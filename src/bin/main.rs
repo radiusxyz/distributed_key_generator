@@ -1,11 +1,13 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use key_management_system::{
     cli::{Cli, Commands, Config, ConfigPath},
     client::key_generator::KeyGeneratorClient,
     error::{self, Error},
     models::{KeyGeneratorAddressListModel, KeyGeneratorModel},
+    rpc::{cluster, internal},
     state::AppState,
+    task::single_key_generator::run_single_key_generator,
     types::Address,
 };
 use radius_sequencer_sdk::{json_rpc::RpcServer, kvstore::KvStore as Database};
@@ -49,6 +51,12 @@ async fn main() -> Result<(), Error> {
                         let key_generator = KeyGeneratorModel::get(key_generator_address)
                             .map_err(error::Error::Database)?;
 
+                        tracing::info!(
+                            "Create key generator client - address: {:?} / ip_address: {:?}.",
+                            key_generator.address(),
+                            key_generator.ip_address(),
+                        );
+
                         let key_generator_client: KeyGeneratorClient =
                             KeyGeneratorClient::new(key_generator.ip_address())
                                 .map_err(error::Error::RpcError)?;
@@ -69,6 +77,8 @@ async fn main() -> Result<(), Error> {
             // Initialize the external RPC server.
             let server_handle = initialize_external_rpc_server(&app_state).await?;
 
+            run_single_key_generator(Arc::new(app_state), Address::new("123".to_string()));
+
             server_handle.await.unwrap();
         }
     }
@@ -81,6 +91,10 @@ async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Erro
 
     // Initialize the internal RPC server.
     let internal_rpc_server = RpcServer::new(app_state.clone())
+        .register_rpc_method(
+            internal::AddKeyGenerator::METHOD_NAME,
+            internal::AddKeyGenerator::handler,
+        )?
         .init(app_state.config().internal_rpc_url().to_string())
         .await
         .map_err(error::Error::RpcError)?;
@@ -101,6 +115,14 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
     let cluster_rpc_url = app_state.config().cluster_rpc_url().to_string();
 
     let key_generator_rpc_server = RpcServer::new(app_state.clone())
+        .register_rpc_method(
+            cluster::SyncKeyGenerator::METHOD_NAME,
+            cluster::SyncKeyGenerator::handler,
+        )?
+        .register_rpc_method(
+            cluster::SyncPartialKey::METHOD_NAME,
+            cluster::SyncPartialKey::handler,
+        )?
         .init(cluster_rpc_url.clone())
         .await
         .map_err(error::Error::RpcError)?;

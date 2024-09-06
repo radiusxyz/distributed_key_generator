@@ -58,18 +58,6 @@ impl SyncPartialKey {
             .add_partial_key(parameter.address, parameter.partial_key)
             .await;
 
-        // let cluster = context.get_cluster(&parameter.cluster_id)?;
-
-        // cluster
-        //     .add_partial_key(parameter.address, parameter.partial_key)
-        //     .await;
-
-        // info!("Aggregate key!");
-        // let partial_key_list = cluster.get_partial_key_list().await;
-        // println!("stompesi - partial_key_list: {:?}", partial_key_list);
-        // let aggregated_key = aggregate_key(&skde_params, &partial_key_list);
-        // println!("aggregated_key: {:?}", aggregated_key);
-
         Ok(())
     }
 }

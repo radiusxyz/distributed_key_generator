@@ -4,6 +4,7 @@ use radius_sequencer_sdk::json_rpc::{Error, RpcClient};
 
 use crate::rpc::{cluster::SyncPartialKey, internal::AddKeyGenerator};
 
+#[derive(Clone)]
 pub struct KeyGeneratorClient {
     inner: Arc<RpcClient>,
 }

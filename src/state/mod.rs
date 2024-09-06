@@ -1,12 +1,13 @@
 use std::{collections::HashMap, sync::Arc};
 
+use radius_sequencer_sdk::context::SharedContext;
 use skde::key_generation::PartialKey;
 use tokio::sync::Mutex;
 
 use crate::{
     cli::Config,
     client::key_generator::KeyGeneratorClient,
-    error,
+    error::{self, Error},
     types::{Address, KeyGenerator, SigningKey},
 };
 
@@ -16,8 +17,10 @@ pub struct AppState {
 
 struct AppStateInner {
     config: Config,
+
     key_generator_clients: Mutex<HashMap<Address, KeyGeneratorClient>>,
     partial_keys: Mutex<HashMap<Address, PartialKey>>,
+    // key_id: SharedContext<u64>,
 }
 
 unsafe impl Send for AppState {}
@@ -70,8 +73,12 @@ impl AppState {
         Ok(())
     }
 
-    pub fn key_generator_clients(&self) -> &Mutex<HashMap<Address, KeyGeneratorClient>> {
-        &self.inner.key_generator_clients
+    pub async fn key_generator_clients(
+        &self,
+    ) -> Result<HashMap<Address, KeyGeneratorClient>, Error> {
+        let key_generator_clients = self.inner.key_generator_clients.lock().await;
+
+        Ok(key_generator_clients.clone())
     }
 
     pub async fn add_partial_key(&self, address: Address, partial_key: PartialKey) {

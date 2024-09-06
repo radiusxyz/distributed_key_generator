@@ -1,18 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
-use radius_sequencer_sdk::{
-    json_rpc::{types::RpcParameter, RpcError},
-    signature::Signature,
-};
-use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::{
-    client::key_generator::KeyGeneratorClient,
-    models::{KeyGeneratorAddressListModel, KeyGeneratorModel},
-    state::AppState,
-    types::{Address, KeyGenerator},
-};
+use crate::{client::key_generator::KeyGeneratorClient, rpc::prelude::*};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct AddKeyGeneratorMessage {
@@ -31,6 +21,10 @@ impl AddKeyGenerator {
 
     pub async fn handler(parameter: RpcParameter, context: Arc<AppState>) -> Result<(), RpcError> {
         let parameter = parameter.parse::<Self>()?;
+        info!(
+            "add_key_generator - address: {:?} / ip_address: {:?}",
+            parameter.message.address, parameter.message.ip_address
+        );
 
         // TODO: Uncomment this code
         // parameter.signature.verify_signature(
@@ -39,16 +33,20 @@ impl AddKeyGenerator {
         //     context.config().chain_type().clone(),
         // )?;
 
-        let mut key_generator_address_list = KeyGeneratorAddressListModel::get()?;
+        let mut key_generator_address_list = KeyGeneratorAddressListModel::get_or_default()?;
         key_generator_address_list.insert(parameter.message.address.clone());
 
         KeyGeneratorAddressListModel::put(&key_generator_address_list)?;
 
-        let key_generator =
-            KeyGenerator::new(parameter.message.address, parameter.message.ip_address);
+        let key_generator = KeyGenerator::new(
+            parameter.message.address.clone(),
+            parameter.message.ip_address.clone(),
+        );
         KeyGeneratorModel::put(&key_generator)?;
 
-        // let key_generator_clients = context.key_generator_clients().await?;
+        let key_generator_clients = context.key_generator_clients().await?;
+
+        sync_key_generator(key_generator_clients, parameter);
 
         context.add_key_generator_client(key_generator).await?;
 

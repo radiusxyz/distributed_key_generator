@@ -2,7 +2,9 @@ use crate::rpc::prelude::*;
 
 /// 09/05
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct GetEncryptionKey;
+pub struct GetEncryptionKey {
+    key_id: u64,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetEncryptionKeyResponse {
