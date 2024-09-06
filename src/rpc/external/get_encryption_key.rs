@@ -1,3 +1,5 @@
+use skde::delay_encryption::SecretKey;
+
 use crate::rpc::prelude::*;
 
 /// 09/05
@@ -8,18 +10,20 @@ pub struct GetEncryptionKey {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetEncryptionKeyResponse {
-    pub encryption_key: String,
+    pub decryption_key: SecretKey,
 }
 
 impl GetEncryptionKey {
-    pub const METHOD_NAME: &'static str = "get_encryption_key";
+    pub const METHOD_NAME: &'static str = "get_decryption_key";
 
     pub async fn handler(
-        _: RpcParameter,
+        parameter: RpcParameter,
         context: Arc<AppState>,
     ) -> Result<GetEncryptionKeyResponse, RpcError> {
-        let encryption_key = context.get_encryption_key().await;
+        let parameter = parameter.parse::<Self>()?;
 
-        Ok(GetEncryptionKeyResponse { encryption_key })
+        let decryption_key = context.get_decryption_key(parameter.key_id).await?;
+
+        Ok(GetEncryptionKeyResponse { decryption_key })
     }
 }

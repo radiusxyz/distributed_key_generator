@@ -8,11 +8,12 @@ use skde::{
 };
 use tracing::info;
 
-use crate::{state::AppState, types::Address};
+use crate::{models::KeyGeneratorModel, state::AppState, types::Address};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncPartialKey {
     pub address: Address,
+    pub key_id: u64,
     pub partial_key: PartialKey,
     pub partial_key_proof: PartialKeyProof,
 }
@@ -28,35 +29,38 @@ impl SyncPartialKey {
 
     pub async fn handler(parameter: RpcParameter, context: Arc<AppState>) -> Result<(), RpcError> {
         let parameter = parameter.parse::<Self>()?;
+        let is_key_generator_in_cluster = !KeyGeneratorModel::get(&parameter.address).is_err();
 
-        info!(
-            "sync_partial_key - address: {:?} / partial_key: {:?}",
-            parameter.address, parameter.partial_key
-        );
+        if is_key_generator_in_cluster {
+            info!(
+                "sync_partial_key - address: {:?} / partial_key: {:?}",
+                parameter.address, parameter.partial_key
+            );
 
-        let time = 2_u32.pow(TIME_PARAM_T);
-        let p = BigUint::from_str(PRIME_P).expect("Invalid PRIME_P");
-        let q = BigUint::from_str(PRIME_Q).expect("Invalid PRIME_Q");
-        let g = BigUint::from_str(GENERATOR).expect("Invalid GENERATOR");
-        let max_key_generator_number = BigUint::from(MAX_KEY_GENERATOR_NUMBER);
+            let time = 2_u32.pow(TIME_PARAM_T);
+            let p = BigUint::from_str(PRIME_P).expect("Invalid PRIME_P");
+            let q = BigUint::from_str(PRIME_Q).expect("Invalid PRIME_Q");
+            let g = BigUint::from_str(GENERATOR).expect("Invalid GENERATOR");
+            let max_key_generator_number = BigUint::from(MAX_KEY_GENERATOR_NUMBER);
 
-        // TODO:
-        let skde_params = setup(time, p, q, g, max_key_generator_number);
+            // TODO:
+            let skde_params = setup(time, p, q, g, max_key_generator_number);
 
-        let is_valid = verify_partial_key_validity(
-            &skde_params,
-            parameter.partial_key.clone(),
-            parameter.partial_key_proof,
-        );
+            let is_valid = verify_partial_key_validity(
+                &skde_params,
+                parameter.partial_key.clone(),
+                parameter.partial_key_proof,
+            );
 
-        // TODO:
-        if !is_valid {
-            return Ok(());
+            // TODO:
+            if !is_valid {
+                return Ok(());
+            }
+
+            context
+                .add_partial_key(parameter.key_id, parameter.address, parameter.partial_key)
+                .await?
         }
-
-        context
-            .add_partial_key(parameter.address, parameter.partial_key)
-            .await;
 
         Ok(())
     }

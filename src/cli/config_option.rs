@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::ConfigPath;
 
-const DEFAULT_EXTERNAL_RPC_URL: &str = "http://127.0.0.1:3000"; // external rpc url
+const DEFAULT_EXTERNAL_RPC_URL: &str = "http://127.0.0.1:3000";
 const DEFAULT_INTERNAL_RPC_URL: &str = "http://127.0.0.1:4000";
 const DEFAULT_CLUSTER_RPC_URL: &str = "http://127.0.0.1:5000";
 
@@ -33,6 +33,10 @@ pub struct ConfigOption {
     #[clap(long = "cluster-rpc-url")]
     pub cluster_rpc_url: Option<String>,
 
+    #[doc = "Set the seed cluster rpc url"]
+    #[clap(long = "seed-cluster-rpc-url")]
+    pub seed_cluster_rpc_url: Option<String>,
+
     #[doc = "Set the radius foundation address"]
     #[clap(long = "radius-foundation-address")]
     pub radius_foundation_address: Option<String>,
@@ -58,10 +62,9 @@ impl Default for ConfigOption {
             external_rpc_url: Some(DEFAULT_EXTERNAL_RPC_URL.into()),
             internal_rpc_url: Some(DEFAULT_INTERNAL_RPC_URL.into()),
             cluster_rpc_url: Some(DEFAULT_CLUSTER_RPC_URL.into()),
-
+            seed_cluster_rpc_url: None,
             radius_foundation_address: Some(DEFAULT_RADIUS_FOUNDATION_ADDRESS.into()),
             chain_type: Some(DEFAULT_CHAIN_TYPE.into()),
-
             partial_key_generation_cycle: Some(DEFAULT_PARTIAL_KEY_GENERATION_CYCLE),
             partial_key_aggregation_cycle: Some(DEFAULT_PARTIAL_KEY_AGGREGATION_CYCLE),
         }
@@ -80,6 +83,13 @@ impl ConfigOption {
 
         set_toml_comment(&mut toml_string, "Set cluster rpc url");
         set_toml_name_value(&mut toml_string, "cluster_rpc_url", &self.cluster_rpc_url);
+
+        set_toml_comment(&mut toml_string, "Set seed cluster rpc url");
+        set_toml_name_value(
+            &mut toml_string,
+            "seed_cluster_rpc_url",
+            &self.seed_cluster_rpc_url,
+        );
 
         set_toml_comment(&mut toml_string, "Set the radius foundation address");
         set_toml_name_value(
@@ -126,6 +136,10 @@ impl ConfigOption {
 
         if other.cluster_rpc_url.is_some() {
             self.cluster_rpc_url = other.cluster_rpc_url.clone();
+        }
+
+        if other.seed_cluster_rpc_url.is_some() {
+            self.seed_cluster_rpc_url = other.seed_cluster_rpc_url.clone();
         }
 
         if other.radius_foundation_address.is_some() {

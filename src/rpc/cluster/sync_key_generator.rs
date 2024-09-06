@@ -1,14 +1,9 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
-use radius_sequencer_sdk::{
-    json_rpc::{types::RpcParameter, RpcError},
-    signature::Signature,
-};
+use radius_sequencer_sdk::json_rpc::{types::RpcParameter, RpcError};
 use serde::{Deserialize, Serialize};
-use tracing::info;
 
 use crate::{
-    client::key_generator::KeyGeneratorClient,
     models::{KeyGeneratorAddressListModel, KeyGeneratorModel},
     state::AppState,
     types::{Address, KeyGenerator},

@@ -16,6 +16,7 @@ pub struct Config {
     external_rpc_url: String,
     internal_rpc_url: String,
     cluster_rpc_url: String,
+    seed_cluster_rpc_url: Option<String>,
 
     signing_key: SigningKey,
 
@@ -58,6 +59,7 @@ impl Config {
             external_rpc_url: merged_config_option.external_rpc_url.unwrap(),
             internal_rpc_url: merged_config_option.internal_rpc_url.unwrap(),
             cluster_rpc_url: merged_config_option.cluster_rpc_url.unwrap(),
+            seed_cluster_rpc_url: merged_config_option.seed_cluster_rpc_url.clone(),
             signing_key,
             radius_foundation_address: merged_config_option
                 .radius_foundation_address
@@ -118,5 +120,9 @@ impl Config {
 
     pub fn cluster_rpc_url(&self) -> &String {
         &self.cluster_rpc_url
+    }
+
+    pub fn seed_cluster_rpc_url(&self) -> &Option<String> {
+        &self.seed_cluster_rpc_url
     }
 }

@@ -1,13 +1,12 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use key_management_system::{
     cli::{Cli, Commands, Config, ConfigPath},
     client::key_generator::KeyGeneratorClient,
     error::{self, Error},
     models::{KeyGeneratorAddressListModel, KeyGeneratorModel},
-    rpc::{cluster, internal},
+    rpc::{cluster, debug, external, internal},
     state::AppState,
-    task::single_key_generator::run_single_key_generator,
     types::Address,
 };
 use radius_sequencer_sdk::{json_rpc::RpcServer, kvstore::KvStore as Database};
@@ -41,8 +40,28 @@ async fn main() -> Result<(), Error> {
                 config.database_path(),
             );
 
-            let key_generator_address_list =
+            let mut key_generator_address_list =
                 KeyGeneratorAddressListModel::get_or_default().map_err(error::Error::Database)?;
+
+            if config.seed_cluster_rpc_url().is_some() {
+                // Initialize the cluster RPC server
+                let seed_key_generator_client =
+                    KeyGeneratorClient::new(config.seed_cluster_rpc_url().clone().unwrap())
+                        .map_err(error::Error::RpcError)?;
+
+                let key_generator_list = seed_key_generator_client.get_key_generator_list().await?;
+
+                tracing::info!("Sync key generators {:?}.", key_generator_list);
+
+                key_generator_list.iter().for_each(|key_generator| {
+                    let _ = KeyGeneratorModel::put(key_generator);
+
+                    key_generator_address_list.insert(key_generator.address().clone());
+                });
+
+                KeyGeneratorAddressListModel::put(&key_generator_address_list)
+                    .map_err(error::Error::Database)?;
+            }
 
             let key_generator_clients = key_generator_address_list
                 .iter()
@@ -77,7 +96,9 @@ async fn main() -> Result<(), Error> {
             // Initialize the external RPC server.
             let server_handle = initialize_external_rpc_server(&app_state).await?;
 
-            run_single_key_generator(Arc::new(app_state), Address::new("123".to_string()));
+            // Run the single key generator task
+            // let node_address = app_state.config().address();
+            // run_single_key_generator(Arc::new(app_state), node_address);
 
             server_handle.await.unwrap();
         }
@@ -94,6 +115,10 @@ async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Erro
         .register_rpc_method(
             internal::AddKeyGenerator::METHOD_NAME,
             internal::AddKeyGenerator::handler,
+        )?
+        .register_rpc_method(
+            debug::RunSingleKeyGenerator::METHOD_NAME,
+            debug::RunSingleKeyGenerator::handler,
         )?
         .init(app_state.config().internal_rpc_url().to_string())
         .await
@@ -148,6 +173,14 @@ async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHand
 
     // Initialize the external RPC server.
     let external_rpc_server = RpcServer::new(app_state.clone())
+        .register_rpc_method(
+            external::GetEncryptionKey::METHOD_NAME,
+            external::GetEncryptionKey::handler,
+        )?
+        .register_rpc_method(
+            external::GetDecryptionKey::METHOD_NAME,
+            external::GetDecryptionKey::handler,
+        )?
         .init(external_rpc_url.clone())
         .await
         .map_err(error::Error::RpcError)?;
