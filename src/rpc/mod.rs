@@ -10,3 +10,9 @@ pub mod prelude {
 
     pub use crate::{error::Error, state::AppState, types::*};
 }
+
+pub mod methods {
+    pub fn serialize_to_bincode<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, bincode::Error> {
+        bincode::serialize(value)
+    }
+}

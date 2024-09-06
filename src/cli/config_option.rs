@@ -9,7 +9,8 @@ const DEFAULT_EXTERNAL_RPC_URL: &str = "http://127.0.0.1:3000"; // external rpc 
 const DEFAULT_INTERNAL_RPC_URL: &str = "http://127.0.0.1:4000";
 const DEFAULT_CLUSTER_RPC_URL: &str = "http://127.0.0.1:5000";
 
-const DEFAULT_SEEDER_RPC_URL: &str = "http://127.0.0.1:6000";
+const DEFAULT_RADIUS_FOUNDATION_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+const DEFAULT_CHAIN_TYPE: &str = "Ethereum";
 
 #[derive(Debug, Deserialize, Parser, Serialize)]
 pub struct ConfigOption {
@@ -28,6 +29,14 @@ pub struct ConfigOption {
     #[doc = "Set the cluster rpc url"]
     #[clap(long = "cluster-rpc-url")]
     pub cluster_rpc_url: Option<String>,
+
+    #[doc = "Set the radius foundation address"]
+    #[clap(long = "radius-foundation-address")]
+    pub radius_foundation_address: Option<String>,
+
+    #[doc = "Set the chain type (for verifying signature for foundation address)"]
+    #[clap(long = "chain-type")]
+    pub chain_type: Option<String>,
 }
 
 impl Default for ConfigOption {
@@ -38,6 +47,9 @@ impl Default for ConfigOption {
             external_rpc_url: Some(DEFAULT_EXTERNAL_RPC_URL.into()),
             internal_rpc_url: Some(DEFAULT_INTERNAL_RPC_URL.into()),
             cluster_rpc_url: Some(DEFAULT_CLUSTER_RPC_URL.into()),
+
+            radius_foundation_address: Some(DEFAULT_RADIUS_FOUNDATION_ADDRESS.into()),
+            chain_type: Some(DEFAULT_CHAIN_TYPE.into()),
         }
     }
 }
@@ -54,6 +66,19 @@ impl ConfigOption {
 
         set_toml_comment(&mut toml_string, "Set cluster rpc url");
         set_toml_name_value(&mut toml_string, "cluster_rpc_url", &self.cluster_rpc_url);
+
+        set_toml_comment(&mut toml_string, "Set the radius foundation address");
+        set_toml_name_value(
+            &mut toml_string,
+            "radius_foundation_address",
+            &self.radius_foundation_address,
+        );
+
+        set_toml_comment(
+            &mut toml_string,
+            "Set the chain type (for verifying signature for foundation address)",
+        );
+        set_toml_name_value(&mut toml_string, "chain_type", &self.chain_type);
 
         toml_string
     }
@@ -73,6 +98,14 @@ impl ConfigOption {
 
         if other.cluster_rpc_url.is_some() {
             self.cluster_rpc_url = other.cluster_rpc_url.clone();
+        }
+
+        if other.radius_foundation_address.is_some() {
+            self.radius_foundation_address = other.radius_foundation_address.clone();
+        }
+
+        if other.chain_type.is_some() {
+            self.chain_type = other.chain_type.clone();
         }
 
         self

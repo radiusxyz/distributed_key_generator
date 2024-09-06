@@ -6,7 +6,7 @@ use key_management_system::{
     error::{self, Error},
     models::{KeyGeneratorAddressListModel, KeyGeneratorModel},
     state::AppState,
-    types::{Address, KeyGeneratorList},
+    types::Address,
 };
 use radius_sequencer_sdk::{json_rpc::RpcServer, kvstore::KvStore as Database};
 use tokio::task::JoinHandle;

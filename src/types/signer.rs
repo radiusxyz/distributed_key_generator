@@ -61,6 +61,10 @@ impl Address {
         Self(value.as_ref().to_owned())
     }
 
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+
     pub fn to_string(&self) -> String {
         self.0.clone()
     }

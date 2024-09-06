@@ -6,6 +6,7 @@ use tokio::sync::Mutex;
 use crate::{
     cli::Config,
     client::key_generator::KeyGeneratorClient,
+    error,
     types::{Address, KeyGenerator, SigningKey},
 };
 
@@ -55,10 +56,18 @@ impl AppState {
         self.inner.config.signing_key()
     }
 
-    pub async fn add_key_generator_client(&self, key_generator: KeyGenerator) {
-        // let mut key_generator_clients = self.inner.key_generator_clients.lock().await;
-        // key_generator_clients.insert(address, key_generator_client);
+    pub async fn add_key_generator_client(
+        &self,
+        key_generator: KeyGenerator,
+    ) -> Result<(), error::Error> {
+        let key_generator_client: KeyGeneratorClient =
+            KeyGeneratorClient::new(key_generator.ip_address()).map_err(error::Error::RpcError)?;
+
+        let mut key_generator_clients = self.inner.key_generator_clients.lock().await;
+        key_generator_clients.insert(key_generator.address().to_owned(), key_generator_client);
         key_generator.address();
+
+        Ok(())
     }
 
     pub fn key_generator_clients(&self) -> &Mutex<HashMap<Address, KeyGeneratorClient>> {

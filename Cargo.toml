@@ -8,6 +8,7 @@ name = "key_generator"
 path = "src/bin/main.rs"
 
 [dependencies]
+bincode = "1.3.3"
 tokio = { version = "1.37.0", features = ["full"] }
 
 serde = { version = "1.0.197", features = ["derive"] }

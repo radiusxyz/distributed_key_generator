@@ -1,4 +1,4 @@
-use std::{str::FromStr, time::Duration};
+use std::{str::FromStr, sync::Arc, time::Duration};
 
 use skde::{
     key_generation::{
@@ -8,7 +8,7 @@ use skde::{
 };
 use tokio::time::sleep;
 
-use crate::{rpc::cluster::SyncPartialKey, types::Address};
+use crate::{rpc::cluster::SyncPartialKey, state::AppState, types::Address};
 
 pub const PRIME_P: &str = "8155133734070055735139271277173718200941522166153710213522626777763679009805792017274916613411023848268056376687809186180768200590914945958831360737612803";
 pub const PRIME_Q: &str = "13379153270147861840625872456862185586039997603014979833900847304743997773803109864546170215161716700184487787472783869920830925415022501258643369350348243";
@@ -16,7 +16,7 @@ pub const GENERATOR: &str = "4";
 pub const TIME_PARAM_T: u32 = 2;
 pub const MAX_KEY_GENERATOR_NUMBER: u32 = 2;
 
-pub fn init_single_key_generator(address: Address) {
+pub fn run_single_key_generator(context: Arc<AppState>, key_id: u64, address: Address) {
     let time = 2_u32.pow(TIME_PARAM_T);
     let p = BigUint::from_str(PRIME_P).expect("Invalid PRIME_P");
     let q = BigUint::from_str(PRIME_Q).expect("Invalid PRIME_Q");
@@ -26,15 +26,13 @@ pub fn init_single_key_generator(address: Address) {
     let skde_params = setup(time, p, q, g, max_key_generator_number);
 
     tokio::spawn(async move {
-        loop {
-            let (secret_value, partial_key) = generate_partial_key(&skde_params);
-            let partial_key_proof = prove_partial_key_validity(&skde_params, &secret_value);
+        // TODO
+        sleep(Duration::from_secs(2)).await;
 
-            sync_partial_key(address.clone(), partial_key, partial_key_proof);
+        let (secret_value, partial_key) = generate_partial_key(&skde_params);
+        let partial_key_proof = prove_partial_key_validity(&skde_params, &secret_value);
 
-            // TODO
-            sleep(Duration::from_secs(3)).await;
-        }
+        sync_partial_key(address.clone(), partial_key, partial_key_proof);
     });
 }
 

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use radius_sequencer_sdk::json_rpc::{Error, RpcClient};
 
-use crate::rpc::cluster::SyncPartialKey;
+use crate::rpc::{cluster::SyncPartialKey, internal::AddKeyGenerator};
 
 pub struct KeyGeneratorClient {
     inner: Arc<RpcClient>,
@@ -17,10 +17,13 @@ impl KeyGeneratorClient {
         })
     }
 
-    pub async fn sync_partial_key(
-        &self,
-        parameter: SyncPartialKey,
-    ) -> Result<(), Error> {
+    pub async fn sync_partial_key(&self, parameter: SyncPartialKey) -> Result<(), Error> {
+        self.inner
+            .request(SyncPartialKey::METHOD_NAME, parameter)
+            .await
+    }
+
+    pub async fn sync_key_generator(&self, parameter: AddKeyGenerator) -> Result<(), Error> {
         self.inner
             .request(SyncPartialKey::METHOD_NAME, parameter)
             .await

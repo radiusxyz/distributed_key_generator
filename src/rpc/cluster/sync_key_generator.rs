@@ -15,19 +15,19 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct AddKeyGeneratorMessage {
+struct SyncKeyGeneratorMessage {
     address: Address,
     ip_address: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct AddKeyGenerator {
+pub struct SyncKeyGenerator {
     // signature: Signature, // TODO: Uncomment this code
-    message: AddKeyGeneratorMessage,
+    message: SyncKeyGeneratorMessage,
 }
 
-impl AddKeyGenerator {
-    pub const METHOD_NAME: &'static str = "add_key_generator";
+impl SyncKeyGenerator {
+    pub const METHOD_NAME: &'static str = "sync_key_generator";
 
     pub async fn handler(parameter: RpcParameter, context: Arc<AppState>) -> Result<(), RpcError> {
         let parameter = parameter.parse::<Self>()?;
@@ -48,31 +48,8 @@ impl AddKeyGenerator {
             KeyGenerator::new(parameter.message.address, parameter.message.ip_address);
         KeyGeneratorModel::put(&key_generator)?;
 
-        // let key_generator_clients = context.key_generator_clients().await?;
-
         context.add_key_generator_client(key_generator).await?;
 
         Ok(())
     }
-}
-
-pub fn sync_key_generator(
-    key_generator_clients: HashMap<Address, KeyGeneratorClient>,
-    parameter: AddKeyGenerator,
-) {
-    tokio::spawn(async move {
-        info!(
-            "sync key generator: {:?} / rpc_client_count: {:?}",
-            parameter,
-            key_generator_clients.len()
-        );
-
-        for (_, key_generator_client) in key_generator_clients {
-            let parameter = parameter.clone();
-
-            tokio::spawn(async move {
-                let _ = key_generator_client.sync_key_generator(parameter).await;
-            });
-        }
-    });
 }

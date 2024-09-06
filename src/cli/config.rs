@@ -1,5 +1,6 @@
 use std::{fs, path::PathBuf};
 
+use radius_sequencer_sdk::signature::ChainType;
 use serde::{Deserialize, Serialize};
 
 use super::{ConfigOption, ConfigPath, CONFIG_FILE_NAME, DATABASE_DIR_NAME, SIGNING_KEY};
@@ -17,6 +18,11 @@ pub struct Config {
     cluster_rpc_url: String,
 
     signing_key: SigningKey,
+
+    radius_foundation_address: Address,
+    chain_type: ChainType,
+    // key_generate_delay_second: u64,
+    // key_aggregate_delay_second: u64,
 }
 
 impl Config {
@@ -52,6 +58,13 @@ impl Config {
             internal_rpc_url: merged_config_option.internal_rpc_url.unwrap(),
             cluster_rpc_url: merged_config_option.cluster_rpc_url.unwrap(),
             signing_key,
+            radius_foundation_address: merged_config_option
+                .radius_foundation_address
+                .unwrap()
+                .into(),
+            // TODO: stompesi
+            // chain_type: merged_config_option.chain_type.unwrap().into(),
+            chain_type: ChainType::Ethereum,
         })
     }
 
@@ -67,6 +80,14 @@ impl Config {
         &self.signing_key
     }
 
+    pub fn radius_foundation_address(&self) -> &Address {
+        &self.radius_foundation_address
+    }
+
+    pub fn chain_type(&self) -> &ChainType {
+        &self.chain_type
+    }
+
     pub fn address(&self) -> Address {
         self.signing_key().get_address()
     }
@@ -78,6 +99,14 @@ impl Config {
     pub fn internal_rpc_url(&self) -> &String {
         &self.internal_rpc_url
     }
+
+    // pub fn key_generate_delay_second(&self) -> &u64 {
+    //     &self.key_generate_delay_second
+    // }
+
+    // pub fn key_aggregate_delay_second(&self) -> &u64 {
+    //     &self.key_aggregate_delay_second
+    // }
 
     pub fn cluster_rpc_url(&self) -> &String {
         &self.cluster_rpc_url

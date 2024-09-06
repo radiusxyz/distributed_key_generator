@@ -1528,6 +1528,7 @@ dependencies = [
 name = "key-management-system"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "clap",
  "radius-sequencer-sdk",
  "serde",
