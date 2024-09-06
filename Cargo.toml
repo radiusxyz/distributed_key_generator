@@ -20,5 +20,5 @@ toml = "0.8.13"
 tracing = "0.1.37"
 tracing-subscriber = "0.3.17"
 
-skde = { git = "https://github.com/radiusxyz/skde", rev="21d0b03ba64a2f78cf8135b774a0949f5a934545"}
+skde = { git = "https://github.com/radiusxyz/skde", rev="2bc6ee02a1b471660105e9dc80470135797a6e73"}
 radius-sequencer-sdk = { git = "https://github.com/radiusxyz/radius-sdk-rs", features = ["full", "signature"] }

@@ -379,7 +379,7 @@ dependencies = [
 [[package]]
 name = "big-integer"
 version = "0.1.0"
-source = "git+https://github.com/radiusxyz/skde?rev=21d0b03ba64a2f78cf8135b774a0949f5a934545#21d0b03ba64a2f78cf8135b774a0949f5a934545"
+source = "git+https://github.com/radiusxyz/skde?rev=2bc6ee02a1b471660105e9dc80470135797a6e73#2bc6ee02a1b471660105e9dc80470135797a6e73"
 dependencies = [
  "ff",
  "halo2wrong",
@@ -1127,7 +1127,7 @@ dependencies = [
 [[package]]
 name = "hash"
 version = "0.1.0"
-source = "git+https://github.com/radiusxyz/skde?rev=21d0b03ba64a2f78cf8135b774a0949f5a934545#21d0b03ba64a2f78cf8135b774a0949f5a934545"
+source = "git+https://github.com/radiusxyz/skde?rev=2bc6ee02a1b471660105e9dc80470135797a6e73#2bc6ee02a1b471660105e9dc80470135797a6e73"
 dependencies = [
  "ff",
  "halo2wrong",
@@ -1882,7 +1882,7 @@ checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
 [[package]]
 name = "poseidon"
 version = "0.1.0"
-source = "git+https://github.com/radiusxyz/skde?rev=21d0b03ba64a2f78cf8135b774a0949f5a934545#21d0b03ba64a2f78cf8135b774a0949f5a934545"
+source = "git+https://github.com/radiusxyz/skde?rev=2bc6ee02a1b471660105e9dc80470135797a6e73#2bc6ee02a1b471660105e9dc80470135797a6e73"
 dependencies = [
  "ff",
  "halo2wrong",
@@ -2461,7 +2461,7 @@ dependencies = [
 [[package]]
 name = "skde"
 version = "0.1.0"
-source = "git+https://github.com/radiusxyz/skde?rev=21d0b03ba64a2f78cf8135b774a0949f5a934545#21d0b03ba64a2f78cf8135b774a0949f5a934545"
+source = "git+https://github.com/radiusxyz/skde?rev=2bc6ee02a1b471660105e9dc80470135797a6e73#2bc6ee02a1b471660105e9dc80470135797a6e73"
 dependencies = [
  "big-integer",
  "bitvec",
