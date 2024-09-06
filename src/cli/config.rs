@@ -21,8 +21,9 @@ pub struct Config {
 
     radius_foundation_address: Address,
     chain_type: ChainType,
-    // key_generate_delay_second: u64,
-    // key_aggregate_delay_second: u64,
+
+    partial_key_generation_cycle: u64,
+    partial_key_aggregation_cycle: u64,
 }
 
 impl Config {
@@ -65,6 +66,13 @@ impl Config {
             // TODO: stompesi
             // chain_type: merged_config_option.chain_type.unwrap().into(),
             chain_type: ChainType::Ethereum,
+
+            partial_key_generation_cycle: merged_config_option
+                .partial_key_generation_cycle
+                .unwrap(),
+            partial_key_aggregation_cycle: merged_config_option
+                .partial_key_aggregation_cycle
+                .unwrap(),
         })
     }
 
@@ -100,13 +108,13 @@ impl Config {
         &self.internal_rpc_url
     }
 
-    // pub fn key_generate_delay_second(&self) -> &u64 {
-    //     &self.key_generate_delay_second
-    // }
+    pub fn partial_key_generation_cycle(&self) -> u64 {
+        self.partial_key_generation_cycle
+    }
 
-    // pub fn key_aggregate_delay_second(&self) -> &u64 {
-    //     &self.key_aggregate_delay_second
-    // }
+    pub fn partial_key_aggregation_cycle(&self) -> u64 {
+        self.partial_key_aggregation_cycle
+    }
 
     pub fn cluster_rpc_url(&self) -> &String {
         &self.cluster_rpc_url

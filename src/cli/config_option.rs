@@ -12,6 +12,9 @@ const DEFAULT_CLUSTER_RPC_URL: &str = "http://127.0.0.1:5000";
 const DEFAULT_RADIUS_FOUNDATION_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 const DEFAULT_CHAIN_TYPE: &str = "Ethereum";
 
+const DEFAULT_PARTIAL_KEY_GENERATION_CYCLE: u64 = 5;
+const DEFAULT_PARTIAL_KEY_AGGREGATION_CYCLE: u64 = 4;
+
 #[derive(Debug, Deserialize, Parser, Serialize)]
 pub struct ConfigOption {
     #[doc = "Set the configuration file path to load from"]
@@ -37,6 +40,14 @@ pub struct ConfigOption {
     #[doc = "Set the chain type (for verifying signature for foundation address)"]
     #[clap(long = "chain-type")]
     pub chain_type: Option<String>,
+
+    #[doc = "Set partial key generation cycle"]
+    #[clap(long = "partial-key-generation-cycle")]
+    pub partial_key_generation_cycle: Option<u64>,
+
+    #[doc = "Set partial key aggregation cycle"]
+    #[clap(long = "partial-key-aggregation-cycle")]
+    pub partial_key_aggregation_cycle: Option<u64>,
 }
 
 impl Default for ConfigOption {
@@ -50,6 +61,9 @@ impl Default for ConfigOption {
 
             radius_foundation_address: Some(DEFAULT_RADIUS_FOUNDATION_ADDRESS.into()),
             chain_type: Some(DEFAULT_CHAIN_TYPE.into()),
+
+            partial_key_generation_cycle: Some(DEFAULT_PARTIAL_KEY_GENERATION_CYCLE),
+            partial_key_aggregation_cycle: Some(DEFAULT_PARTIAL_KEY_AGGREGATION_CYCLE),
         }
     }
 }
@@ -80,6 +94,20 @@ impl ConfigOption {
         );
         set_toml_name_value(&mut toml_string, "chain_type", &self.chain_type);
 
+        set_toml_comment(&mut toml_string, "Set partial key generation cycle");
+        set_toml_name_value(
+            &mut toml_string,
+            "partial_key_generation_cycle",
+            &self.partial_key_generation_cycle,
+        );
+
+        set_toml_comment(&mut toml_string, "Set partial key aggregation cycle");
+        set_toml_name_value(
+            &mut toml_string,
+            "partial_key_aggregation_cycle",
+            &self.partial_key_aggregation_cycle,
+        );
+
         toml_string
     }
 
@@ -106,6 +134,14 @@ impl ConfigOption {
 
         if other.chain_type.is_some() {
             self.chain_type = other.chain_type.clone();
+        }
+
+        if other.partial_key_generation_cycle.is_some() {
+            self.partial_key_generation_cycle = other.partial_key_generation_cycle.clone();
+        }
+
+        if other.partial_key_aggregation_cycle.is_some() {
+            self.partial_key_aggregation_cycle = other.partial_key_aggregation_cycle.clone();
         }
 
         self
