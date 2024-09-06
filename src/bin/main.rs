@@ -116,6 +116,10 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
 
     let key_generator_rpc_server = RpcServer::new(app_state.clone())
         .register_rpc_method(
+            cluster::GetKeyGeneratorList::METHOD_NAME,
+            cluster::GetKeyGeneratorList::handler,
+        )?
+        .register_rpc_method(
             cluster::SyncKeyGenerator::METHOD_NAME,
             cluster::SyncKeyGenerator::handler,
         )?
