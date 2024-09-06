@@ -1,0 +1,23 @@
+[package]
+name = "key-management-system"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "key_generator"
+path = "src/bin/main.rs"
+
+[dependencies]
+tokio = { version = "1.37.0", features = ["full"] }
+
+serde = { version = "1.0.197", features = ["derive"] }
+serde_json = "1.0.127"
+
+clap = { version = "4.4.7", features = ["derive"] }
+toml = "0.8.13"
+
+tracing = "0.1.37"
+tracing-subscriber = "0.3.17"
+
+skde = { git = "https://github.com/radiusxyz/skde", rev="21d0b03ba64a2f78cf8135b774a0949f5a934545"}
+radius-sequencer-sdk = { git = "https://github.com/radiusxyz/radius-sdk-rs", features = ["full", "signature"] }
