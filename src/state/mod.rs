@@ -5,7 +5,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     cli::Config,
-    client::{key_generator::KeyGeneratorClient, seeder::SeederClient},
+    client::key_generator::KeyGeneratorClient,
     types::{Address, KeyGenerator, SigningKey},
 };
 
@@ -15,7 +15,6 @@ pub struct AppState {
 
 struct AppStateInner {
     config: Config,
-    seeder_client: SeederClient,
     key_generator_clients: Mutex<HashMap<Address, KeyGeneratorClient>>,
     partial_keys: Mutex<HashMap<Address, PartialKey>>,
 }
@@ -33,11 +32,13 @@ impl Clone for AppState {
 }
 
 impl AppState {
-    pub fn new(config: Config, seeder_client: SeederClient) -> Self {
+    pub fn new(
+        config: Config,
+        key_generator_clients: HashMap<Address, KeyGeneratorClient>,
+    ) -> Self {
         let inner = AppStateInner {
             config,
-            seeder_client,
-            key_generator_clients: Mutex::new(HashMap::new()),
+            key_generator_clients: Mutex::new(key_generator_clients),
             partial_keys: Mutex::new(HashMap::new()),
         };
 
@@ -67,10 +68,6 @@ impl AppState {
     pub async fn add_partial_key(&self, address: Address, partial_key: PartialKey) {
         let mut partial_keys = self.inner.partial_keys.lock().await;
         partial_keys.insert(address, partial_key);
-    }
-
-    pub async fn get_seeder_client(&self) -> SeederClient {
-        self.inner.seeder_client.clone()
     }
 
     pub async fn get_encryption_key(&self) -> String {

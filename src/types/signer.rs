@@ -47,7 +47,7 @@ impl From<SigningKey> for String {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PublicKey(String);
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct Address(String);
 
 impl Default for Address {

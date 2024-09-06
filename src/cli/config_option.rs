@@ -28,10 +28,6 @@ pub struct ConfigOption {
     #[doc = "Set the cluster rpc url"]
     #[clap(long = "cluster-rpc-url")]
     pub cluster_rpc_url: Option<String>,
-
-    #[doc = "Set the seeder rpc url"]
-    #[clap(long = "seeder-rpc-url")]
-    pub seeder_rpc_url: Option<String>,
 }
 
 impl Default for ConfigOption {
@@ -42,8 +38,6 @@ impl Default for ConfigOption {
             external_rpc_url: Some(DEFAULT_EXTERNAL_RPC_URL.into()),
             internal_rpc_url: Some(DEFAULT_INTERNAL_RPC_URL.into()),
             cluster_rpc_url: Some(DEFAULT_CLUSTER_RPC_URL.into()),
-
-            seeder_rpc_url: Some(DEFAULT_SEEDER_RPC_URL.into()),
         }
     }
 }
@@ -60,9 +54,6 @@ impl ConfigOption {
 
         set_toml_comment(&mut toml_string, "Set cluster rpc url");
         set_toml_name_value(&mut toml_string, "cluster_rpc_url", &self.cluster_rpc_url);
-
-        set_toml_comment(&mut toml_string, "Set seeder rpc url");
-        set_toml_name_value(&mut toml_string, "seeder_rpc_url", &self.seeder_rpc_url);
 
         toml_string
     }
@@ -82,10 +73,6 @@ impl ConfigOption {
 
         if other.cluster_rpc_url.is_some() {
             self.cluster_rpc_url = other.cluster_rpc_url.clone();
-        }
-
-        if other.seeder_rpc_url.is_some() {
-            self.seeder_rpc_url = other.seeder_rpc_url.clone();
         }
 
         self

@@ -7,11 +7,19 @@ impl KeyGeneratorAddressListModel {
     const ID: &'static str = stringify!(KeyGeneratorAddressListModel);
 
     pub fn get() -> Result<KeyGeneratorAddressList, KvStoreError> {
-        kvstore()?.get(&Self::ID)
+        let key = &(Self::ID);
+        kvstore()?.get(key)
+    }
+
+    pub fn get_or_default() -> Result<KeyGeneratorAddressList, KvStoreError> {
+        let key = &(Self::ID);
+
+        kvstore()?.get_or_default(key)
     }
 
     pub fn put(key_generator_address_list: &KeyGeneratorAddressList) -> Result<(), KvStoreError> {
-        kvstore()?.put(&Self::ID, key_generator_address_list)
+        let key = &(Self::ID);
+        kvstore()?.put(key, key_generator_address_list)
     }
 }
 

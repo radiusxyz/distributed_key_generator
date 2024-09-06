@@ -1,8 +1,12 @@
+use std::collections::HashMap;
+
 use key_management_system::{
     cli::{Cli, Commands, Config, ConfigPath},
-    client::seeder::SeederClient,
+    client::key_generator::KeyGeneratorClient,
     error::{self, Error},
+    models::{KeyGeneratorAddressListModel, KeyGeneratorModel},
     state::AppState,
+    types::{Address, KeyGeneratorList},
 };
 use radius_sequencer_sdk::{json_rpc::RpcServer, kvstore::KvStore as Database};
 use tokio::task::JoinHandle;
@@ -35,17 +39,26 @@ async fn main() -> Result<(), Error> {
                 config.database_path(),
             );
 
-            // Initialize seeder client
-            let seeder_rpc_url = config.seeder_rpc_url();
-            let seeder_client =
-                SeederClient::new(seeder_rpc_url).map_err(error::Error::RpcError)?;
-            tracing::info!(
-                "Successfully initialized seeder client {:?}.",
-                seeder_rpc_url,
-            );
+            let key_generator_address_list =
+                KeyGeneratorAddressListModel::get_or_default().map_err(error::Error::Database)?;
+
+            let key_generator_clients = key_generator_address_list
+                .iter()
+                .map(
+                    |key_generator_address| -> Result<(Address, KeyGeneratorClient), Error> {
+                        let key_generator = KeyGeneratorModel::get(key_generator_address)
+                            .map_err(error::Error::Database)?;
+
+                        let key_generator_client: KeyGeneratorClient =
+                            KeyGeneratorClient::new(key_generator.ip_address())
+                                .map_err(error::Error::RpcError)?;
+                        Ok((key_generator.address().clone(), key_generator_client))
+                    },
+                )
+                .collect::<Result<HashMap<Address, KeyGeneratorClient>, Error>>()?;
 
             // Initialize an application-wide state instance
-            let app_state = AppState::new(config, seeder_client);
+            let app_state = AppState::new(config, key_generator_clients);
 
             // Initialize the internal RPC server
             initialize_internal_rpc_server(&app_state).await?;

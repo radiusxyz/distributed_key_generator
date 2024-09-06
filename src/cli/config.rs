@@ -12,8 +12,6 @@ use crate::{
 pub struct Config {
     path: PathBuf,
 
-    seeder_rpc_url: String,
-
     external_rpc_url: String,
     internal_rpc_url: String,
     cluster_rpc_url: String,
@@ -53,7 +51,6 @@ impl Config {
             external_rpc_url: merged_config_option.external_rpc_url.unwrap(),
             internal_rpc_url: merged_config_option.internal_rpc_url.unwrap(),
             cluster_rpc_url: merged_config_option.cluster_rpc_url.unwrap(),
-            seeder_rpc_url: merged_config_option.seeder_rpc_url.unwrap(),
             signing_key,
         })
     }
@@ -84,9 +81,5 @@ impl Config {
 
     pub fn cluster_rpc_url(&self) -> &String {
         &self.cluster_rpc_url
-    }
-
-    pub fn seeder_rpc_url(&self) -> &String {
-        &self.seeder_rpc_url
     }
 }
