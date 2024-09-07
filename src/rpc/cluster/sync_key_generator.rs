@@ -4,9 +4,8 @@ use radius_sequencer_sdk::json_rpc::{types::RpcParameter, RpcError};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    models::{KeyGeneratorAddressListModel, KeyGeneratorModel},
     state::AppState,
-    types::{Address, KeyGenerator},
+    types::{Address, KeyGenerator, KeyGeneratorAddressListModel, KeyGeneratorModel},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -8,7 +8,10 @@ use skde::{
 };
 use tracing::info;
 
-use crate::{models::KeyGeneratorModel, state::AppState, types::Address};
+use crate::{
+    state::AppState,
+    types::{Address, KeyGeneratorModel},
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncPartialKey {

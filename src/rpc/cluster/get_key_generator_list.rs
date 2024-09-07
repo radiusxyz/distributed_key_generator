@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     error::{self, Error},
-    models::{KeyGeneratorAddressListModel, KeyGeneratorModel},
     state::AppState,
-    types::{KeyGenerator, KeyGeneratorList},
+    types::{
+        Address, KeyGenerator, KeyGeneratorAddressListModel, KeyGeneratorList, KeyGeneratorModel,
+    },
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -11,5 +11,5 @@ pub mod prelude {
     };
     pub use serde::{Deserialize, Serialize};
 
-    pub use crate::{error::Error, models::*, state::AppState, types::*};
+    pub use crate::{error::Error, state::AppState, types::*};
 }
