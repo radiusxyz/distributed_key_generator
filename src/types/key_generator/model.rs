@@ -1,4 +1,4 @@
-use crate::types::{prelude::*, signer::Address};
+use crate::types::prelude::*;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct KeyGeneratorAddressListModel;

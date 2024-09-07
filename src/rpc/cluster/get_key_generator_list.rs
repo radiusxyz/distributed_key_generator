@@ -6,9 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::{self, Error},
     state::AppState,
-    types::{
-        Address, KeyGenerator, KeyGeneratorAddressListModel, KeyGeneratorList, KeyGeneratorModel,
-    },
+    types::{KeyGenerator, KeyGeneratorAddressListModel, KeyGeneratorList, KeyGeneratorModel},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

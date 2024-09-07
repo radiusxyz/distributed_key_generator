@@ -4,10 +4,9 @@ use key_management_system::{
     cli::{Cli, Commands, Config, ConfigPath},
     client::key_generator::KeyGeneratorClient,
     error::{self, Error},
-    models::{KeyGeneratorAddressListModel, KeyGeneratorModel},
-    rpc::{cluster, debug, external, internal},
+    rpc::{cluster, external, internal},
     state::AppState,
-    types::Address,
+    types::{Address, KeyGeneratorAddressListModel, KeyGeneratorModel},
 };
 use radius_sequencer_sdk::{json_rpc::RpcServer, kvstore::KvStore as Database};
 use tokio::task::JoinHandle;
@@ -117,8 +116,8 @@ async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Erro
             internal::AddKeyGenerator::handler,
         )?
         .register_rpc_method(
-            debug::RunSingleKeyGenerator::METHOD_NAME,
-            debug::RunSingleKeyGenerator::handler,
+            internal::debug::RunSingleKeyGenerator::METHOD_NAME,
+            internal::debug::RunSingleKeyGenerator::handler,
         )?
         .init(app_state.config().internal_rpc_url().to_string())
         .await

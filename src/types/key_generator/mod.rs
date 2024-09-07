@@ -3,7 +3,6 @@ use std::collections::btree_set::{BTreeSet, Iter};
 
 pub use model::*;
 
-use super::Address;
 use crate::types::prelude::*;
 
 pub type KeyGeneratorList = Vec<KeyGenerator>;
