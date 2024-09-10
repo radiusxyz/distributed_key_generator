@@ -4,7 +4,10 @@ use radius_sequencer_sdk::json_rpc::{Error, RpcClient};
 
 use crate::{
     rpc::{
-        cluster::{GetKeyGeneratorList, RunGeneratePartialKey, SyncKeyGenerator, SyncPartialKey},
+        cluster::{
+            GetKeyGeneratorList, RunGeneratePartialKey, SyncAggregatedKey, SyncKeyGenerator,
+            SyncPartialKey,
+        },
         internal::AddKeyGenerator,
     },
     types::KeyGeneratorList,
@@ -48,6 +51,12 @@ impl KeyGeneratorClient {
     ) -> Result<(), Error> {
         self.inner
             .request(RunGeneratePartialKey::METHOD_NAME, parameter)
+            .await
+    }
+
+    pub async fn sync_aggregated_key(&self, parameter: SyncAggregatedKey) -> Result<(), Error> {
+        self.inner
+            .request(SyncAggregatedKey::METHOD_NAME, parameter)
             .await
     }
 }

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use skde::key_generation::{
     generate_partial_key, prove_partial_key_validity, PartialKey, PartialKeyProof,
 };
-use tracing::{error, info};
+use tracing::info;
 
 use crate::{
     client::key_generator::KeyGeneratorClient, rpc::cluster::SyncPartialKey, state::AppState,
@@ -22,8 +22,6 @@ impl RunGeneratePartialKey {
 
     pub async fn handler(parameter: RpcParameter, context: Arc<AppState>) -> Result<(), RpcError> {
         let parameter = parameter.parse::<Self>()?;
-
-        info!("run_generate_partial_key - key_id: {:?}", parameter.key_id);
 
         let skde_params = context.skde_params();
 
@@ -74,7 +72,7 @@ pub fn sync_partial_key(
                         info!("Complete to sync partial key");
                     }
                     Err(err) => {
-                        error!("Failed to sync partial key - error: {:?}", err);
+                        info!("Failed to sync partial key - error: {:?}", err);
                     }
                 }
             });

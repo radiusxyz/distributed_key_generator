@@ -39,4 +39,8 @@ impl PartialKeyList {
     pub fn get_with_index(&self, index: usize) -> Option<(&Address, &PartialKey)> {
         self.0.iter().nth(index)
     }
+
+    pub fn get_address_list(&self) -> Vec<Address> {
+        self.0.keys().cloned().collect()
+    }
 }

@@ -201,6 +201,10 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
             cluster::SyncKeyGenerator::handler,
         )?
         .register_rpc_method(
+            cluster::SyncAggregatedKey::METHOD_NAME,
+            cluster::SyncAggregatedKey::handler,
+        )?
+        .register_rpc_method(
             cluster::SyncPartialKey::METHOD_NAME,
             cluster::SyncPartialKey::handler,
         )?

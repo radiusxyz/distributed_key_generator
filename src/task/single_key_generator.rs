@@ -1,12 +1,15 @@
 use std::{collections::BTreeMap, time::Duration};
 
-use skde::{delay_encryption::solve_time_lock_puzzle, key_aggregation::aggregate_key};
+use skde::{
+    delay_encryption::solve_time_lock_puzzle,
+    key_aggregation::{aggregate_key, AggregatedKey},
+};
 use tokio::time::sleep;
 use tracing::{error, info};
 
 use crate::{
     client::key_generator::KeyGeneratorClient,
-    rpc::cluster::RunGeneratePartialKey,
+    rpc::cluster::{RunGeneratePartialKey, SyncAggregatedKey},
     state::AppState,
     types::{Address, AggregatedKeyModel, DecryptionKeyModel, KeyIdModel, PartialKeyListModel},
 };
@@ -30,14 +33,21 @@ pub fn run_single_key_generator(context: AppState) {
                 sleep(Duration::from_secs(partial_key_aggregation_cycle)).await;
                 let skde_params = context.skde_params().clone();
 
-                let partial_key_list = PartialKeyListModel::get_or_default(key_id)
-                    .unwrap()
-                    .to_vec();
-                let aggregated_key = aggregate_key(&skde_params, &partial_key_list);
+                let partial_key_list = PartialKeyListModel::get_or_default(key_id).unwrap();
+
+                let participant_addresses = partial_key_list.get_address_list();
+
+                let aggregated_key = aggregate_key(&skde_params, &partial_key_list.to_vec());
                 AggregatedKeyModel::put(key_id, &aggregated_key).unwrap();
+
                 info!("Aggregated key: {:?}", aggregated_key);
 
-                // TODO:
+                sync_aggregated_key(
+                    key_generator_clients,
+                    key_id,
+                    aggregated_key.clone(),
+                    participant_addresses,
+                );
 
                 let decryption_key = solve_time_lock_puzzle(&skde_params, &aggregated_key).unwrap();
                 DecryptionKeyModel::put(key_id, &decryption_key).unwrap();
@@ -82,39 +92,41 @@ pub fn run_generate_partial_key(
     });
 }
 
-// pub fn sync_aggregated_key(
-//     key_generator_clients: BTreeMap<Address, KeyGeneratorClient>,
-//     address: Address,
-//     key_id: u64,
-//     aggregated_key: PartialKey,
-// ) {
-//     tokio::spawn(async move {
-//         let parameter = SyncPartialKey {
-//             address,
-//             key_id,
-//             aggregated_key,
-//             aggregated_key_proof,
-//         };
+pub fn sync_aggregated_key(
+    key_generator_clients: BTreeMap<Address, KeyGeneratorClient>,
+    key_id: u64,
+    aggregated_key: AggregatedKey,
+    participant_addresses: Vec<Address>,
+) {
+    tokio::spawn(async move {
+        let parameter = SyncAggregatedKey {
+            key_id,
+            aggregated_key,
+            participant_addresses,
+        };
 
-//         info!(
-//             "sync_aggregated_key - rpc_client_count: {:?}",
-//             key_generator_clients.len()
-//         );
+        info!(
+            "sync_aggregated_key - rpc_client_count: {:?}",
+            key_generator_clients.len()
+        );
 
-//         for (_address, key_generator_rpc_client) in key_generator_clients {
-//             let key_generator_rpc_client = key_generator_rpc_client.clone();
-//             let parameter = parameter.clone();
+        for (_address, key_generator_rpc_client) in key_generator_clients {
+            let key_generator_rpc_client = key_generator_rpc_client.clone();
+            let parameter = parameter.clone();
 
-//             tokio::spawn(async move {
-//                 match key_generator_rpc_client.sync_partial_key(parameter).await {
-//                     Ok(_) => {
-//                         info!("Complete to sync partial key");
-//                     }
-//                     Err(err) => {
-//                         error!("Failed to sync partial key - error: {:?}", err);
-//                     }
-//                 }
-//             });
-//         }
-//     });
-// }
+            tokio::spawn(async move {
+                match key_generator_rpc_client
+                    .sync_aggregated_key(parameter)
+                    .await
+                {
+                    Ok(_) => {
+                        info!("Complete to sync aggregated key");
+                    }
+                    Err(err) => {
+                        error!("Failed to sync aggregated key - error: {:?}", err);
+                    }
+                }
+            });
+        }
+    });
+}
