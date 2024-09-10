@@ -11,10 +11,15 @@ pub struct KeyIdModel;
 impl KeyIdModel {
     const ID: &'static str = stringify!(KeyIdModel);
 
-    pub fn put(key_id: u64) -> Result<(), KvStoreError> {
-        let key = &Self::ID;
+    pub fn initialize() -> Result<(), KvStoreError> {
+        if Self::get().is_err() {
+            let key = &Self::ID;
+            let key_id = 0u64;
 
-        kvstore()?.put(key, &key_id)
+            kvstore()?.put(key, &key_id)?;
+        }
+
+        Ok(())
     }
 
     pub fn get() -> Result<u64, KvStoreError> {
@@ -23,28 +28,14 @@ impl KeyIdModel {
         kvstore()?.get(key)
     }
 
-    pub fn get_or_default() -> Result<u64, KvStoreError> {
+    pub fn increase_key_id() -> Result<(), KvStoreError> {
         let key = &Self::ID;
 
-        kvstore()?.get_or_default(key)
-    }
+        kvstore()?.apply(key, |locked_key_id: &mut Lock<u64>| {
+            **locked_key_id += 1;
+        })?;
 
-    pub fn get_mut_or_default() -> Result<Lock<'static, u64>, KvStoreError> {
-        let key = &Self::ID;
-
-        match kvstore()?.get_mut(key) {
-            Ok(key_id) => Ok(key_id),
-            Err(error) => {
-                if error.is_none_type() {
-                    let key_id = 0;
-                    kvstore()?.put(key, &key_id)?;
-
-                    return kvstore()?.get_mut(key);
-                }
-
-                Err(error)
-            }
-        }
+        Ok(())
     }
 }
 

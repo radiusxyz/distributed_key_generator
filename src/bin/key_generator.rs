@@ -9,6 +9,7 @@ use key_management_system::{
     task::single_key_generator::run_single_key_generator,
     types::{
         Address, Config, ConfigOption, ConfigPath, KeyGeneratorAddressListModel, KeyGeneratorModel,
+        KeyIdModel,
     },
 };
 use radius_sequencer_sdk::{json_rpc::RpcServer, kvstore::KvStore as Database};
@@ -88,6 +89,7 @@ async fn main() -> Result<(), Error> {
             );
 
             KeyGeneratorAddressListModel::initialize().map_err(error::Error::Database)?;
+            KeyIdModel::initialize().map_err(error::Error::Database)?;
 
             let mut key_generator_address_list =
                 KeyGeneratorAddressListModel::get().map_err(error::Error::Database)?;

@@ -21,7 +21,7 @@ pub fn run_single_key_generator(context: AppState) {
             let key_generator_clients = context.key_generator_clients().await.unwrap();
             let context = context.clone();
 
-            let key_id = KeyIdModel::get_or_default().unwrap();
+            let key_id = KeyIdModel::get().unwrap();
 
             info!("request run_generate_partial_key - key_id: {:?}", key_id);
             run_generate_partial_key(key_generator_clients.clone(), key_id);
@@ -37,10 +37,14 @@ pub fn run_single_key_generator(context: AppState) {
                 AggregatedKeyModel::put(key_id, &aggregated_key).unwrap();
                 info!("Aggregated key: {:?}", aggregated_key);
 
+                // TODO:
+
                 let decryption_key = solve_time_lock_puzzle(&skde_params, &aggregated_key).unwrap();
                 DecryptionKeyModel::put(key_id, &decryption_key).unwrap();
                 info!("Decryption key: {:?}", decryption_key);
             });
+
+            KeyIdModel::increase_key_id().unwrap();
         }
     });
 }
@@ -77,3 +81,40 @@ pub fn run_generate_partial_key(
         }
     });
 }
+
+// pub fn sync_aggregated_key(
+//     key_generator_clients: BTreeMap<Address, KeyGeneratorClient>,
+//     address: Address,
+//     key_id: u64,
+//     aggregated_key: PartialKey,
+// ) {
+//     tokio::spawn(async move {
+//         let parameter = SyncPartialKey {
+//             address,
+//             key_id,
+//             aggregated_key,
+//             aggregated_key_proof,
+//         };
+
+//         info!(
+//             "sync_aggregated_key - rpc_client_count: {:?}",
+//             key_generator_clients.len()
+//         );
+
+//         for (_address, key_generator_rpc_client) in key_generator_clients {
+//             let key_generator_rpc_client = key_generator_rpc_client.clone();
+//             let parameter = parameter.clone();
+
+//             tokio::spawn(async move {
+//                 match key_generator_rpc_client.sync_partial_key(parameter).await {
+//                     Ok(_) => {
+//                         info!("Complete to sync partial key");
+//                     }
+//                     Err(err) => {
+//                         error!("Failed to sync partial key - error: {:?}", err);
+//                     }
+//                 }
+//             });
+//         }
+//     });
+// }
