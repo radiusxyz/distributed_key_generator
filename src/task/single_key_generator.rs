@@ -12,8 +12,10 @@ use tokio::time::sleep;
 use tracing::info;
 
 use crate::{
-    client::key_generator::KeyGeneratorClient, rpc::cluster::SyncPartialKey, state::AppState,
-    types::Address,
+    client::key_generator::KeyGeneratorClient,
+    rpc::cluster::SyncPartialKey,
+    state::AppState,
+    types::{Address, AggregatedKeyModel, DecryptionKeyModel, PartialKeyListModel},
 };
 
 pub const PRIME_P: &str = "8155133734070055735139271277173718200941522166153710213522626777763679009805792017274916613411023848268056376687809186180768200590914945958831360737612803";
@@ -48,20 +50,14 @@ pub fn run_single_key_generator(context: Arc<AppState>, key_id: u64) {
         sleep(Duration::from_secs(partial_key_aggregation_cycle)).await;
 
         // TODO: move to other function
-        let partial_key_list = context.get_partial_key_list(key_id).await.unwrap();
-        let aggregated_key = aggregate_key(&skde_params, &partial_key_list);
+        let partial_key_list = PartialKeyListModel::get(key_id).unwrap();
+        let aggregated_key = aggregate_key(&skde_params, &partial_key_list.to_vec());
 
-        context
-            .add_aggregated_key(key_id, aggregated_key.clone())
-            .await
-            .unwrap();
+        AggregatedKeyModel::put(key_id, &aggregated_key).unwrap();
 
         let decryption_key = solve_time_lock_puzzle(&skde_params, &aggregated_key).unwrap();
 
-        context
-            .add_decryption_key(key_id, decryption_key)
-            .await
-            .unwrap();
+        DecryptionKeyModel::put(key_id, &decryption_key).unwrap();
     });
 }
 

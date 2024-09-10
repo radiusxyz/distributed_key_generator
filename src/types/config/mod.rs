@@ -1,13 +1,32 @@
+mod config_option;
+mod config_path;
+
 use std::{fs, path::PathBuf};
 
+pub use config_option::*;
+pub use config_path::*;
 use radius_sequencer_sdk::signature::ChainType;
 use serde::{Deserialize, Serialize};
 
-use super::{ConfigOption, ConfigPath, CONFIG_FILE_NAME, DATABASE_DIR_NAME, SIGNING_KEY};
 use crate::{
     error::Error,
     types::{Address, SigningKey},
 };
+
+pub const DEFAULT_HOME_PATH: &str = ".radius";
+pub const DATABASE_DIR_NAME: &str = "database";
+pub const CONFIG_FILE_NAME: &str = "Config.toml";
+pub const SIGNING_KEY: &str = "signing_key";
+
+const DEFAULT_EXTERNAL_RPC_URL: &str = "http://127.0.0.1:3000";
+const DEFAULT_INTERNAL_RPC_URL: &str = "http://127.0.0.1:4000";
+const DEFAULT_CLUSTER_RPC_URL: &str = "http://127.0.0.1:5000";
+
+const DEFAULT_RADIUS_FOUNDATION_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+const DEFAULT_CHAIN_TYPE: &str = "Ethereum";
+
+const DEFAULT_PARTIAL_KEY_GENERATION_CYCLE: u64 = 5;
+const DEFAULT_PARTIAL_KEY_AGGREGATION_CYCLE: u64 = 4;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {

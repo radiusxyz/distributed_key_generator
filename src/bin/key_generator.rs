@@ -1,15 +1,47 @@
 use std::collections::HashMap;
 
+use clap::{Parser, Subcommand};
 use key_management_system::{
-    cli::{Cli, Commands, Config, ConfigPath},
     client::key_generator::KeyGeneratorClient,
     error::{self, Error},
     rpc::{cluster, external, internal},
     state::AppState,
-    types::{Address, KeyGeneratorAddressListModel, KeyGeneratorModel},
+    types::{
+        Address, Config, ConfigOption, ConfigPath, KeyGeneratorAddressListModel, KeyGeneratorModel,
+    },
 };
 use radius_sequencer_sdk::{json_rpc::RpcServer, kvstore::KvStore as Database};
+pub use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
+
+#[derive(Debug, Deserialize, Parser, Serialize)]
+#[command(author, version, about, long_about = None)]
+#[command(propagate_version = true)]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+impl Cli {
+    pub fn init() -> Self {
+        Cli::parse()
+    }
+}
+
+#[derive(Subcommand, Debug, Deserialize, Serialize)]
+pub enum Commands {
+    /// Initializes a node
+    Init {
+        #[clap(flatten)]
+        config_path: Box<ConfigPath>,
+    },
+
+    /// Starts the node
+    Start {
+        #[clap(flatten)]
+        config_option: Box<ConfigOption>,
+    },
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {

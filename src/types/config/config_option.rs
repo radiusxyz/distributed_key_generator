@@ -3,17 +3,11 @@ use std::path::PathBuf;
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 
-use super::ConfigPath;
-
-const DEFAULT_EXTERNAL_RPC_URL: &str = "http://127.0.0.1:3000";
-const DEFAULT_INTERNAL_RPC_URL: &str = "http://127.0.0.1:4000";
-const DEFAULT_CLUSTER_RPC_URL: &str = "http://127.0.0.1:5000";
-
-const DEFAULT_RADIUS_FOUNDATION_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
-const DEFAULT_CHAIN_TYPE: &str = "Ethereum";
-
-const DEFAULT_PARTIAL_KEY_GENERATION_CYCLE: u64 = 5;
-const DEFAULT_PARTIAL_KEY_AGGREGATION_CYCLE: u64 = 4;
+use super::{
+    config_path::ConfigPath, DEFAULT_CHAIN_TYPE, DEFAULT_CLUSTER_RPC_URL, DEFAULT_EXTERNAL_RPC_URL,
+    DEFAULT_INTERNAL_RPC_URL, DEFAULT_PARTIAL_KEY_AGGREGATION_CYCLE,
+    DEFAULT_PARTIAL_KEY_GENERATION_CYCLE, DEFAULT_RADIUS_FOUNDATION_ADDRESS,
+};
 
 #[derive(Debug, Deserialize, Parser, Serialize)]
 pub struct ConfigOption {

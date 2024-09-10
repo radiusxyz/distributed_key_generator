@@ -18,12 +18,11 @@ impl GetDecryptionKey {
 
     pub async fn handler(
         parameter: RpcParameter,
-        context: Arc<AppState>,
+        _context: Arc<AppState>,
     ) -> Result<GetDecryptionKeyResponse, RpcError> {
         let parameter = parameter.parse::<Self>()?;
 
-        let aggregated_key = context.get_encryption_key(parameter.key_id).await?;
-
+        let aggregated_key = AggregatedKeyModel::get(parameter.key_id)?;
         let encryption_key = PublicKey {
             pk: aggregated_key.u.clone(),
         };

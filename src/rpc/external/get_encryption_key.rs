@@ -18,11 +18,11 @@ impl GetEncryptionKey {
 
     pub async fn handler(
         parameter: RpcParameter,
-        context: Arc<AppState>,
+        _context: Arc<AppState>,
     ) -> Result<GetEncryptionKeyResponse, RpcError> {
         let parameter = parameter.parse::<Self>()?;
 
-        let decryption_key = context.get_decryption_key(parameter.key_id).await?;
+        let decryption_key = DecryptionKeyModel::get(parameter.key_id)?;
 
         Ok(GetEncryptionKeyResponse { decryption_key })
     }

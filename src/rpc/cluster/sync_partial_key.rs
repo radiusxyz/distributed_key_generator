@@ -10,7 +10,7 @@ use tracing::info;
 
 use crate::{
     state::AppState,
-    types::{Address, KeyGeneratorModel},
+    types::{Address, KeyGeneratorModel, PartialKeyListModel},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -30,7 +30,7 @@ pub const MAX_KEY_GENERATOR_NUMBER: u32 = 2;
 impl SyncPartialKey {
     pub const METHOD_NAME: &'static str = "sync_partial_key";
 
-    pub async fn handler(parameter: RpcParameter, context: Arc<AppState>) -> Result<(), RpcError> {
+    pub async fn handler(parameter: RpcParameter, _context: Arc<AppState>) -> Result<(), RpcError> {
         let parameter = parameter.parse::<Self>()?;
         let is_key_generator_in_cluster = !KeyGeneratorModel::get(&parameter.address).is_err();
 
@@ -60,9 +60,9 @@ impl SyncPartialKey {
                 return Ok(());
             }
 
-            context
-                .add_partial_key(parameter.key_id, parameter.address, parameter.partial_key)
-                .await?
+            let mut partial_key_list = PartialKeyListModel::get_mut_or_default(parameter.key_id)?;
+            partial_key_list.insert(parameter.address, parameter.partial_key);
+            partial_key_list.update()?;
         }
 
         Ok(())

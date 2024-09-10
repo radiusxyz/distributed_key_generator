@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use radius_sequencer_sdk::json_rpc::{types::RpcParameter, RpcError};
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::{
     state::AppState,
@@ -25,6 +26,11 @@ impl SyncKeyGenerator {
 
     pub async fn handler(parameter: RpcParameter, context: Arc<AppState>) -> Result<(), RpcError> {
         let parameter = parameter.parse::<Self>()?;
+
+        info!(
+            "sync_key_generator - address: {:?} / ip_address: {:?}",
+            parameter.message.address, parameter.message.ip_address
+        );
 
         // TODO: Uncomment this code
         // parameter.signature.verify_signature(
