@@ -33,14 +33,12 @@ impl AddKeyGenerator {
         //     context.config().chain_type().clone(),
         // )?;
 
-        let mut key_generator_address_list = KeyGeneratorAddressListModel::get_mut_or_default()?;
-
+        let key_generator_address_list = KeyGeneratorAddressListModel::get()?;
         if key_generator_address_list.contains(&parameter.message.address) {
             return Ok(());
         }
 
-        key_generator_address_list.insert(parameter.message.address.clone());
-        key_generator_address_list.update()?;
+        KeyGeneratorAddressListModel::add_key_generator_address(parameter.message.address.clone())?;
 
         let key_generator = KeyGenerator::new(
             parameter.message.address.clone(),

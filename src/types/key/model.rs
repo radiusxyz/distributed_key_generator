@@ -1,5 +1,7 @@
 use radius_sequencer_sdk::kvstore::Lock;
-use skde::{delay_encryption::SecretKey, key_aggregation::AggregatedKey};
+use skde::{
+    delay_encryption::SecretKey, key_aggregation::AggregatedKey, key_generation::PartialKey,
+};
 
 use crate::types::prelude::*;
 
@@ -52,6 +54,17 @@ pub struct PartialKeyListModel;
 impl PartialKeyListModel {
     const ID: &'static str = stringify!(PartialKeyListModel);
 
+    pub fn initialize(key_id: u64) -> Result<(), KvStoreError> {
+        if Self::get(key_id).is_err() {
+            let key = &(Self::ID, key_id);
+            let partial_key_list = PartialKeyList::default();
+
+            kvstore()?.put(key, &partial_key_list)?
+        }
+
+        Ok(())
+    }
+
     pub fn put(key_id: u64, sequencing_info_list: &PartialKeyList) -> Result<(), KvStoreError> {
         let key = &(Self::ID, key_id);
 
@@ -70,22 +83,18 @@ impl PartialKeyListModel {
         kvstore()?.get_or_default(key)
     }
 
-    pub fn get_mut_or_default(key_id: u64) -> Result<Lock<'static, PartialKeyList>, KvStoreError> {
+    pub fn add_key_generator_address(
+        key_id: u64,
+        address: Address,
+        partial_key: PartialKey,
+    ) -> Result<(), KvStoreError> {
         let key = &(Self::ID, key_id);
 
-        match kvstore()?.get_mut(key) {
-            Ok(partial_key_list) => Ok(partial_key_list),
-            Err(error) => {
-                if error.is_none_type() {
-                    let partial_key_list = PartialKeyList::default();
-                    kvstore()?.put(key, &partial_key_list)?;
+        kvstore()?.apply(key, |locked_partial_key_list: &mut Lock<PartialKeyList>| {
+            locked_partial_key_list.insert(address, partial_key)
+        })?;
 
-                    return kvstore()?.get_mut(key);
-                }
-
-                Err(error)
-            }
-        }
+        Ok(())
     }
 }
 

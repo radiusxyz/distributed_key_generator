@@ -87,8 +87,10 @@ async fn main() -> Result<(), Error> {
                 config.database_path(),
             );
 
+            KeyGeneratorAddressListModel::initialize().map_err(error::Error::Database)?;
+
             let mut key_generator_address_list =
-                KeyGeneratorAddressListModel::get_or_default().map_err(error::Error::Database)?;
+                KeyGeneratorAddressListModel::get().map_err(error::Error::Database)?;
 
             if config.seed_cluster_rpc_url().is_some() {
                 // Follow

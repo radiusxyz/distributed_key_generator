@@ -470,7 +470,7 @@ dependencies = [
 [[package]]
 name = "block-commitment"
 version = "0.1.0"
-source = "git+https://github.com/radiusxyz/radius-sdk-rs#5a5b022b6d57d589950acb402e7100975ee5d11f"
+source = "git+https://github.com/radiusxyz/radius-sdk-rs?rev=0c1884d5fbc12468907e2a7a8009207277947aad#0c1884d5fbc12468907e2a7a8009207277947aad"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -629,7 +629,7 @@ checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 [[package]]
 name = "context"
 version = "0.1.0"
-source = "git+https://github.com/radiusxyz/radius-sdk-rs#5a5b022b6d57d589950acb402e7100975ee5d11f"
+source = "git+https://github.com/radiusxyz/radius-sdk-rs?rev=0c1884d5fbc12468907e2a7a8009207277947aad#0c1884d5fbc12468907e2a7a8009207277947aad"
 dependencies = [
  "crossbeam-epoch",
 ]
@@ -1327,7 +1327,7 @@ dependencies = [
 [[package]]
 name = "json-rpc"
 version = "0.1.0"
-source = "git+https://github.com/radiusxyz/radius-sdk-rs#5a5b022b6d57d589950acb402e7100975ee5d11f"
+source = "git+https://github.com/radiusxyz/radius-sdk-rs?rev=0c1884d5fbc12468907e2a7a8009207277947aad#0c1884d5fbc12468907e2a7a8009207277947aad"
 dependencies = [
  "hyper",
  "jsonrpsee",
@@ -1543,7 +1543,7 @@ dependencies = [
 [[package]]
 name = "kvstore"
 version = "0.1.0"
-source = "git+https://github.com/radiusxyz/radius-sdk-rs#5a5b022b6d57d589950acb402e7100975ee5d11f"
+source = "git+https://github.com/radiusxyz/radius-sdk-rs?rev=0c1884d5fbc12468907e2a7a8009207277947aad#0c1884d5fbc12468907e2a7a8009207277947aad"
 dependencies = [
  "bincode",
  "rocksdb",
@@ -1951,7 +1951,7 @@ checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
 [[package]]
 name = "radius-sequencer-sdk"
 version = "0.1.0"
-source = "git+https://github.com/radiusxyz/radius-sdk-rs#5a5b022b6d57d589950acb402e7100975ee5d11f"
+source = "git+https://github.com/radiusxyz/radius-sdk-rs?rev=0c1884d5fbc12468907e2a7a8009207277947aad#0c1884d5fbc12468907e2a7a8009207277947aad"
 dependencies = [
  "block-commitment",
  "context",
@@ -2437,7 +2437,7 @@ dependencies = [
 [[package]]
 name = "signature"
 version = "0.1.0"
-source = "git+https://github.com/radiusxyz/radius-sdk-rs#5a5b022b6d57d589950acb402e7100975ee5d11f"
+source = "git+https://github.com/radiusxyz/radius-sdk-rs?rev=0c1884d5fbc12468907e2a7a8009207277947aad#0c1884d5fbc12468907e2a7a8009207277947aad"
 dependencies = [
  "const-hex",
  "ed25519-dalek",

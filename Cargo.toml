@@ -21,4 +21,5 @@ tracing = "0.1.37"
 tracing-subscriber = "0.3.17"
 
 skde = { git = "https://github.com/radiusxyz/skde", rev="2bc6ee02a1b471660105e9dc80470135797a6e73"}
-radius-sequencer-sdk = { git = "https://github.com/radiusxyz/radius-sdk-rs", features = ["full", "signature"] }
+
+radius-sequencer-sdk = { git = "https://github.com/radiusxyz/radius-sdk-rs", features = ["full", "signature"], rev="0c1884d5fbc12468907e2a7a8009207277947aad" }

@@ -30,7 +30,6 @@ pub fn run_single_key_generator(context: AppState) {
                 sleep(Duration::from_secs(partial_key_aggregation_cycle)).await;
                 let skde_params = context.skde_params().clone();
 
-                // TODO: move to other function
                 let partial_key_list = PartialKeyListModel::get_or_default(key_id)
                     .unwrap()
                     .to_vec();

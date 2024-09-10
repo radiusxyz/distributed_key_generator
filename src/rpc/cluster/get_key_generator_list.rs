@@ -16,7 +16,7 @@ impl GetKeyGeneratorList {
     pub const METHOD_NAME: &'static str = "get_key_generator_list";
 
     pub async fn handler(_: RpcParameter, _: Arc<AppState>) -> Result<KeyGeneratorList, RpcError> {
-        let key_generator_address_list = KeyGeneratorAddressListModel::get_or_default()?;
+        let key_generator_address_list = KeyGeneratorAddressListModel::get()?;
 
         let key_generator_list = key_generator_address_list
             .iter()

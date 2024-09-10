@@ -31,6 +31,8 @@ impl SyncPartialKey {
                 parameter.address, parameter.partial_key
             );
 
+            PartialKeyListModel::initialize(parameter.key_id)?;
+
             let is_valid = verify_partial_key_validity(
                 context.skde_params(),
                 parameter.partial_key.clone(),
@@ -42,9 +44,11 @@ impl SyncPartialKey {
                 return Ok(());
             }
 
-            let mut partial_key_list = PartialKeyListModel::get_mut_or_default(parameter.key_id)?;
-            partial_key_list.insert(parameter.address, parameter.partial_key);
-            partial_key_list.update()?;
+            PartialKeyListModel::add_key_generator_address(
+                parameter.key_id,
+                parameter.address,
+                parameter.partial_key,
+            )?;
         }
 
         Ok(())
