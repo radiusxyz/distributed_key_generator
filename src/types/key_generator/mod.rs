@@ -45,4 +45,8 @@ impl KeyGeneratorAddressList {
     pub fn iter(&self) -> Iter<'_, Address> {
         self.0.iter()
     }
+
+    pub fn contains(&self, key_generator_address: &Address) -> bool {
+        self.0.contains(key_generator_address)
+    }
 }

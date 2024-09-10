@@ -1,69 +1,60 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, time::Duration};
 
-use skde::{
-    delay_encryption::solve_time_lock_puzzle,
-    key_aggregation::aggregate_key,
-    key_generation::{
-        generate_partial_key, prove_partial_key_validity, PartialKey, PartialKeyProof,
-    },
-};
+use skde::{delay_encryption::solve_time_lock_puzzle, key_aggregation::aggregate_key};
 use tokio::time::sleep;
-use tracing::info;
+use tracing::{error, info};
 
 use crate::{
     client::key_generator::KeyGeneratorClient,
-    rpc::cluster::SyncPartialKey,
+    rpc::cluster::RunGeneratePartialKey,
     state::AppState,
-    types::{Address, AggregatedKeyModel, DecryptionKeyModel, PartialKeyListModel},
+    types::{Address, AggregatedKeyModel, DecryptionKeyModel, KeyIdModel, PartialKeyListModel},
 };
 
-pub fn run_single_key_generator(context: Arc<AppState>, key_id: u64) {
+pub fn run_single_key_generator(context: AppState) {
     tokio::spawn(async move {
-        let skde_params = context.skde_params();
+        let partial_key_generation_cycle = context.config().partial_key_generation_cycle();
         let partial_key_aggregation_cycle = context.config().partial_key_aggregation_cycle();
-        let (secret_value, partial_key) = generate_partial_key(skde_params);
-        let partial_key_proof = prove_partial_key_validity(skde_params, &secret_value);
 
-        let key_generator_clients = context.key_generator_clients().await.unwrap();
+        loop {
+            sleep(Duration::from_secs(partial_key_generation_cycle)).await;
+            let key_generator_clients = context.key_generator_clients().await.unwrap();
+            let context = context.clone();
 
-        sync_partial_key(
-            key_generator_clients,
-            context.config().signing_key().get_address().clone(),
-            key_id,
-            partial_key,
-            partial_key_proof,
-        );
-        sleep(Duration::from_secs(partial_key_aggregation_cycle)).await;
+            let key_id = KeyIdModel::get_or_default().unwrap();
 
-        // TODO: move to other function
-        let partial_key_list = PartialKeyListModel::get(key_id).unwrap();
-        let aggregated_key = aggregate_key(skde_params, &partial_key_list.to_vec());
+            info!("request run_generate_partial_key - key_id: {:?}", key_id);
+            run_generate_partial_key(key_generator_clients.clone(), key_id);
 
-        AggregatedKeyModel::put(key_id, &aggregated_key).unwrap();
+            tokio::spawn(async move {
+                sleep(Duration::from_secs(partial_key_aggregation_cycle)).await;
+                let skde_params = context.skde_params().clone();
 
-        let decryption_key = solve_time_lock_puzzle(skde_params, &aggregated_key).unwrap();
+                // TODO: move to other function
+                let partial_key_list = PartialKeyListModel::get_or_default(key_id)
+                    .unwrap()
+                    .to_vec();
+                let aggregated_key = aggregate_key(&skde_params, &partial_key_list);
+                AggregatedKeyModel::put(key_id, &aggregated_key).unwrap();
+                info!("Aggregated key: {:?}", aggregated_key);
 
-        DecryptionKeyModel::put(key_id, &decryption_key).unwrap();
+                let decryption_key = solve_time_lock_puzzle(&skde_params, &aggregated_key).unwrap();
+                DecryptionKeyModel::put(key_id, &decryption_key).unwrap();
+                info!("Decryption key: {:?}", decryption_key);
+            });
+        }
     });
 }
 
-pub fn sync_partial_key(
-    key_generator_clients: HashMap<Address, KeyGeneratorClient>,
-    address: Address,
+pub fn run_generate_partial_key(
+    key_generator_clients: BTreeMap<Address, KeyGeneratorClient>,
     key_id: u64,
-    partial_key: PartialKey,
-    partial_key_proof: PartialKeyProof,
 ) {
     tokio::spawn(async move {
-        let parameter = SyncPartialKey {
-            address,
-            key_id,
-            partial_key,
-            partial_key_proof,
-        };
+        let parameter = RunGeneratePartialKey { key_id };
 
         info!(
-            "sync_partial_key - rpc_client_count: {:?}",
+            "run_generate_partial_key - rpc_client_count: {:?}",
             key_generator_clients.len()
         );
 
@@ -72,12 +63,15 @@ pub fn sync_partial_key(
             let parameter = parameter.clone();
 
             tokio::spawn(async move {
-                match key_generator_rpc_client.sync_partial_key(parameter).await {
+                match key_generator_rpc_client
+                    .run_generate_partial_key(parameter)
+                    .await
+                {
                     Ok(_) => {
-                        info!("Complete to sync partial key");
+                        info!("Complete to run generate partial key");
                     }
                     Err(err) => {
-                        info!("Failed to sync partial key - error: {:?}", err);
+                        error!("Failed to run generate partial key - error: {:?}", err);
                     }
                 }
             });

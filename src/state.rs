@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 
 use tokio::sync::Mutex;
 
@@ -14,7 +14,7 @@ pub struct AppState {
 
 struct AppStateInner {
     config: Config,
-    key_generator_clients: Mutex<HashMap<Address, KeyGeneratorClient>>,
+    key_generator_clients: Mutex<BTreeMap<Address, KeyGeneratorClient>>,
     skde_params: skde::SkdeParams,
 }
 
@@ -32,7 +32,7 @@ impl Clone for AppState {
 impl AppState {
     pub fn new(
         config: Config,
-        key_generator_clients: HashMap<Address, KeyGeneratorClient>,
+        key_generator_clients: BTreeMap<Address, KeyGeneratorClient>,
         skde_params: skde::SkdeParams,
     ) -> Self {
         let inner = AppStateInner {
@@ -60,14 +60,12 @@ impl AppState {
         let mut key_generator_clients = self.inner.key_generator_clients.lock().await;
         key_generator_clients.insert(key_generator.address().to_owned(), key_generator_client);
 
-        key_generator.address();
-
         Ok(())
     }
 
     pub async fn key_generator_clients(
         &self,
-    ) -> Result<HashMap<Address, KeyGeneratorClient>, Error> {
+    ) -> Result<BTreeMap<Address, KeyGeneratorClient>, Error> {
         let key_generator_clients = self.inner.key_generator_clients.lock().await;
 
         Ok(key_generator_clients.clone())

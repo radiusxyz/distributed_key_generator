@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use tracing::info;
 
@@ -33,10 +33,14 @@ impl AddKeyGenerator {
         //     context.config().chain_type().clone(),
         // )?;
 
-        let mut key_generator_address_list = KeyGeneratorAddressListModel::get_or_default()?;
-        key_generator_address_list.insert(parameter.message.address.clone());
+        let mut key_generator_address_list = KeyGeneratorAddressListModel::get_mut_or_default()?;
 
-        KeyGeneratorAddressListModel::put(&key_generator_address_list)?;
+        if key_generator_address_list.contains(&parameter.message.address) {
+            return Ok(());
+        }
+
+        key_generator_address_list.insert(parameter.message.address.clone());
+        key_generator_address_list.update()?;
 
         let key_generator = KeyGenerator::new(
             parameter.message.address.clone(),
@@ -44,18 +48,18 @@ impl AddKeyGenerator {
         );
         KeyGeneratorModel::put(&key_generator)?;
 
+        context.add_key_generator_client(key_generator).await?;
+
         let key_generator_clients = context.key_generator_clients().await?;
 
         sync_key_generator(key_generator_clients, parameter);
-
-        context.add_key_generator_client(key_generator).await?;
 
         Ok(())
     }
 }
 
 pub fn sync_key_generator(
-    key_generator_clients: HashMap<Address, KeyGeneratorClient>,
+    key_generator_clients: BTreeMap<Address, KeyGeneratorClient>,
     parameter: AddKeyGenerator,
 ) {
     tokio::spawn(async move {

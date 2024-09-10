@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::BTreeMap, str::FromStr};
 
 use clap::{Parser, Subcommand};
 use key_management_system::{
@@ -6,6 +6,7 @@ use key_management_system::{
     error::{self, Error},
     rpc::{cluster, external, internal},
     state::AppState,
+    task::single_key_generator::run_single_key_generator,
     types::{
         Address, Config, ConfigOption, ConfigPath, KeyGeneratorAddressListModel, KeyGeneratorModel,
     },
@@ -90,6 +91,7 @@ async fn main() -> Result<(), Error> {
                 KeyGeneratorAddressListModel::get_or_default().map_err(error::Error::Database)?;
 
             if config.seed_cluster_rpc_url().is_some() {
+                // Follow
                 // Initialize the cluster RPC server
                 let seed_key_generator_client =
                     KeyGeneratorClient::new(config.seed_cluster_rpc_url().clone().unwrap())
@@ -97,13 +99,15 @@ async fn main() -> Result<(), Error> {
 
                 let key_generator_list = seed_key_generator_client.get_key_generator_list().await?;
 
-                tracing::info!("Sync key generators {:?}.", key_generator_list);
-
                 key_generator_list.iter().for_each(|key_generator| {
-                    let _ = KeyGeneratorModel::put(key_generator);
+                    if !KeyGeneratorModel::is_exist(key_generator.address()) {
+                        let _ = KeyGeneratorModel::put(key_generator);
+                    }
 
                     key_generator_address_list.insert(key_generator.address().clone());
                 });
+
+                tracing::info!("Sync key generators {:?}.", key_generator_list);
 
                 KeyGeneratorAddressListModel::put(&key_generator_address_list)
                     .map_err(error::Error::Database)?;
@@ -128,10 +132,16 @@ async fn main() -> Result<(), Error> {
                         Ok((key_generator.address().clone(), key_generator_client))
                     },
                 )
-                .collect::<Result<HashMap<Address, KeyGeneratorClient>, Error>>()?;
+                .collect::<Result<BTreeMap<Address, KeyGeneratorClient>, Error>>()?;
 
             // Initialize an application-wide state instance
             let app_state = AppState::new(config, key_generator_clients, skde_params);
+
+            if app_state.config().seed_cluster_rpc_url().is_none() {
+                // Leader
+                // Run the single key generator task
+                run_single_key_generator(app_state.clone());
+            }
 
             // Initialize the internal RPC server
             initialize_internal_rpc_server(&app_state).await?;
@@ -141,10 +151,6 @@ async fn main() -> Result<(), Error> {
 
             // Initialize the external RPC server.
             let server_handle = initialize_external_rpc_server(&app_state).await?;
-
-            // Run the single key generator task
-            // let node_address = app_state.config().address();
-            // run_single_key_generator(Arc::new(app_state), node_address);
 
             server_handle.await.unwrap();
         }
@@ -161,10 +167,6 @@ async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Erro
         .register_rpc_method(
             internal::AddKeyGenerator::METHOD_NAME,
             internal::AddKeyGenerator::handler,
-        )?
-        .register_rpc_method(
-            internal::debug::RunSingleKeyGenerator::METHOD_NAME,
-            internal::debug::RunSingleKeyGenerator::handler,
         )?
         .init(app_state.config().internal_rpc_url().to_string())
         .await
@@ -197,6 +199,10 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
         .register_rpc_method(
             cluster::SyncPartialKey::METHOD_NAME,
             cluster::SyncPartialKey::handler,
+        )?
+        .register_rpc_method(
+            cluster::RunGeneratePartialKey::METHOD_NAME,
+            cluster::RunGeneratePartialKey::handler,
         )?
         .init(cluster_rpc_url.clone())
         .await

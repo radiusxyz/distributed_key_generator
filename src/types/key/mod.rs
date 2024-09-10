@@ -27,4 +27,16 @@ impl PartialKeyList {
     pub fn to_vec(&self) -> Vec<PartialKey> {
         self.0.iter().map(|(_key, value)| value.clone()).collect()
     }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn get(&self, address: &Address) -> Option<&PartialKey> {
+        self.0.get(address)
+    }
+
+    pub fn get_with_index(&self, index: usize) -> Option<(&Address, &PartialKey)> {
+        self.0.iter().nth(index)
+    }
 }

@@ -39,10 +39,13 @@ impl SyncKeyGenerator {
         //     context.config().chain_type().clone(),
         // )?;
 
-        let mut key_generator_address_list = KeyGeneratorAddressListModel::get()?;
-        key_generator_address_list.insert(parameter.message.address.clone());
+        let mut key_generator_address_list = KeyGeneratorAddressListModel::get_mut_or_default()?;
 
-        KeyGeneratorAddressListModel::put(&key_generator_address_list)?;
+        if key_generator_address_list.contains(&parameter.message.address) {
+            return Ok(());
+        }
+        key_generator_address_list.insert(parameter.message.address.clone());
+        key_generator_address_list.update()?;
 
         let key_generator =
             KeyGenerator::new(parameter.message.address, parameter.message.ip_address);

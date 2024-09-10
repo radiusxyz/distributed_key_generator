@@ -4,6 +4,49 @@ use skde::{delay_encryption::SecretKey, key_aggregation::AggregatedKey};
 use crate::types::prelude::*;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct KeyIdModel;
+
+impl KeyIdModel {
+    const ID: &'static str = stringify!(KeyIdModel);
+
+    pub fn put(key_id: u64) -> Result<(), KvStoreError> {
+        let key = &Self::ID;
+
+        kvstore()?.put(key, &key_id)
+    }
+
+    pub fn get() -> Result<u64, KvStoreError> {
+        let key = &Self::ID;
+
+        kvstore()?.get(key)
+    }
+
+    pub fn get_or_default() -> Result<u64, KvStoreError> {
+        let key = &Self::ID;
+
+        kvstore()?.get_or_default(key)
+    }
+
+    pub fn get_mut_or_default() -> Result<Lock<'static, u64>, KvStoreError> {
+        let key = &Self::ID;
+
+        match kvstore()?.get_mut(key) {
+            Ok(key_id) => Ok(key_id),
+            Err(error) => {
+                if error.is_none_type() {
+                    let key_id = 0;
+                    kvstore()?.put(key, &key_id)?;
+
+                    return kvstore()?.get_mut(key);
+                }
+
+                Err(error)
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct PartialKeyListModel;
 
 impl PartialKeyListModel {
@@ -19,6 +62,12 @@ impl PartialKeyListModel {
         let key = &(Self::ID, key_id);
 
         kvstore()?.get(key)
+    }
+
+    pub fn get_or_default(key_id: u64) -> Result<PartialKeyList, KvStoreError> {
+        let key = &(Self::ID, key_id);
+
+        kvstore()?.get_or_default(key)
     }
 
     pub fn get_mut_or_default(key_id: u64) -> Result<Lock<'static, PartialKeyList>, KvStoreError> {
@@ -46,10 +95,10 @@ pub struct AggregatedKeyModel;
 impl AggregatedKeyModel {
     const ID: &'static str = stringify!(AggregatedKeyModel);
 
-    pub fn put(key_id: u64, decryption_key: &AggregatedKey) -> Result<(), KvStoreError> {
+    pub fn put(key_id: u64, aggregated_key: &AggregatedKey) -> Result<(), KvStoreError> {
         let key = &(Self::ID, key_id);
 
-        kvstore()?.put(key, decryption_key)
+        kvstore()?.put(key, aggregated_key)
     }
 
     pub fn get(key_id: u64) -> Result<AggregatedKey, KvStoreError> {
