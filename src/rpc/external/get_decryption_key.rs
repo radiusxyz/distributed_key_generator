@@ -1,4 +1,4 @@
-use skde::delay_encryption::PublicKey;
+use skde::delay_encryption::SecretKey;
 
 use crate::rpc::prelude::*;
 
@@ -10,11 +10,11 @@ pub struct GetDecryptionKey {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetDecryptionKeyResponse {
-    pub encryption_key: PublicKey,
+    pub decryption_key: SecretKey,
 }
 
 impl GetDecryptionKey {
-    pub const METHOD_NAME: &'static str = "get_encryption_key";
+    pub const METHOD_NAME: &'static str = "get_decryption_key";
 
     pub async fn handler(
         parameter: RpcParameter,
@@ -22,11 +22,8 @@ impl GetDecryptionKey {
     ) -> Result<GetDecryptionKeyResponse, RpcError> {
         let parameter = parameter.parse::<Self>()?;
 
-        let aggregated_key = AggregatedKeyModel::get(parameter.key_id)?;
-        let encryption_key = PublicKey {
-            pk: aggregated_key.u.clone(),
-        };
+        let decryption_key = DecryptionKeyModel::get(parameter.key_id)?;
 
-        Ok(GetDecryptionKeyResponse { encryption_key })
+        Ok(GetDecryptionKeyResponse { decryption_key })
     }
 }
