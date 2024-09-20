@@ -20,9 +20,9 @@ for (( node_index=0; node_index<NODE_COUNT; node_index++ )) do
 
     config_file_path=$data_path/config.toml
     
-    sed -i.temp "s/external_rpc_url = \"http:\/\/127.0.0.1:3000\"/external_rpc_url = \"http:\/\/127.0.0.1:300$node_index\"/g" $config_file_path
-    sed -i.temp "s/internal_rpc_url = \"http:\/\/127.0.0.1:4000\"/internal_rpc_url = \"http:\/\/127.0.0.1:400$node_index\"/g" $config_file_path
-    sed -i.temp "s/cluster_rpc_url = \"http:\/\/127.0.0.1:5000\"/cluster_rpc_url = \"http:\/\/127.0.0.1:500$node_index\"/g" $config_file_path
+    sed -i.temp "s/external_rpc_url = \"http:\/\/127.0.0.1:3000\"/external_rpc_url = \"http:\/\/127.0.0.1:710$node_index\"/g" $config_file_path
+    sed -i.temp "s/internal_rpc_url = \"http:\/\/127.0.0.1:4000\"/internal_rpc_url = \"http:\/\/127.0.0.1:720$node_index\"/g" $config_file_path
+    sed -i.temp "s/cluster_rpc_url = \"http:\/\/127.0.0.1:5000\"/cluster_rpc_url = \"http:\/\/127.0.0.1:730$node_index\"/g" $config_file_path
 
     # TODO: remove
     private_key_path=$data_path/signing_key
