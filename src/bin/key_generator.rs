@@ -245,6 +245,10 @@ async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHand
             external::GetLatestEncryptionKey::METHOD_NAME,
             external::GetLatestEncryptionKey::handler,
         )?
+        .register_rpc_method(
+            external::GetSkdeParams::METHOD_NAME,
+            external::GetSkdeParams::handler,
+        )?
         .init(external_rpc_url.clone())
         .await
         .map_err(error::Error::RpcError)?;

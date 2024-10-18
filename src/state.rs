@@ -15,7 +15,7 @@ pub struct AppState {
 struct AppStateInner {
     config: Config,
     key_generator_clients: Mutex<BTreeMap<Address, KeyGeneratorClient>>,
-    skde_params: skde::SkdeParams,
+    skde_params: skde::delay_encryption::SkdeParams,
 }
 
 unsafe impl Send for AppState {}
@@ -33,7 +33,7 @@ impl AppState {
     pub fn new(
         config: Config,
         key_generator_clients: BTreeMap<Address, KeyGeneratorClient>,
-        skde_params: skde::SkdeParams,
+        skde_params: skde::delay_encryption::SkdeParams,
     ) -> Self {
         let inner = AppStateInner {
             config,
@@ -71,7 +71,7 @@ impl AppState {
         Ok(key_generator_clients.clone())
     }
 
-    pub fn skde_params(&self) -> &skde::SkdeParams {
+    pub fn skde_params(&self) -> &skde::delay_encryption::SkdeParams {
         &self.inner.skde_params
     }
 }
