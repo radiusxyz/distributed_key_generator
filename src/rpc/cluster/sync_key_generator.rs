@@ -28,7 +28,7 @@ impl SyncKeyGenerator {
         let parameter = parameter.parse::<Self>()?;
 
         info!(
-            "sync_key_generator - address: {:?} / ip_address: {:?}",
+            "Sync key generator - address: {:?}, url: {:?}",
             parameter.message.address, parameter.message.ip_address
         );
 

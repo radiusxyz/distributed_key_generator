@@ -22,7 +22,7 @@ impl AddKeyGenerator {
     pub async fn handler(parameter: RpcParameter, context: Arc<AppState>) -> Result<(), RpcError> {
         let parameter = parameter.parse::<Self>()?;
         info!(
-            "add_key_generator - address: {:?} / ip_address: {:?}",
+            "Add key generator - address: {:?} , url: {:?}",
             parameter.message.address, parameter.message.ip_address
         );
 

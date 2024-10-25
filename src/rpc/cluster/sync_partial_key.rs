@@ -27,7 +27,7 @@ impl SyncPartialKey {
 
         if is_key_generator_in_cluster {
             info!(
-                "sync_partial_key - address: {:?} / partial_key: {:?}",
+                "Sync partial key - address: {:?}, partial key: {:?}",
                 parameter.address, parameter.partial_key
             );
 
@@ -39,7 +39,7 @@ impl SyncPartialKey {
                 parameter.partial_key_proof,
             );
 
-            // TODO:
+            // TODO: Error handling
             if !is_valid {
                 return Ok(());
             }

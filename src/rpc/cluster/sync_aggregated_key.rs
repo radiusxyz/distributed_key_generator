@@ -16,6 +16,7 @@ use crate::{
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncAggregatedKey {
     pub key_id: u64,
+    // TODO: unused field
     pub aggregated_key: AggregatedKey,
     pub participant_addresses: Vec<Address>,
 }
@@ -25,6 +26,11 @@ impl SyncAggregatedKey {
 
     pub async fn handler(parameter: RpcParameter, context: Arc<AppState>) -> Result<(), RpcError> {
         let parameter = parameter.parse::<Self>()?;
+
+        info!(
+            "Sync aggregated key - key_id: {:?}, participant address: {:?}",
+            parameter.key_id, parameter.participant_addresses
+        );
 
         let skde_params = context.skde_params().clone();
 
