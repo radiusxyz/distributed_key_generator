@@ -1571,6 +1571,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "distributed-key-generation"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "clap",
+ "radius-sequencer-sdk",
+ "serde",
+ "serde_json",
+ "skde",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber 0.3.18",
+]
+
+[[package]]
 name = "doctest-file"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2617,22 +2633,6 @@ checksum = "505d1856a39b200489082f90d897c3f07c455563880bc5952e38eabf731c83b6"
 dependencies = [
  "digest 0.10.7",
  "sha3-asm",
-]
-
-[[package]]
-name = "key-management-system"
-version = "0.1.0"
-dependencies = [
- "bincode",
- "clap",
- "radius-sequencer-sdk",
- "serde",
- "serde_json",
- "skde",
- "tokio",
- "toml",
- "tracing",
- "tracing-subscriber 0.3.18",
 ]
 
 [[package]]

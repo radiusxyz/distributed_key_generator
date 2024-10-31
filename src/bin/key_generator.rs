@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, str::FromStr};
 
 use clap::{Parser, Subcommand};
-use key_management_system::{
+use distributed_key_generation::{
     client::key_generator::KeyGeneratorClient,
     error::{self, Error},
     rpc::{cluster, external, internal},

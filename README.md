@@ -1,3 +1,3 @@
-# Key-management-system
+# distributed-key-generation
 
-Key-management-system
+distributed-key-generation
