@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use radius_sequencer_sdk::json_rpc::{types::RpcParameter, RpcError};
+use radius_sdk::json_rpc::server::{RpcError, RpcParameter};
 use serde::{Deserialize, Serialize};
 use skde::key_generation::{
     generate_partial_key, prove_partial_key_validity, PartialKey, PartialKeyProof,
@@ -8,8 +8,8 @@ use skde::key_generation::{
 use tracing::info;
 
 use crate::{
-    client::key_generator::KeyGeneratorClient, rpc::cluster::SyncPartialKey, state::AppState,
-    types::Address,
+    client::key_generator::DistributedKeyGenerationClient, rpc::cluster::SyncPartialKey,
+    state::AppState, types::Address,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -28,10 +28,10 @@ impl RunGeneratePartialKey {
         let (secret_value, partial_key) = generate_partial_key(skde_params);
         let partial_key_proof = prove_partial_key_validity(skde_params, &secret_value);
 
-        let key_generator_clients = context.key_generator_clients().await.unwrap();
+        let distributed_key_generation_clients = context.key_generator_clients().await.unwrap();
 
         sync_partial_key(
-            key_generator_clients,
+            distributed_key_generation_clients,
             context.config().signing_key().get_address().clone(),
             parameter.key_id,
             partial_key,
@@ -43,7 +43,7 @@ impl RunGeneratePartialKey {
 }
 
 pub fn sync_partial_key(
-    key_generator_clients: BTreeMap<Address, KeyGeneratorClient>,
+    distributed_key_generation_clients: BTreeMap<Address, DistributedKeyGenerationClient>,
     address: Address,
     key_id: u64,
     partial_key: PartialKey,
@@ -59,10 +59,10 @@ pub fn sync_partial_key(
 
         info!(
             "sync_partial_key - rpc_client_count: {:?}",
-            key_generator_clients.len()
+            distributed_key_generation_clients.len()
         );
 
-        for (_address, key_generator_rpc_client) in key_generator_clients {
+        for (_address, key_generator_rpc_client) in distributed_key_generation_clients {
             let key_generator_rpc_client = key_generator_rpc_client.clone();
             let parameter = parameter.clone();
 

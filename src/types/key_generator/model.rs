@@ -1,42 +1,50 @@
-use radius_sequencer_sdk::kvstore::Lock;
+use radius_sdk::kvstore::Lock;
 
 use crate::types::prelude::*;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
-pub struct KeyGeneratorAddressListModel;
+pub struct DistributedKeyGenerationAddressListModel;
 
-impl KeyGeneratorAddressListModel {
-    const ID: &'static str = stringify!(KeyGeneratorAddressListModel);
+impl DistributedKeyGenerationAddressListModel {
+    const ID: &'static str = stringify!(DistributedKeyGenerationAddressListModel);
 
     pub fn initialize() -> Result<(), KvStoreError> {
         if Self::get().is_err() {
             let key = &Self::ID;
-            let key_generator_address_list = KeyGeneratorAddressList::default();
+            let distributed_key_generation_address_list =
+                DistributedKeyGenerationAddressList::default();
 
-            kvstore()?.put(key, &key_generator_address_list)?
+            kvstore()?.put(key, &distributed_key_generation_address_list)?
         }
 
         Ok(())
     }
 
-    pub fn put(key_generator_address_list: &KeyGeneratorAddressList) -> Result<(), KvStoreError> {
+    pub fn put(
+        distributed_key_generation_address_list: &DistributedKeyGenerationAddressList,
+    ) -> Result<(), KvStoreError> {
         let key = &Self::ID;
-        kvstore()?.put(key, key_generator_address_list)
+        kvstore()?.put(key, distributed_key_generation_address_list)
     }
 
-    pub fn get() -> Result<KeyGeneratorAddressList, KvStoreError> {
+    pub fn get() -> Result<DistributedKeyGenerationAddressList, KvStoreError> {
         let key = &Self::ID;
 
         kvstore()?.get(key)
     }
 
-    pub fn add_key_generator_address(key_generator_address: Address) -> Result<(), KvStoreError> {
+    pub fn add_distributed_key_generation_address(
+        distributed_key_generation_address: Address,
+    ) -> Result<(), KvStoreError> {
         let key = &Self::ID;
 
         kvstore()?.apply(
             key,
-            |locked_key_generator_address_list: &mut Lock<KeyGeneratorAddressList>| {
-                locked_key_generator_address_list.insert(key_generator_address)
+            |locked_distributed_key_generation_address_list: &mut Lock<
+                DistributedKeyGenerationAddressList,
+            >| {
+                locked_distributed_key_generation_address_list
+                    .insert(distributed_key_generation_address)
             },
         )?;
 
@@ -45,18 +53,18 @@ impl KeyGeneratorAddressListModel {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
-pub struct KeyGeneratorModel;
+pub struct DistributedKeyGenerationModel;
 
-impl KeyGeneratorModel {
-    const ID: &'static str = stringify!(KeyGeneratorModel);
+impl DistributedKeyGenerationModel {
+    const ID: &'static str = stringify!(DistributedKeyGenerationModel);
 
-    pub fn get(address: &Address) -> Result<KeyGenerator, KvStoreError> {
+    pub fn get(address: &Address) -> Result<DistributedKeyGeneration, KvStoreError> {
         let key = (Self::ID, address);
 
         kvstore()?.get(&key)
     }
 
-    pub fn put(key_generator: &KeyGenerator) -> Result<(), KvStoreError> {
+    pub fn put(key_generator: &DistributedKeyGeneration) -> Result<(), KvStoreError> {
         let key = (Self::ID, key_generator.address());
         kvstore()?.put(&key, key_generator)
     }

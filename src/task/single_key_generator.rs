@@ -8,7 +8,7 @@ use tokio::time::sleep;
 use tracing::{error, info};
 
 use crate::{
-    client::key_generator::KeyGeneratorClient,
+    client::key_generator::DistributedKeyGenerationClient,
     rpc::cluster::{RunGeneratePartialKey, SyncAggregatedKey},
     state::AppState,
     types::{Address, AggregatedKeyModel, DecryptionKeyModel, KeyIdModel, PartialKeyListModel},
@@ -21,13 +21,13 @@ pub fn run_single_key_generator(context: AppState) {
 
         loop {
             sleep(Duration::from_secs(partial_key_generation_cycle)).await;
-            let key_generator_clients = context.key_generator_clients().await.unwrap();
+            let distributed_key_generation_clients = context.key_generator_clients().await.unwrap();
             let context = context.clone();
 
             let key_id = KeyIdModel::get().unwrap();
 
             info!("request run_generate_partial_key - key_id: {:?}", key_id);
-            run_generate_partial_key(key_generator_clients.clone(), key_id);
+            run_generate_partial_key(distributed_key_generation_clients.clone(), key_id);
 
             tokio::spawn(async move {
                 sleep(Duration::from_secs(partial_key_aggregation_cycle)).await;
@@ -43,7 +43,7 @@ pub fn run_single_key_generator(context: AppState) {
                 info!("Aggregated key: {:?}", aggregated_key);
 
                 sync_aggregated_key(
-                    key_generator_clients,
+                    distributed_key_generation_clients,
                     key_id,
                     aggregated_key.clone(),
                     participant_addresses,
@@ -60,7 +60,7 @@ pub fn run_single_key_generator(context: AppState) {
 }
 
 pub fn run_generate_partial_key(
-    key_generator_clients: BTreeMap<Address, KeyGeneratorClient>,
+    key_generator_clients: BTreeMap<Address, DistributedKeyGenerationClient>,
     key_id: u64,
 ) {
     tokio::spawn(async move {
@@ -93,7 +93,7 @@ pub fn run_generate_partial_key(
 }
 
 pub fn sync_aggregated_key(
-    key_generator_clients: BTreeMap<Address, KeyGeneratorClient>,
+    distributed_key_generation_clients: BTreeMap<Address, DistributedKeyGenerationClient>,
     key_id: u64,
     aggregated_key: AggregatedKey,
     participant_addresses: Vec<Address>,
@@ -107,10 +107,10 @@ pub fn sync_aggregated_key(
 
         info!(
             "sync_aggregated_key - rpc_client_count: {:?}",
-            key_generator_clients.len()
+            distributed_key_generation_clients.len()
         );
 
-        for (_address, key_generator_rpc_client) in key_generator_clients {
+        for (_address, key_generator_rpc_client) in distributed_key_generation_clients {
             let key_generator_rpc_client = key_generator_rpc_client.clone();
             let parameter = parameter.clone();
 

@@ -62,7 +62,7 @@ impl Address {
         self.0.as_bytes()
     }
 
-    pub fn to_string(&self) -> String {
+    pub fn into_inner(&self) -> String {
         self.0.clone()
     }
 }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use radius_sequencer_sdk::json_rpc::{Error, RpcClient};
+use radius_sdk::json_rpc::client::{Id, RpcClient, RpcClientError};
 
 use crate::{
     rpc::{
@@ -8,55 +8,106 @@ use crate::{
             GetKeyGeneratorList, RunGeneratePartialKey, SyncAggregatedKey, SyncKeyGenerator,
             SyncPartialKey,
         },
-        internal::AddKeyGenerator,
+        internal::AddDistributedKeyGeneration,
     },
     types::KeyGeneratorList,
 };
 
-#[derive(Clone)]
-pub struct KeyGeneratorClient {
-    inner: Arc<RpcClient>,
+pub struct DistributedKeyGenerationClient {
+    inner: Arc<DistributedKeyGenerationClientInner>,
 }
 
-impl KeyGeneratorClient {
-    pub fn new(rpc_url: impl AsRef<str>) -> Result<Self, Error> {
-        let rpc_client = RpcClient::new(rpc_url)?;
+struct DistributedKeyGenerationClientInner {
+    rpc_url: String,
+    rpc_client: RpcClient,
+}
+
+impl Clone for DistributedKeyGenerationClient {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl DistributedKeyGenerationClient {
+    pub fn new(rpc_url: impl AsRef<str>) -> Result<Self, RpcClientError> {
+        let inner = DistributedKeyGenerationClientInner {
+            rpc_url: rpc_url.as_ref().to_string(),
+            rpc_client: RpcClient::new()?,
+        };
 
         Ok(Self {
-            inner: Arc::new(rpc_client),
+            inner: Arc::new(inner),
         })
     }
 
-    pub async fn sync_partial_key(&self, parameter: SyncPartialKey) -> Result<(), Error> {
+    pub async fn sync_partial_key(&self, parameter: SyncPartialKey) -> Result<(), RpcClientError> {
         self.inner
-            .request(SyncPartialKey::METHOD_NAME, parameter)
+            .rpc_client
+            .request(
+                &self.inner.rpc_url,
+                SyncPartialKey::METHOD_NAME,
+                &parameter,
+                Id::Null,
+            )
             .await
     }
 
-    pub async fn sync_key_generator(&self, parameter: AddKeyGenerator) -> Result<(), Error> {
+    pub async fn sync_key_generator(
+        &self,
+        parameter: AddDistributedKeyGeneration,
+    ) -> Result<(), RpcClientError> {
         self.inner
-            .request(SyncKeyGenerator::METHOD_NAME, parameter)
+            .rpc_client
+            .request(
+                &self.inner.rpc_url,
+                SyncKeyGenerator::METHOD_NAME,
+                &parameter,
+                Id::Null,
+            )
             .await
     }
 
-    pub async fn get_key_generator_list(&self) -> Result<KeyGeneratorList, Error> {
+    pub async fn get_key_generator_list(&self) -> Result<KeyGeneratorList, RpcClientError> {
         self.inner
-            .request(GetKeyGeneratorList::METHOD_NAME, {})
+            .rpc_client
+            .request(
+                &self.inner.rpc_url,
+                GetKeyGeneratorList::METHOD_NAME,
+                &{},
+                Id::Null,
+            )
             .await
     }
 
     pub async fn run_generate_partial_key(
         &self,
         parameter: RunGeneratePartialKey,
-    ) -> Result<(), Error> {
+    ) -> Result<(), RpcClientError> {
         self.inner
-            .request(RunGeneratePartialKey::METHOD_NAME, parameter)
+            .rpc_client
+            .request(
+                &self.inner.rpc_url,
+                RunGeneratePartialKey::METHOD_NAME,
+                &parameter,
+                Id::Null,
+            )
             .await
     }
 
-    pub async fn sync_aggregated_key(&self, parameter: SyncAggregatedKey) -> Result<(), Error> {
+    pub async fn sync_aggregated_key(
+        &self,
+        parameter: SyncAggregatedKey,
+    ) -> Result<(), RpcClientError> {
         self.inner
-            .request(SyncAggregatedKey::METHOD_NAME, parameter)
+            .rpc_client
+            .request(
+                &self.inner.rpc_url,
+                SyncAggregatedKey::METHOD_NAME,
+                &parameter,
+                Id::Null,
+            )
             .await
     }
 }

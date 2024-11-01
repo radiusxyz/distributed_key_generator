@@ -3,9 +3,9 @@ use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::Mutex;
 
 use crate::{
-    client::key_generator::KeyGeneratorClient,
+    client::key_generator::DistributedKeyGenerationClient,
     error::{self, Error},
-    types::{Address, Config, KeyGenerator},
+    types::{Address, Config, DistributedKeyGeneration},
 };
 
 pub struct AppState {
@@ -14,7 +14,7 @@ pub struct AppState {
 
 struct AppStateInner {
     config: Config,
-    key_generator_clients: Mutex<BTreeMap<Address, KeyGeneratorClient>>,
+    key_generator_clients: Mutex<BTreeMap<Address, DistributedKeyGenerationClient>>,
     skde_params: skde::delay_encryption::SkdeParams,
 }
 
@@ -32,7 +32,7 @@ impl Clone for AppState {
 impl AppState {
     pub fn new(
         config: Config,
-        key_generator_clients: BTreeMap<Address, KeyGeneratorClient>,
+        key_generator_clients: BTreeMap<Address, DistributedKeyGenerationClient>,
         skde_params: skde::delay_encryption::SkdeParams,
     ) -> Self {
         let inner = AppStateInner {
@@ -52,10 +52,11 @@ impl AppState {
 
     pub async fn add_key_generator_client(
         &self,
-        key_generator: KeyGenerator,
+        key_generator: DistributedKeyGeneration,
     ) -> Result<(), error::Error> {
-        let key_generator_client: KeyGeneratorClient =
-            KeyGeneratorClient::new(key_generator.ip_address()).map_err(error::Error::RpcError)?;
+        let key_generator_client: DistributedKeyGenerationClient =
+            DistributedKeyGenerationClient::new(key_generator.ip_address())
+                .map_err(error::Error::RpcClientError)?;
 
         let mut key_generator_clients = self.inner.key_generator_clients.lock().await;
         key_generator_clients.insert(key_generator.address().to_owned(), key_generator_client);
@@ -65,7 +66,7 @@ impl AppState {
 
     pub async fn key_generator_clients(
         &self,
-    ) -> Result<BTreeMap<Address, KeyGeneratorClient>, Error> {
+    ) -> Result<BTreeMap<Address, DistributedKeyGenerationClient>, Error> {
         let key_generator_clients = self.inner.key_generator_clients.lock().await;
 
         Ok(key_generator_clients.clone())

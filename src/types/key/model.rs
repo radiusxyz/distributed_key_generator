@@ -1,4 +1,4 @@
-use radius_sequencer_sdk::kvstore::Lock;
+use radius_sdk::kvstore::Lock;
 use skde::{
     delay_encryption::SecretKey, key_aggregation::AggregatedKey, key_generation::PartialKey,
 };
