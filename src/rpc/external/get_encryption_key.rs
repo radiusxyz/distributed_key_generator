@@ -24,9 +24,8 @@ impl GetEncryptionKey {
 
         let aggregated_key = AggregatedKeyModel::get(parameter.key_id)?;
         let encryption_key = PublicKey {
-            pk: aggregated_key.u.clone(),
+            pk: aggregated_key.u,
         };
-
         Ok(GetEncryptionKeyResponse { encryption_key })
     }
 }
