@@ -25,7 +25,7 @@ impl PartialKeyList {
     }
 
     pub fn to_vec(&self) -> Vec<PartialKey> {
-        self.0.iter().map(|(_key, value)| value.clone()).collect()
+        self.0.values().cloned().collect()
     }
 
     pub fn len(&self) -> usize {

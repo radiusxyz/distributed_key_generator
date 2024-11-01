@@ -17,8 +17,8 @@ impl GetSkdeParams {
     ) -> Result<GetSkdeParamsResponse, RpcError> {
         let skde_params = context.skde_params();
 
-        return Ok(GetSkdeParamsResponse {
+        Ok(GetSkdeParamsResponse {
             skde_params: skde_params.clone(),
-        });
+        })
     }
 }

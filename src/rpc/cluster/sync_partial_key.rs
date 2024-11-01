@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use radius_sequencer_sdk::json_rpc::{types::RpcParameter, RpcError};
+use radius_sdk::json_rpc::server::{RpcError, RpcParameter};
 use serde::{Deserialize, Serialize};
 use skde::key_generation::{verify_partial_key_validity, PartialKey, PartialKeyProof};
 use tracing::info;
 
 use crate::{
     state::AppState,
-    types::{Address, KeyGeneratorModel, PartialKeyListModel},
+    types::{Address, DistributedKeyGenerationModel, PartialKeyListModel},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -23,7 +23,8 @@ impl SyncPartialKey {
 
     pub async fn handler(parameter: RpcParameter, context: Arc<AppState>) -> Result<(), RpcError> {
         let parameter = parameter.parse::<Self>()?;
-        let is_key_generator_in_cluster = !KeyGeneratorModel::get(&parameter.address).is_err();
+        let is_key_generator_in_cluster =
+            DistributedKeyGenerationModel::get(&parameter.address).is_ok();
 
         if is_key_generator_in_cluster {
             info!(

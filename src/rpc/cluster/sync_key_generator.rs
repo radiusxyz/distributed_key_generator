@@ -1,12 +1,15 @@
 use std::sync::Arc;
 
-use radius_sequencer_sdk::json_rpc::{types::RpcParameter, RpcError};
+use radius_sdk::json_rpc::server::{RpcError, RpcParameter};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
     state::AppState,
-    types::{Address, KeyGenerator, KeyGeneratorAddressListModel, KeyGeneratorModel},
+    types::{
+        Address, DistributedKeyGeneration, DistributedKeyGenerationAddressListModel,
+        DistributedKeyGenerationModel,
+    },
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -39,16 +42,18 @@ impl SyncKeyGenerator {
         //     context.config().chain_type().clone(),
         // )?;
 
-        let key_generator_address_list = KeyGeneratorAddressListModel::get()?;
+        let key_generator_address_list = DistributedKeyGenerationAddressListModel::get()?;
         if key_generator_address_list.contains(&parameter.message.address) {
             return Ok(());
         }
 
-        KeyGeneratorAddressListModel::add_key_generator_address(parameter.message.address.clone())?;
+        DistributedKeyGenerationAddressListModel::add_distributed_key_generation_address(
+            parameter.message.address.clone(),
+        )?;
 
         let key_generator =
-            KeyGenerator::new(parameter.message.address, parameter.message.ip_address);
-        KeyGeneratorModel::put(&key_generator)?;
+            DistributedKeyGeneration::new(parameter.message.address, parameter.message.ip_address);
+        DistributedKeyGenerationModel::put(&key_generator)?;
 
         context.add_key_generator_client(key_generator).await?;
 

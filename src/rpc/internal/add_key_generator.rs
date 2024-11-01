@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use tracing::info;
 
-use crate::{client::key_generator::KeyGeneratorClient, rpc::prelude::*};
+use crate::{client::key_generator::DistributedKeyGenerationClient, rpc::prelude::*};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct AddKeyGeneratorMessage {
@@ -11,18 +11,18 @@ struct AddKeyGeneratorMessage {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct AddKeyGenerator {
+pub struct AddDistributedKeyGeneration {
     // signature: Signature, // TODO: Uncomment this code
     message: AddKeyGeneratorMessage,
 }
 
-impl AddKeyGenerator {
-    pub const METHOD_NAME: &'static str = "add_key_generator";
+impl AddDistributedKeyGeneration {
+    pub const METHOD_NAME: &'static str = "add_distributed_key_generation";
 
     pub async fn handler(parameter: RpcParameter, context: Arc<AppState>) -> Result<(), RpcError> {
         let parameter = parameter.parse::<Self>()?;
         info!(
-            "Add key generator - address: {:?} , url: {:?}",
+            "Add distributed key generation - address: {:?} , url: {:?}",
             parameter.message.address, parameter.message.ip_address
         );
 
@@ -33,18 +33,21 @@ impl AddKeyGenerator {
         //     context.config().chain_type().clone(),
         // )?;
 
-        let key_generator_address_list = KeyGeneratorAddressListModel::get()?;
-        if key_generator_address_list.contains(&parameter.message.address) {
+        let distributed_key_generation_address_list =
+            DistributedKeyGenerationAddressListModel::get()?;
+        if distributed_key_generation_address_list.contains(&parameter.message.address) {
             return Ok(());
         }
 
-        KeyGeneratorAddressListModel::add_key_generator_address(parameter.message.address.clone())?;
+        DistributedKeyGenerationAddressListModel::add_distributed_key_generation_address(
+            parameter.message.address.clone(),
+        )?;
 
-        let key_generator = KeyGenerator::new(
+        let key_generator = DistributedKeyGeneration::new(
             parameter.message.address.clone(),
             parameter.message.ip_address.clone(),
         );
-        KeyGeneratorModel::put(&key_generator)?;
+        DistributedKeyGenerationModel::put(&key_generator)?;
 
         context.add_key_generator_client(key_generator).await?;
 
@@ -57,17 +60,17 @@ impl AddKeyGenerator {
 }
 
 pub fn sync_key_generator(
-    key_generator_clients: BTreeMap<Address, KeyGeneratorClient>,
-    parameter: AddKeyGenerator,
+    distributed_key_generation_clients: BTreeMap<Address, DistributedKeyGenerationClient>,
+    parameter: AddDistributedKeyGeneration,
 ) {
     tokio::spawn(async move {
         info!(
-            "sync key generator: {:?} / rpc_client_count: {:?}",
+            "sync distributed key generation: {:?} / rpc_client_count: {:?}",
             parameter,
-            key_generator_clients.len()
+            distributed_key_generation_clients.len()
         );
 
-        for (_, key_generator_client) in key_generator_clients {
+        for (_, key_generator_client) in distributed_key_generation_clients {
             let parameter = parameter.clone();
 
             tokio::spawn(async move {

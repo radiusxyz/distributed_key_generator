@@ -117,39 +117,43 @@ impl ConfigOption {
 
     pub fn merge(mut self, other: &ConfigOption) -> Self {
         if other.path.is_some() {
-            self.path = other.path.clone();
+            self.path.clone_from(&other.path);
         }
 
         if other.external_rpc_url.is_some() {
-            self.external_rpc_url = other.external_rpc_url.clone();
+            self.external_rpc_url.clone_from(&other.external_rpc_url);
         }
 
         if other.internal_rpc_url.is_some() {
-            self.internal_rpc_url = other.internal_rpc_url.clone();
+            self.internal_rpc_url.clone_from(&other.internal_rpc_url);
         }
 
         if other.cluster_rpc_url.is_some() {
-            self.cluster_rpc_url = other.cluster_rpc_url.clone();
+            self.cluster_rpc_url.clone_from(&other.cluster_rpc_url);
         }
 
         if other.seed_cluster_rpc_url.is_some() {
-            self.seed_cluster_rpc_url = other.seed_cluster_rpc_url.clone();
+            self.seed_cluster_rpc_url
+                .clone_from(&other.seed_cluster_rpc_url);
         }
 
         if other.radius_foundation_address.is_some() {
-            self.radius_foundation_address = other.radius_foundation_address.clone();
+            self.radius_foundation_address
+                .clone_from(&other.radius_foundation_address);
         }
 
         if other.chain_type.is_some() {
-            self.chain_type = other.chain_type.clone();
+            self.chain_type.clone_from(&other.chain_type);
         }
 
         if other.partial_key_generation_cycle.is_some() {
-            self.partial_key_generation_cycle = other.partial_key_generation_cycle.clone();
+            self.partial_key_aggregation_cycle
+                .clone_from(&other.partial_key_aggregation_cycle);
         }
 
         if other.partial_key_aggregation_cycle.is_some() {
-            self.partial_key_aggregation_cycle = other.partial_key_aggregation_cycle.clone();
+            self.partial_key_aggregation_cycle
+                .clone_from(&other.partial_key_aggregation_cycle);
         }
 
         self

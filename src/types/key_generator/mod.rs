@@ -5,15 +5,15 @@ pub use model::*;
 
 use crate::types::prelude::*;
 
-pub type KeyGeneratorList = Vec<KeyGenerator>;
+pub type KeyGeneratorList = Vec<DistributedKeyGeneration>;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct KeyGenerator {
+pub struct DistributedKeyGeneration {
     address: Address,
     ip_address: String,
 }
 
-impl KeyGenerator {
+impl DistributedKeyGeneration {
     pub fn new(address: Address, ip_address: String) -> Self {
         Self {
             address,
@@ -31,9 +31,9 @@ impl KeyGenerator {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct KeyGeneratorAddressList(BTreeSet<Address>);
+pub struct DistributedKeyGenerationAddressList(BTreeSet<Address>);
 
-impl KeyGeneratorAddressList {
+impl DistributedKeyGenerationAddressList {
     pub fn insert(&mut self, key_generator_address: Address) {
         self.0.insert(key_generator_address);
     }

@@ -1,10 +1,11 @@
 #[derive(Debug)]
 pub enum Error {
-    Database(radius_sequencer_sdk::kvstore::KvStoreError),
-    RpcError(radius_sequencer_sdk::json_rpc::Error),
+    Database(radius_sdk::kvstore::KvStoreError),
+    RpcServerError(radius_sdk::json_rpc::server::RpcServerError),
+    RpcClientError(radius_sdk::json_rpc::client::RpcClientError),
 
-    LoadConfigOption,
-    ParseTomlString,
+    LoadConfigOption(std::io::Error),
+    ParseTomlString(toml::de::Error),
     RemoveConfigDirectory,
     CreateConfigDirectory,
     CreateConfigFile,
@@ -23,8 +24,14 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-impl From<radius_sequencer_sdk::json_rpc::Error> for Error {
-    fn from(value: radius_sequencer_sdk::json_rpc::Error) -> Self {
-        Self::RpcError(value)
+impl From<radius_sdk::json_rpc::server::RpcServerError> for Error {
+    fn from(value: radius_sdk::json_rpc::server::RpcServerError) -> Self {
+        Self::RpcServerError(value)
+    }
+}
+
+impl From<radius_sdk::json_rpc::client::RpcClientError> for Error {
+    fn from(value: radius_sdk::json_rpc::client::RpcClientError) -> Self {
+        Self::RpcClientError(value)
     }
 }

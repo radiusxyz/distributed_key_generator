@@ -5,8 +5,11 @@ pub mod internal;
 pub mod prelude {
     pub use std::sync::Arc;
 
-    pub use radius_sequencer_sdk::{
-        json_rpc::{types::*, RpcClient, RpcError},
+    pub use radius_sdk::{
+        json_rpc::{
+            client::RpcClient,
+            server::{RpcError, RpcParameter},
+        },
         kvstore::kvstore,
     };
     pub use serde::{Deserialize, Serialize};

@@ -2,17 +2,17 @@ use std::{collections::BTreeMap, str::FromStr};
 
 use clap::{Parser, Subcommand};
 use distributed_key_generation::{
-    client::key_generator::KeyGeneratorClient,
+    client::key_generator::DistributedKeyGenerationClient,
     error::{self, Error},
     rpc::{cluster, external, internal},
     state::AppState,
     task::single_key_generator::run_single_key_generator,
     types::{
-        Address, Config, ConfigOption, ConfigPath, KeyGeneratorAddressListModel, KeyGeneratorModel,
-        KeyIdModel,
+        Address, Config, ConfigOption, ConfigPath, DistributedKeyGenerationAddressListModel,
+        DistributedKeyGenerationModel, KeyIdModel,
     },
 };
-use radius_sequencer_sdk::{json_rpc::RpcServer, kvstore::KvStore as Database};
+use radius_sdk::{json_rpc::server::RpcServer, kvstore::KvStore as Database};
 pub use serde::{Deserialize, Serialize};
 use skde::{setup, BigUint};
 use tokio::task::JoinHandle;
@@ -88,24 +88,26 @@ async fn main() -> Result<(), Error> {
                 config.database_path(),
             );
 
-            KeyGeneratorAddressListModel::initialize().map_err(error::Error::Database)?;
+            DistributedKeyGenerationAddressListModel::initialize()
+                .map_err(error::Error::Database)?;
             KeyIdModel::initialize().map_err(error::Error::Database)?;
 
             let mut key_generator_address_list =
-                KeyGeneratorAddressListModel::get().map_err(error::Error::Database)?;
+                DistributedKeyGenerationAddressListModel::get().map_err(error::Error::Database)?;
 
             if config.seed_cluster_rpc_url().is_some() {
                 // Follow
                 // Initialize the cluster RPC server
-                let seed_key_generator_client =
-                    KeyGeneratorClient::new(config.seed_cluster_rpc_url().clone().unwrap())
-                        .map_err(error::Error::RpcError)?;
+                let seed_key_generator_client = DistributedKeyGenerationClient::new(
+                    config.seed_cluster_rpc_url().clone().unwrap(),
+                )
+                .map_err(error::Error::RpcClientError)?;
 
                 let key_generator_list = seed_key_generator_client.get_key_generator_list().await?;
 
                 key_generator_list.iter().for_each(|key_generator| {
-                    if !KeyGeneratorModel::is_exist(key_generator.address()) {
-                        let _ = KeyGeneratorModel::put(key_generator);
+                    if !DistributedKeyGenerationModel::is_exist(key_generator.address()) {
+                        let _ = DistributedKeyGenerationModel::put(key_generator);
                     }
 
                     key_generator_address_list.insert(key_generator.address().clone());
@@ -113,16 +115,17 @@ async fn main() -> Result<(), Error> {
 
                 tracing::info!("Sync key generators {:?}.", key_generator_list);
 
-                KeyGeneratorAddressListModel::put(&key_generator_address_list)
+                DistributedKeyGenerationAddressListModel::put(&key_generator_address_list)
                     .map_err(error::Error::Database)?;
             }
 
             let key_generator_clients = key_generator_address_list
                 .iter()
                 .map(
-                    |key_generator_address| -> Result<(Address, KeyGeneratorClient), Error> {
-                        let key_generator = KeyGeneratorModel::get(key_generator_address)
-                            .map_err(error::Error::Database)?;
+                    |key_generator_address| -> Result<(Address, DistributedKeyGenerationClient), Error> {
+                        let key_generator =
+                            DistributedKeyGenerationModel::get(key_generator_address)
+                                .map_err(error::Error::Database)?;
 
                         tracing::info!(
                             "Create key generator client - address: {:?} / ip_address: {:?}.",
@@ -130,13 +133,13 @@ async fn main() -> Result<(), Error> {
                             key_generator.ip_address(),
                         );
 
-                        let key_generator_client: KeyGeneratorClient =
-                            KeyGeneratorClient::new(key_generator.ip_address())
-                                .map_err(error::Error::RpcError)?;
+                        let key_generator_client: DistributedKeyGenerationClient =
+                        DistributedKeyGenerationClient::new(key_generator.ip_address())
+                                .map_err(error::Error::RpcClientError)?;
                         Ok((key_generator.address().clone(), key_generator_client))
                     },
                 )
-                .collect::<Result<BTreeMap<Address, KeyGeneratorClient>, Error>>()?;
+                .collect::<Result<BTreeMap<Address, DistributedKeyGenerationClient>, Error>>()?;
 
             // Initialize an application-wide state instance
             let app_state = AppState::new(config, key_generator_clients, skde_params);
@@ -169,12 +172,12 @@ async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Erro
     // Initialize the internal RPC server.
     let internal_rpc_server = RpcServer::new(app_state.clone())
         .register_rpc_method(
-            internal::AddKeyGenerator::METHOD_NAME,
-            internal::AddKeyGenerator::handler,
+            internal::AddDistributedKeyGeneration::METHOD_NAME,
+            internal::AddDistributedKeyGeneration::handler,
         )?
         .init(app_state.config().internal_rpc_url().to_string())
         .await
-        .map_err(error::Error::RpcError)?;
+        .map_err(error::Error::RpcServerError)?;
 
     tracing::info!(
         "Successfully started the internal RPC server: {}",
@@ -214,7 +217,7 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
         )?
         .init(cluster_rpc_url.clone())
         .await
-        .map_err(error::Error::RpcError)?;
+        .map_err(error::Error::RpcServerError)?;
 
     tracing::info!(
         "Successfully started the cluster RPC server: {}",
@@ -251,7 +254,7 @@ async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHand
         )?
         .init(external_rpc_url.clone())
         .await
-        .map_err(error::Error::RpcError)?;
+        .map_err(error::Error::RpcServerError)?;
 
     tracing::info!(
         "Successfully started the external RPC server: {}",
