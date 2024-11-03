@@ -11,13 +11,13 @@ struct AddKeyGeneratorMessage {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct AddDistributedKeyGeneration {
+pub struct AddKeyGenerator {
     // signature: Signature, // TODO: Uncomment this code
     message: AddKeyGeneratorMessage,
 }
 
-impl AddDistributedKeyGeneration {
-    pub const METHOD_NAME: &'static str = "add_distributed_key_generation";
+impl AddKeyGenerator {
+    pub const METHOD_NAME: &'static str = "add_key_generator";
 
     pub async fn handler(parameter: RpcParameter, context: Arc<AppState>) -> Result<(), RpcError> {
         let parameter = parameter.parse::<Self>()?;
@@ -61,7 +61,7 @@ impl AddDistributedKeyGeneration {
 
 pub fn sync_key_generator(
     distributed_key_generation_clients: BTreeMap<Address, DistributedKeyGenerationClient>,
-    parameter: AddDistributedKeyGeneration,
+    parameter: AddKeyGenerator,
 ) {
     tokio::spawn(async move {
         info!(

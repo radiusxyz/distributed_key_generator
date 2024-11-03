@@ -172,8 +172,8 @@ async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Erro
     // Initialize the internal RPC server.
     let internal_rpc_server = RpcServer::new(app_state.clone())
         .register_rpc_method(
-            internal::AddDistributedKeyGeneration::METHOD_NAME,
-            internal::AddDistributedKeyGeneration::handler,
+            internal::AddKeyGenerator::METHOD_NAME,
+            internal::AddKeyGenerator::handler,
         )?
         .init(app_state.config().internal_rpc_url().to_string())
         .await

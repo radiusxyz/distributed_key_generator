@@ -8,7 +8,7 @@ use crate::{
             GetKeyGeneratorList, RunGeneratePartialKey, SyncAggregatedKey, SyncKeyGenerator,
             SyncPartialKey,
         },
-        internal::AddDistributedKeyGeneration,
+        internal::AddKeyGenerator,
     },
     types::KeyGeneratorList,
 };
@@ -56,7 +56,7 @@ impl DistributedKeyGenerationClient {
 
     pub async fn sync_key_generator(
         &self,
-        parameter: AddDistributedKeyGeneration,
+        parameter: AddKeyGenerator,
     ) -> Result<(), RpcClientError> {
         self.inner
             .rpc_client
