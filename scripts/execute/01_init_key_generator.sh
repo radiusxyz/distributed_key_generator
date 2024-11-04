@@ -4,13 +4,13 @@ source $SCRIPT_PATH/env.sh
 
 if [[ ! -f "$KEY_GENERATOR_BIN_PATH" ]]; then
     echo "Error: Keygenerator binary not found at $KEY_GENERATOR_BIN_PATH"
-    echo "Please run this command 'cp $PROJECT_ROOT_PATH/target/release/key_generator $PROJECT_ROOT_PATH/scripts'"
+    echo "Please run this command 'cp $PROJECT_ROOT_PATH/target/release/key-generator $PROJECT_ROOT_PATH/scripts'"
     exit 1
 fi
 
 rm -rf $DATA_PATH
 
-echo "Initialize key_generator" 
+echo "Initialize key generator" 
 
 $KEY_GENERATOR_BIN_PATH init --path $DATA_PATH
 
