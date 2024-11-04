@@ -3,6 +3,12 @@ CURRENT_PATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 PROJECT_ROOT_PATH="$( cd $SCRIPT_PATH/../.. >/dev/null 2>&1 ; pwd -P )"
 KEY_GENERATOR_BIN_PATH="$PROJECT_ROOT_PATH/scripts/key-generator"
 
+if [[ ! -f "$KEY_GENERATOR_BIN_PATH" ]]; then
+    echo "Error: Keygenerator binary not found at $KEY_GENERATOR_BIN_PATH"
+    echo "Please run this command 'cp $PROJECT_ROOT_PATH/target/release/key-generator $PROJECT_ROOT_PATH/scripts'"
+    exit 1
+fi
+
 DATA_PATH=$CURRENT_PATH/../../data
 CONFIG_FILE_PATH=$DATA_PATH/Config.toml
 PRIVATE_KEY_PATH=$DATA_PATH/signing_key
