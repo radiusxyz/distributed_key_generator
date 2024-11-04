@@ -1,6 +1,7 @@
 #!/bin/bash
 CURRENT_PATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
-KEY_GENERATOR_BIN_PATH=$CURRENT_PATH/../key_generator
+PROJECT_ROOT_PATH="$( cd $SCRIPT_PATH/../.. >/dev/null 2>&1 ; pwd -P )"
+KEY_GENERATOR_BIN_PATH="$PROJECT_ROOT_PATH/scripts/key_generator"
 
 DATA_PATH=$CURRENT_PATH/../../data
 CONFIG_FILE_PATH=$DATA_PATH/Config.toml

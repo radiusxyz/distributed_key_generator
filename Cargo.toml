@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "key_generator"
+name = "key-generator"
 path = "src/bin/key_generator.rs"
 
 [dependencies]
