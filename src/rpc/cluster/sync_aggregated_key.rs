@@ -1,23 +1,22 @@
 use std::sync::Arc;
 
-use radius_sdk::json_rpc::server::{RpcError, RpcParameter};
+use radius_sdk::{
+    json_rpc::server::{RpcError, RpcParameter},
+    signature::Address,
+};
 use serde::{Deserialize, Serialize};
 use skde::{
     delay_encryption::solve_time_lock_puzzle,
-    key_aggregation::{aggregate_key, AggregatedKey},
+    key_aggregation::{aggregate_key, AggregatedKey as SkdeAggregatedKey},
 };
 use tracing::info;
 
-use crate::{
-    state::AppState,
-    types::{Address, AggregatedKeyModel, DecryptionKeyModel, PartialKeyListModel},
-};
+use crate::{state::AppState, types::*};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncAggregatedKey {
-    pub key_id: u64,
-    // TODO: unused field
-    pub aggregated_key: AggregatedKey,
+    pub key_id: KeyId,
+    pub aggregated_key: SkdeAggregatedKey,
     pub participant_addresses: Vec<Address>,
 }
 
@@ -27,27 +26,32 @@ impl SyncAggregatedKey {
     pub async fn handler(parameter: RpcParameter, context: Arc<AppState>) -> Result<(), RpcError> {
         let parameter = parameter.parse::<Self>()?;
 
-        info!(
-            "Sync aggregated key - key_id: {:?}, participant address: {:?}",
-            parameter.key_id, parameter.participant_addresses
-        );
-
         let skde_params = context.skde_params().clone();
 
-        let partial_key_list = PartialKeyListModel::get_or_default(parameter.key_id).unwrap();
+        let partial_key_address_list =
+            PartialKeyAddressList::get_or(parameter.key_id, PartialKeyAddressList::default)?;
 
-        // TODO: validate
-        let _participant_addresses = partial_key_list.get_address_list();
+        let partial_key_list = partial_key_address_list.get_partial_key_list(parameter.key_id)?;
 
-        let aggregated_key = aggregate_key(&skde_params, &partial_key_list.to_vec());
-        AggregatedKeyModel::put(parameter.key_id, &aggregated_key).unwrap();
+        let skde_aggregated_key = aggregate_key(&skde_params, &partial_key_list);
+        let aggregated_key = AggregatedKey::new(skde_aggregated_key.clone());
+        aggregated_key.put(parameter.key_id)?;
 
-        info!("Aggregated key: {:?}", aggregated_key);
+        info!(
+            "Completed to generate encryption key - key id: {:?} / encryption key: {:?}",
+            parameter.key_id, skde_aggregated_key.u
+        );
 
         tokio::spawn(async move {
-            let decryption_key = solve_time_lock_puzzle(&skde_params, &aggregated_key).unwrap();
-            DecryptionKeyModel::put(parameter.key_id, &decryption_key).unwrap();
-            info!("Decryption key: {:?}", decryption_key);
+            let decryption_key =
+                solve_time_lock_puzzle(&skde_params, &skde_aggregated_key).unwrap();
+            let decryption_key = DecryptionKey::new(decryption_key.sk.clone());
+
+            decryption_key.put(parameter.key_id).unwrap();
+            info!(
+                "Complete to get decryption key - key_id: {:?} / decryption key: {:?}",
+                parameter.key_id, decryption_key
+            );
         });
 
         Ok(())

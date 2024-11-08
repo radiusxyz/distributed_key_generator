@@ -1,16 +1,14 @@
-use skde::delay_encryption::SecretKey;
-
 use crate::rpc::prelude::*;
 
 /// 09/05
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetDecryptionKey {
-    key_id: u64,
+    key_id: KeyId,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetDecryptionKeyResponse {
-    pub decryption_key: SecretKey,
+    pub decryption_key: String,
 }
 
 impl GetDecryptionKey {
@@ -22,8 +20,10 @@ impl GetDecryptionKey {
     ) -> Result<GetDecryptionKeyResponse, RpcError> {
         let parameter = parameter.parse::<Self>()?;
 
-        let decryption_key = DecryptionKeyModel::get(parameter.key_id)?;
+        let decryption_key = DecryptionKey::get(parameter.key_id)?;
 
-        Ok(GetDecryptionKeyResponse { decryption_key })
+        Ok(GetDecryptionKeyResponse {
+            decryption_key: decryption_key.as_string(),
+        })
     }
 }

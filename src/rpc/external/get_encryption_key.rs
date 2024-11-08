@@ -1,16 +1,14 @@
-use skde::delay_encryption::PublicKey;
-
 use crate::rpc::prelude::*;
 
 /// 09/05
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetEncryptionKey {
-    key_id: u64,
+    key_id: KeyId,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetEncryptionKeyResponse {
-    pub encryption_key: PublicKey,
+    pub encryption_key: String,
 }
 
 impl GetEncryptionKey {
@@ -22,10 +20,11 @@ impl GetEncryptionKey {
     ) -> Result<GetEncryptionKeyResponse, RpcError> {
         let parameter = parameter.parse::<Self>()?;
 
-        let aggregated_key = AggregatedKeyModel::get(parameter.key_id)?;
-        let encryption_key = PublicKey {
-            pk: aggregated_key.u,
-        };
-        Ok(GetEncryptionKeyResponse { encryption_key })
+        let aggregated_key = AggregatedKey::get(parameter.key_id)?;
+        let encryption_key = aggregated_key.encryption_key();
+
+        Ok(GetEncryptionKeyResponse {
+            encryption_key: encryption_key,
+        })
     }
 }

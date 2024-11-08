@@ -1,20 +1,26 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
-use radius_sdk::json_rpc::server::{RpcError, RpcParameter};
+use radius_sdk::{
+    json_rpc::{
+        client::{Id, RpcClient},
+        server::{RpcError, RpcParameter},
+    },
+    signature::Address,
+};
 use serde::{Deserialize, Serialize};
 use skde::key_generation::{
     generate_partial_key, prove_partial_key_validity, PartialKey, PartialKeyProof,
 };
-use tracing::info;
 
 use crate::{
-    client::key_generator::DistributedKeyGenerationClient, rpc::cluster::SyncPartialKey,
-    state::AppState, types::Address,
+    rpc::cluster::SyncPartialKey,
+    state::AppState,
+    types::{KeyGeneratorList, KeyId},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RunGeneratePartialKey {
-    pub key_id: u64,
+    pub key_id: KeyId,
 }
 
 impl RunGeneratePartialKey {
@@ -26,16 +32,14 @@ impl RunGeneratePartialKey {
         let skde_params = context.skde_params();
 
         let (secret_value, partial_key) = generate_partial_key(skde_params);
+
         let partial_key_proof = prove_partial_key_validity(skde_params, &secret_value);
 
-        let distributed_key_generation_clients = context.key_generator_clients().await.unwrap();
-
         sync_partial_key(
-            distributed_key_generation_clients,
-            context.config().signing_key().get_address().clone(),
+            context.config().signer().address().clone(),
             parameter.key_id,
             partial_key,
-            partial_key_proof,
+            partial_key_proof
         );
 
         Ok(())
@@ -43,39 +47,31 @@ impl RunGeneratePartialKey {
 }
 
 pub fn sync_partial_key(
-    distributed_key_generation_clients: BTreeMap<Address, DistributedKeyGenerationClient>,
     address: Address,
-    key_id: u64,
+    key_id: KeyId,
     partial_key: PartialKey,
     partial_key_proof: PartialKeyProof,
 ) {
+    let all_key_generator_rpc_url_list = KeyGeneratorList::get()
+        .unwrap()
+        .get_all_key_generator_rpc_url_list();
+
     tokio::spawn(async move {
         let parameter = SyncPartialKey {
             address,
             key_id,
-            partial_key,
+            skde_partial_key: partial_key,
             partial_key_proof,
         };
 
-        info!(
-            "sync_partial_key - rpc_client_count: {:?}",
-            distributed_key_generation_clients.len()
-        );
-
-        for (_address, key_generator_rpc_client) in distributed_key_generation_clients {
-            let key_generator_rpc_client = key_generator_rpc_client.clone();
-            let parameter = parameter.clone();
-
-            tokio::spawn(async move {
-                match key_generator_rpc_client.sync_partial_key(parameter).await {
-                    Ok(_) => {
-                        info!("Complete to sync partial key");
-                    }
-                    Err(err) => {
-                        info!("Failed to sync partial key - error: {:?}", err);
-                    }
-                }
-            });
-        }
+        let rpc_client = RpcClient::new().unwrap();
+        rpc_client
+            .multicast(
+                all_key_generator_rpc_url_list,
+                SyncPartialKey::METHOD_NAME,
+                &parameter,
+                Id::Null,
+            )
+            .await;
     });
 }

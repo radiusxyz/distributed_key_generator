@@ -6,7 +6,7 @@ rm -rf $DATA_PATH
 
 echo "Initialize key generator" 
 
-$KEY_GENERATOR_BIN_PATH init --path $DATA_PATH
+$BIN_PATH init --path $DATA_PATH
 
 sed -i.temp "s|internal_rpc_url = \"http://127.0.0.1:4000\"|internal_rpc_url = \"$KEY_GENERATOR_INTERNAL_RPC_URL\"|g" $CONFIG_FILE_PATH
 sed -i.temp "s|external_rpc_url = \"http://127.0.0.1:3000\"|external_rpc_url = \"$KEY_GENERATOR_EXTERNAL_RPC_URL\"|g" $CONFIG_FILE_PATH

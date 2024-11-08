@@ -5,13 +5,9 @@ use std::{fs, path::PathBuf};
 
 pub use config_option::*;
 pub use config_path::*;
-use radius_sdk::signature::ChainType;
-use serde::{Deserialize, Serialize};
+use radius_sdk::signature::{Address, ChainType, PrivateKeySigner};
 
-use crate::{
-    error::Error,
-    types::{Address, SigningKey},
-};
+use crate::error::Error;
 
 pub const DEFAULT_HOME_PATH: &str = ".radius";
 pub const DATABASE_DIR_NAME: &str = "database";
@@ -23,12 +19,12 @@ const DEFAULT_INTERNAL_RPC_URL: &str = "http://127.0.0.1:4000";
 const DEFAULT_CLUSTER_RPC_URL: &str = "http://127.0.0.1:5000";
 
 const DEFAULT_RADIUS_FOUNDATION_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
-const DEFAULT_CHAIN_TYPE: &str = "Ethereum";
+const DEFAULT_CHAIN_TYPE: &str = "ethereum";
 
 const DEFAULT_PARTIAL_KEY_GENERATION_CYCLE: u64 = 5;
 const DEFAULT_PARTIAL_KEY_AGGREGATION_CYCLE: u64 = 4;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone)]
 pub struct Config {
     path: PathBuf,
 
@@ -37,7 +33,7 @@ pub struct Config {
     cluster_rpc_url: String,
     seed_cluster_rpc_url: Option<String>,
 
-    signing_key: SigningKey,
+    signer: PrivateKeySigner,
 
     radius_foundation_address: Address,
     chain_type: ChainType,
@@ -69,9 +65,13 @@ impl Config {
         // Merge configs from CLI input
         let merged_config_option = config_file.merge(config_option);
 
+        let chain_type = merged_config_option.chain_type.unwrap().try_into().unwrap();
+
         // Read signing key
         let signing_key_path = config_path.join(SIGNING_KEY);
-        let signing_key = SigningKey::from(fs::read_to_string(signing_key_path).unwrap());
+        let signer =
+            PrivateKeySigner::from_str(chain_type, &fs::read_to_string(signing_key_path).unwrap())
+                .unwrap();
 
         Ok(Config {
             path: config_path,
@@ -79,14 +79,13 @@ impl Config {
             internal_rpc_url: merged_config_option.internal_rpc_url.unwrap(),
             cluster_rpc_url: merged_config_option.cluster_rpc_url.unwrap(),
             seed_cluster_rpc_url: merged_config_option.seed_cluster_rpc_url.clone(),
-            signing_key,
-            radius_foundation_address: merged_config_option
-                .radius_foundation_address
-                .unwrap()
-                .into(),
-            // TODO: stompesi
-            // chain_type: merged_config_option.chain_type.unwrap().into(),
-            chain_type: ChainType::Ethereum,
+            signer,
+            radius_foundation_address: Address::from_str(
+                chain_type,
+                &merged_config_option.radius_foundation_address.unwrap(),
+            )
+            .unwrap(),
+            chain_type,
 
             partial_key_generation_cycle: merged_config_option
                 .partial_key_generation_cycle
@@ -105,8 +104,8 @@ impl Config {
         self.path.join(DATABASE_DIR_NAME)
     }
 
-    pub fn signing_key(&self) -> &SigningKey {
-        &self.signing_key
+    pub fn signer(&self) -> &PrivateKeySigner {
+        &self.signer
     }
 
     pub fn radius_foundation_address(&self) -> &Address {
@@ -117,8 +116,8 @@ impl Config {
         &self.chain_type
     }
 
-    pub fn address(&self) -> Address {
-        self.signing_key().get_address()
+    pub fn address(&self) -> &Address {
+        self.signer().address()
     }
 
     pub fn external_rpc_url(&self) -> &String {

@@ -1,15 +1,15 @@
 use std::sync::Arc;
 
-use radius_sdk::json_rpc::server::{RpcError, RpcParameter};
+use radius_sdk::{
+    json_rpc::server::{RpcError, RpcParameter},
+    signature::Address,
+};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
     state::AppState,
-    types::{
-        Address, DistributedKeyGeneration, DistributedKeyGenerationAddressListModel,
-        DistributedKeyGenerationModel,
-    },
+    types::{KeyGenerator, KeyGeneratorList},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -27,12 +27,13 @@ pub struct SyncKeyGenerator {
 impl SyncKeyGenerator {
     pub const METHOD_NAME: &'static str = "sync_key_generator";
 
-    pub async fn handler(parameter: RpcParameter, context: Arc<AppState>) -> Result<(), RpcError> {
+    pub async fn handler(parameter: RpcParameter, _context: Arc<AppState>) -> Result<(), RpcError> {
         let parameter = parameter.parse::<Self>()?;
 
         info!(
             "Sync key generator - address: {:?}, url: {:?}",
-            parameter.message.address, parameter.message.ip_address
+            parameter.message.address.as_hex_string(),
+            parameter.message.ip_address
         );
 
         // TODO: Uncomment this code
@@ -42,20 +43,19 @@ impl SyncKeyGenerator {
         //     context.config().chain_type().clone(),
         // )?;
 
-        let key_generator_address_list = DistributedKeyGenerationAddressListModel::get()?;
-        if key_generator_address_list.contains(&parameter.message.address) {
+        let key_generator = KeyGenerator::new(
+            parameter.message.address.clone(),
+            parameter.message.ip_address.clone(),
+        );
+
+        let key_generator_list = KeyGeneratorList::get()?;
+        if key_generator_list.contains(&key_generator) {
             return Ok(());
         }
 
-        DistributedKeyGenerationAddressListModel::add_distributed_key_generation_address(
-            parameter.message.address.clone(),
-        )?;
-
-        let key_generator =
-            DistributedKeyGeneration::new(parameter.message.address, parameter.message.ip_address);
-        DistributedKeyGenerationModel::put(&key_generator)?;
-
-        context.add_key_generator_client(key_generator).await?;
+        KeyGeneratorList::apply(|key_generator_list| {
+            key_generator_list.insert(key_generator);
+        })?;
 
         Ok(())
     }

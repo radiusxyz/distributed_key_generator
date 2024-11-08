@@ -1,18 +1,23 @@
-use std::{collections::BTreeMap, str::FromStr};
+use std::str::FromStr;
 
 use clap::{Parser, Subcommand};
 use distributed_key_generation::{
-    client::key_generator::DistributedKeyGenerationClient,
     error::{self, Error},
-    rpc::{cluster, external, internal},
+    rpc::{
+        cluster::{self, GetKeyGeneratorList},
+        external, internal,
+    },
     state::AppState,
     task::single_key_generator::run_single_key_generator,
-    types::{
-        Address, Config, ConfigOption, ConfigPath, DistributedKeyGenerationAddressListModel,
-        DistributedKeyGenerationModel, KeyIdModel,
-    },
+    types::*,
 };
-use radius_sdk::{json_rpc::server::RpcServer, kvstore::KvStore as Database};
+use radius_sdk::{
+    json_rpc::{
+        client::{Id, RpcClient},
+        server::RpcServer,
+    },
+    kvstore::KvStore as Database,
+};
 pub use serde::{Deserialize, Serialize};
 use skde::{setup, BigUint};
 use tokio::task::JoinHandle;
@@ -65,6 +70,7 @@ async fn main() -> Result<(), Error> {
                 config.path(),
             );
 
+            // TODO: remove this values
             const PRIME_P: &str = "8155133734070055735139271277173718200941522166153710213522626777763679009805792017274916613411023848268056376687809186180768200590914945958831360737612803";
             const PRIME_Q: &str = "13379153270147861840625872456862185586039997603014979833900847304743997773803109864546170215161716700184487787472783869920830925415022501258643369350348243";
             const GENERATOR: &str = "4";
@@ -83,66 +89,35 @@ async fn main() -> Result<(), Error> {
             Database::new(config.database_path())
                 .map_err(error::Error::Database)?
                 .init();
+
+            KeyGeneratorList::initialize().map_err(error::Error::Database)?;
+            KeyId::initialize().map_err(error::Error::Database)?;
+
             tracing::info!(
                 "Successfully initialized the database at {:?}.",
                 config.database_path(),
             );
 
-            DistributedKeyGenerationAddressListModel::initialize()
-                .map_err(error::Error::Database)?;
-            KeyIdModel::initialize().map_err(error::Error::Database)?;
-
-            let mut key_generator_address_list =
-                DistributedKeyGenerationAddressListModel::get().map_err(error::Error::Database)?;
-
-            if config.seed_cluster_rpc_url().is_some() {
+            if let Some(seed_rpc_url) = config.seed_cluster_rpc_url() {
                 // Follow
                 // Initialize the cluster RPC server
-                let seed_key_generator_client = DistributedKeyGenerationClient::new(
-                    config.seed_cluster_rpc_url().clone().unwrap(),
-                )
-                .map_err(error::Error::RpcClientError)?;
 
-                let key_generator_list = seed_key_generator_client.get_key_generator_list().await?;
+                let rpc_client = RpcClient::new()?;
 
-                key_generator_list.iter().for_each(|key_generator| {
-                    if !DistributedKeyGenerationModel::is_exist(key_generator.address()) {
-                        let _ = DistributedKeyGenerationModel::put(key_generator);
-                    }
+                let key_generator_list: KeyGeneratorList = rpc_client
+                    .request(
+                        seed_rpc_url,
+                        GetKeyGeneratorList::METHOD_NAME,
+                        &GetKeyGeneratorList,
+                        Id::Null,
+                    )
+                    .await?;
 
-                    key_generator_address_list.insert(key_generator.address().clone());
-                });
-
-                tracing::info!("Sync key generators {:?}.", key_generator_list);
-
-                DistributedKeyGenerationAddressListModel::put(&key_generator_address_list)
-                    .map_err(error::Error::Database)?;
+                key_generator_list.put().map_err(error::Error::Database)?;
             }
 
-            let key_generator_clients = key_generator_address_list
-                .iter()
-                .map(
-                    |key_generator_address| -> Result<(Address, DistributedKeyGenerationClient), Error> {
-                        let key_generator =
-                            DistributedKeyGenerationModel::get(key_generator_address)
-                                .map_err(error::Error::Database)?;
-
-                        tracing::info!(
-                            "Create key generator client - address: {:?} / ip_address: {:?}.",
-                            key_generator.address(),
-                            key_generator.ip_address(),
-                        );
-
-                        let key_generator_client: DistributedKeyGenerationClient =
-                        DistributedKeyGenerationClient::new(key_generator.ip_address())
-                                .map_err(error::Error::RpcClientError)?;
-                        Ok((key_generator.address().clone(), key_generator_client))
-                    },
-                )
-                .collect::<Result<BTreeMap<Address, DistributedKeyGenerationClient>, Error>>()?;
-
             // Initialize an application-wide state instance
-            let app_state = AppState::new(config, key_generator_clients, skde_params);
+            let app_state = AppState::new(config, skde_params);
 
             if app_state.config().seed_cluster_rpc_url().is_none() {
                 // Leader

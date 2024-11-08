@@ -1,17 +1,20 @@
-use std::{collections::BTreeMap, time::Duration};
+use std::time::Duration;
 
+use radius_sdk::{
+    json_rpc::client::{Id, RpcClient},
+    signature::Address,
+};
 use skde::{
     delay_encryption::solve_time_lock_puzzle,
-    key_aggregation::{aggregate_key, AggregatedKey},
+    key_aggregation::{aggregate_key, AggregatedKey as SkdeAggregatedKey},
 };
 use tokio::time::sleep;
-use tracing::{error, info};
+use tracing::info;
 
 use crate::{
-    client::key_generator::DistributedKeyGenerationClient,
     rpc::cluster::{RunGeneratePartialKey, SyncAggregatedKey},
     state::AppState,
-    types::{Address, AggregatedKeyModel, DecryptionKeyModel, KeyIdModel, PartialKeyListModel},
+    types::*,
 };
 
 pub fn run_single_key_generator(context: AppState) {
@@ -21,83 +24,89 @@ pub fn run_single_key_generator(context: AppState) {
 
         loop {
             sleep(Duration::from_secs(partial_key_generation_cycle)).await;
-            let distributed_key_generation_clients = context.key_generator_clients().await.unwrap();
             let context = context.clone();
 
-            let key_id = KeyIdModel::get().unwrap();
+            let mut key_id = KeyId::get_mut().unwrap();
+            let current_key_id = key_id.clone();
+            key_id.increase_key_id();
+            key_id.update().unwrap();
 
-            info!("request run_generate_partial_key - key_id: {:?}", key_id);
-            run_generate_partial_key(distributed_key_generation_clients.clone(), key_id);
+            run_generate_partial_key(current_key_id);
 
             tokio::spawn(async move {
                 sleep(Duration::from_secs(partial_key_aggregation_cycle)).await;
                 let skde_params = context.skde_params().clone();
 
-                let partial_key_list = PartialKeyListModel::get_or_default(key_id).unwrap();
+                let partial_key_address_list =
+                    PartialKeyAddressList::get_or(current_key_id, PartialKeyAddressList::default)
+                        .unwrap();
 
-                let participant_addresses = partial_key_list.get_address_list();
+                let participant_addresses = partial_key_address_list.to_vec();
+                let partial_key_list = partial_key_address_list
+                    .get_partial_key_list(current_key_id)
+                    .unwrap();
 
-                let aggregated_key = aggregate_key(&skde_params, &partial_key_list.to_vec());
-                AggregatedKeyModel::put(key_id, &aggregated_key).unwrap();
+                let skde_aggregated_key = aggregate_key(&skde_params, &partial_key_list);
 
-                info!("Aggregated key: {:?}", aggregated_key);
+                let aggregated_key = AggregatedKey::new(skde_aggregated_key.clone());
+                aggregated_key.put(current_key_id).unwrap();
 
-                sync_aggregated_key(
-                    distributed_key_generation_clients,
-                    key_id,
-                    aggregated_key.clone(),
-                    participant_addresses,
+                info!(
+                    "Completed to generate encryption key - key id: {:?} / encryption key: {:?}",
+                    current_key_id, skde_aggregated_key.u
                 );
 
-                let decryption_key = solve_time_lock_puzzle(&skde_params, &aggregated_key).unwrap();
-                DecryptionKeyModel::put(key_id, &decryption_key).unwrap();
-                info!("Decryption key: {:?}", decryption_key);
-            });
+                sync_aggregated_key(
+                    current_key_id,
+                    skde_aggregated_key.clone(),
+                    participant_addresses,
+                    context.config().signer().address(),
+                );
 
-            KeyIdModel::increase_key_id().unwrap();
+                let secure_key =
+                    solve_time_lock_puzzle(&skde_params, &skde_aggregated_key).unwrap();
+                let decryption_key = DecryptionKey::new(secure_key.sk.clone());
+                decryption_key.put(current_key_id).unwrap();
+
+                info!(
+                    "Complete to get decryption key - key_id: {:?} / decryption key: {:?}",
+                    current_key_id, decryption_key
+                );
+            });
         }
     });
 }
 
-pub fn run_generate_partial_key(
-    key_generator_clients: BTreeMap<Address, DistributedKeyGenerationClient>,
-    key_id: u64,
-) {
+pub fn run_generate_partial_key(key_id: KeyId) {
+    let all_key_generator_rpc_url_list = KeyGeneratorList::get()
+        .unwrap()
+        .get_all_key_generator_rpc_url_list();
+
     tokio::spawn(async move {
         let parameter = RunGeneratePartialKey { key_id };
 
-        info!(
-            "run_generate_partial_key - rpc_client_count: {:?}",
-            key_generator_clients.len()
-        );
-
-        for (_address, key_generator_rpc_client) in key_generator_clients {
-            let key_generator_rpc_client = key_generator_rpc_client.clone();
-            let parameter = parameter.clone();
-
-            tokio::spawn(async move {
-                match key_generator_rpc_client
-                    .run_generate_partial_key(parameter)
-                    .await
-                {
-                    Ok(_) => {
-                        info!("Complete to run generate partial key");
-                    }
-                    Err(err) => {
-                        error!("Failed to run generate partial key - error: {:?}", err);
-                    }
-                }
-            });
-        }
+        let rpc_client = RpcClient::new().unwrap();
+        rpc_client
+            .multicast(
+                all_key_generator_rpc_url_list,
+                RunGeneratePartialKey::METHOD_NAME,
+                &parameter,
+                Id::Null,
+            )
+            .await;
     });
 }
 
 pub fn sync_aggregated_key(
-    distributed_key_generation_clients: BTreeMap<Address, DistributedKeyGenerationClient>,
-    key_id: u64,
-    aggregated_key: AggregatedKey,
+    key_id: KeyId,
+    aggregated_key: SkdeAggregatedKey,
     participant_addresses: Vec<Address>,
+    my_address: &Address,
 ) {
+    let other_key_generator_rpc_url_list = KeyGeneratorList::get()
+        .unwrap()
+        .get_other_key_generator_rpc_url_list(my_address);
+
     tokio::spawn(async move {
         let parameter = SyncAggregatedKey {
             key_id,
@@ -105,28 +114,14 @@ pub fn sync_aggregated_key(
             participant_addresses,
         };
 
-        info!(
-            "sync_aggregated_key - rpc_client_count: {:?}",
-            distributed_key_generation_clients.len()
-        );
-
-        for (_address, key_generator_rpc_client) in distributed_key_generation_clients {
-            let key_generator_rpc_client = key_generator_rpc_client.clone();
-            let parameter = parameter.clone();
-
-            tokio::spawn(async move {
-                match key_generator_rpc_client
-                    .sync_aggregated_key(parameter)
-                    .await
-                {
-                    Ok(_) => {
-                        info!("Complete to sync aggregated key");
-                    }
-                    Err(err) => {
-                        error!("Failed to sync aggregated key - error: {:?}", err);
-                    }
-                }
-            });
-        }
+        let rpc_client = RpcClient::new().unwrap();
+        rpc_client
+            .multicast(
+                other_key_generator_rpc_url_list,
+                SyncAggregatedKey::METHOD_NAME,
+                &parameter,
+                Id::Null,
+            )
+            .await;
     });
 }

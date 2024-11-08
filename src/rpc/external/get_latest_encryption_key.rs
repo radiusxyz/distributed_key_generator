@@ -1,5 +1,3 @@
-use skde::delay_encryption::PublicKey;
-
 use crate::rpc::prelude::*;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -7,8 +5,8 @@ pub struct GetLatestEncryptionKey {}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetLatestEncryptionKeyResponse {
-    pub key_id: u64,
-    pub encryption_key: PublicKey,
+    pub key_id: KeyId,
+    pub encryption_key: String,
 }
 
 impl GetLatestEncryptionKey {
@@ -18,18 +16,16 @@ impl GetLatestEncryptionKey {
         _parameter: RpcParameter,
         _context: Arc<AppState>,
     ) -> Result<GetLatestEncryptionKeyResponse, RpcError> {
-        let mut key_id = KeyIdModel::get()?;
+        let mut key_id = KeyId::get()?;
 
         loop {
-            if AggregatedKeyModel::get(key_id).is_err() {
-                key_id -= 1;
+            if AggregatedKey::get(key_id).is_err() {
+                key_id.decrease_key_id();
                 continue;
             }
 
-            let aggregated_key = AggregatedKeyModel::get(key_id)?;
-            let encryption_key = PublicKey {
-                pk: aggregated_key.u.clone(),
-            };
+            let aggregated_key = AggregatedKey::get(key_id)?;
+            let encryption_key = aggregated_key.encryption_key();
 
             return Ok(GetLatestEncryptionKeyResponse {
                 key_id,

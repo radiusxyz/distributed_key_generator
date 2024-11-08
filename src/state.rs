@@ -1,12 +1,6 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
-use tokio::sync::Mutex;
-
-use crate::{
-    client::key_generator::DistributedKeyGenerationClient,
-    error::{self, Error},
-    types::{Address, Config, DistributedKeyGeneration},
-};
+use crate::types::Config;
 
 pub struct AppState {
     inner: Arc<AppStateInner>,
@@ -14,7 +8,6 @@ pub struct AppState {
 
 struct AppStateInner {
     config: Config,
-    key_generator_clients: Mutex<BTreeMap<Address, DistributedKeyGenerationClient>>,
     skde_params: skde::delay_encryption::SkdeParams,
 }
 
@@ -30,14 +23,10 @@ impl Clone for AppState {
 }
 
 impl AppState {
-    pub fn new(
-        config: Config,
-        key_generator_clients: BTreeMap<Address, DistributedKeyGenerationClient>,
-        skde_params: skde::delay_encryption::SkdeParams,
-    ) -> Self {
+    pub fn new(config: Config, skde_params: skde::delay_encryption::SkdeParams) -> Self {
         let inner = AppStateInner {
             config,
-            key_generator_clients: Mutex::new(key_generator_clients),
+
             skde_params,
         };
 
@@ -48,28 +37,6 @@ impl AppState {
 
     pub fn config(&self) -> &Config {
         &self.inner.config
-    }
-
-    pub async fn add_key_generator_client(
-        &self,
-        key_generator: DistributedKeyGeneration,
-    ) -> Result<(), error::Error> {
-        let key_generator_client: DistributedKeyGenerationClient =
-            DistributedKeyGenerationClient::new(key_generator.ip_address())
-                .map_err(error::Error::RpcClientError)?;
-
-        let mut key_generator_clients = self.inner.key_generator_clients.lock().await;
-        key_generator_clients.insert(key_generator.address().to_owned(), key_generator_client);
-
-        Ok(())
-    }
-
-    pub async fn key_generator_clients(
-        &self,
-    ) -> Result<BTreeMap<Address, DistributedKeyGenerationClient>, Error> {
-        let key_generator_clients = self.inner.key_generator_clients.lock().await;
-
-        Ok(key_generator_clients.clone())
     }
 
     pub fn skde_params(&self) -> &skde::delay_encryption::SkdeParams {
