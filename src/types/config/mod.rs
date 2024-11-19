@@ -7,8 +7,6 @@ pub use config_option::*;
 pub use config_path::*;
 use radius_sdk::signature::{Address, ChainType, PrivateKeySigner};
 
-use crate::error::Error;
-
 pub const DEFAULT_HOME_PATH: &str = ".radius";
 pub const DATABASE_DIR_NAME: &str = "database";
 pub const CONFIG_FILE_NAME: &str = "Config.toml";
@@ -43,7 +41,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load(config_option: &mut ConfigOption) -> Result<Self, Error> {
+    pub fn load(config_option: &mut ConfigOption) -> Result<Self, ConfigError> {
         let config_path = match config_option.path.as_mut() {
             Some(config_path) => config_path.clone(),
             None => {
@@ -55,12 +53,11 @@ impl Config {
 
         // Read config file
         let config_file_path = config_path.join(CONFIG_FILE_NAME);
-        let config_string =
-            fs::read_to_string(config_file_path).map_err(Error::LoadConfigOption)?;
+        let config_string = fs::read_to_string(config_file_path).map_err(ConfigError::Load)?;
 
         // Parse String to TOML String
         let config_file: ConfigOption =
-            toml::from_str(&config_string).map_err(Error::ParseTomlString)?;
+            toml::from_str(&config_string).map_err(ConfigError::Parse)?;
 
         // Merge configs from CLI input
         let merged_config_option = config_file.merge(config_option);
@@ -143,4 +140,43 @@ impl Config {
     pub fn seed_cluster_rpc_url(&self) -> &Option<String> {
         &self.seed_cluster_rpc_url
     }
+
+    pub fn external_port(&self) -> Result<String, ConfigError> {
+        Ok(self
+            .external_rpc_url()
+            .split(':')
+            .last()
+            .ok_or(ConfigError::InvalidExternalPort)?
+            .to_string())
+    }
+
+    pub fn cluster_port(&self) -> Result<String, ConfigError> {
+        Ok(self
+            .cluster_rpc_url()
+            .split(':')
+            .last()
+            .ok_or(ConfigError::InvalidClusterPort)?
+            .to_string())
+    }
 }
+
+#[derive(Debug)]
+pub enum ConfigError {
+    Load(std::io::Error),
+    Parse(toml::de::Error),
+    RemoveConfigDirectory(std::io::Error),
+    CreateConfigDirectory(std::io::Error),
+    CreateConfigFile(std::io::Error),
+    CreatePrivateKeyFile(std::io::Error),
+
+    InvalidExternalPort,
+    InvalidClusterPort,
+}
+
+impl std::fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for ConfigError {}

@@ -167,7 +167,7 @@ async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Erro
 }
 
 async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error> {
-    let cluster_rpc_url = app_state.config().cluster_rpc_url().to_string();
+    let cluster_rpc_url = anywhere(&app_state.config().cluster_port()?);
 
     let key_generator_rpc_server = RpcServer::new(app_state.clone())
         .register_rpc_method(
@@ -207,7 +207,7 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
 }
 
 async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHandle<()>, Error> {
-    let external_rpc_url = app_state.config().external_rpc_url().to_string();
+    let external_rpc_url = anywhere(&app_state.config().external_port()?);
 
     // Initialize the external RPC server.
     let external_rpc_server = RpcServer::new(app_state.clone())
@@ -241,4 +241,8 @@ async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHand
     });
 
     Ok(server_handle)
+}
+
+pub fn anywhere(port: &str) -> String {
+    format!("0.0.0.0:{}", port)
 }

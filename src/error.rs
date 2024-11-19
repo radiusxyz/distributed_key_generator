@@ -1,5 +1,6 @@
 #[derive(Debug)]
 pub enum Error {
+    Config(crate::types::ConfigError),
     Database(radius_sdk::kvstore::KvStoreError),
     RpcServerError(radius_sdk::json_rpc::server::RpcServerError),
     RpcClientError(radius_sdk::json_rpc::client::RpcClientError),
@@ -23,6 +24,12 @@ impl std::fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+impl From<crate::types::ConfigError> for Error {
+    fn from(value: crate::types::ConfigError) -> Self {
+        Self::Config(value)
+    }
+}
 
 impl From<radius_sdk::json_rpc::server::RpcServerError> for Error {
     fn from(value: radius_sdk::json_rpc::server::RpcServerError) -> Self {
