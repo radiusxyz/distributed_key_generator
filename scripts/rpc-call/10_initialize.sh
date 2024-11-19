@@ -10,7 +10,8 @@ curl --location $KEY_GENERATOR_INTERNAL_RPC_URL \
     "params": {
         "message": {
             "address": "'"$KEY_GENERATOR_ADDRESS"'",
-            "ip_address": "'"$KEY_GENERATOR_CLUSTER_RPC_URL"'"
+            "cluster_rpc_url": "'"$KEY_GENERATOR_CLUSTER_RPC_URL"'",
+            "external_rpc_url": "'"$KEY_GENERATOR_EXTERNAL_RPC_URL"'"
         }
     },
     "id": 1

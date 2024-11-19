@@ -8,14 +8,16 @@ use crate::types::prelude::*;
 
 pub struct KeyGenerator {
     address: Address,
-    ip_address: String,
+    cluster_rpc_url: String,
+    external_rpc_url: String,
 }
 
 impl KeyGenerator {
-    pub fn new(address: Address, ip_address: String) -> Self {
+    pub fn new(address: Address, cluster_rpc_url: String, external_rpc_url: String) -> Self {
         Self {
             address,
-            ip_address,
+            cluster_rpc_url,
+            external_rpc_url,
         }
     }
 
@@ -23,8 +25,12 @@ impl KeyGenerator {
         &self.address
     }
 
-    pub fn ip_address(&self) -> &str {
-        &self.ip_address
+    pub fn cluster_rpc_url(&self) -> &str {
+        &self.cluster_rpc_url
+    }
+
+    pub fn external_rpc_url(&self) -> &str {
+        &self.external_rpc_url
     }
 }
 
@@ -70,7 +76,7 @@ impl KeyGeneratorList {
                 if key_generator.address() == my_address {
                     None
                 } else {
-                    Some(key_generator.ip_address().to_owned())
+                    Some(key_generator.cluster_rpc_url().to_owned())
                 }
             })
             .collect()
@@ -79,7 +85,7 @@ impl KeyGeneratorList {
     pub fn get_all_key_generator_rpc_url_list(&self) -> Vec<String> {
         self.0
             .iter()
-            .map(|key_generator| key_generator.ip_address().to_owned())
+            .map(|key_generator| key_generator.cluster_rpc_url().to_owned())
             .collect()
     }
 

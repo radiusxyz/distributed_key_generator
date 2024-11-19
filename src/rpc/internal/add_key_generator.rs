@@ -6,7 +6,8 @@ use crate::rpc::{cluster::SyncKeyGenerator, prelude::*};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct AddKeyGeneratorMessage {
     address: Address,
-    ip_address: String,
+    cluster_rpc_url: String,
+    external_rpc_url: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -21,9 +22,10 @@ impl AddKeyGenerator {
     pub async fn handler(parameter: RpcParameter, _context: Arc<AppState>) -> Result<(), RpcError> {
         let parameter = parameter.parse::<Self>()?;
         info!(
-            "Add distributed key generation - address: {:?} / url: {:?}",
+            "Add distributed key generation - address: {:?} / cluster_rpc_url: {:?} / external_rpc_url: {:?}",
             parameter.message.address.as_hex_string(),
-            parameter.message.ip_address
+            parameter.message.cluster_rpc_url,
+            parameter.message.external_rpc_url
         );
 
         // TODO: Uncomment this code
@@ -35,7 +37,8 @@ impl AddKeyGenerator {
 
         let key_generator = KeyGenerator::new(
             parameter.message.address.clone(),
-            parameter.message.ip_address.clone(),
+            parameter.message.cluster_rpc_url.clone(),
+            parameter.message.external_rpc_url.clone(),
         );
 
         let key_generator_address_list = KeyGeneratorList::get()?;
@@ -60,9 +63,9 @@ pub fn sync_key_generator(parameter: AddKeyGenerator) {
 
     tokio::spawn(async move {
         info!(
-            "Sync distributed key generation - address: {:?} / ip_address: {:?} / rpc_client_count: {:?}",
+            "Sync distributed key generation - address: {:?} / cluster_rpc_url: {:?} / rpc_client_count: {:?}",
             parameter.message.address.as_hex_string(),
-            parameter.message.ip_address,
+            parameter.message.cluster_rpc_url,
             other_key_generator_rpc_url_list.len()
         );
 

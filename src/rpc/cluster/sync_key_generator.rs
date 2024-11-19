@@ -15,7 +15,8 @@ use crate::{
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct SyncKeyGeneratorMessage {
     address: Address,
-    ip_address: String,
+    cluster_rpc_url: String,
+    external_rpc_url: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -31,9 +32,10 @@ impl SyncKeyGenerator {
         let parameter = parameter.parse::<Self>()?;
 
         info!(
-            "Sync key generator - address: {:?}, url: {:?}",
+            "Sync key generator - address: {:?} / cluster_rpc_url: {:?} / external_rpc_url: {:?}",
             parameter.message.address.as_hex_string(),
-            parameter.message.ip_address
+            parameter.message.cluster_rpc_url,
+            parameter.message.external_rpc_url
         );
 
         // TODO: Uncomment this code
@@ -45,7 +47,8 @@ impl SyncKeyGenerator {
 
         let key_generator = KeyGenerator::new(
             parameter.message.address.clone(),
-            parameter.message.ip_address.clone(),
+            parameter.message.cluster_rpc_url.clone(),
+            parameter.message.external_rpc_url.clone(),
         );
 
         let key_generator_list = KeyGeneratorList::get()?;
