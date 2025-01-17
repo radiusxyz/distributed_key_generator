@@ -16,7 +16,7 @@ use radius_sdk::{
         client::{Id, RpcClient},
         server::RpcServer,
     },
-    kvstore::KvStore as Database,
+    kvstore::KvStoreBuilder,
 };
 pub use serde::{Deserialize, Serialize};
 use skde::{setup, BigUint};
@@ -86,7 +86,10 @@ async fn main() -> Result<(), Error> {
             let skde_params = setup(time, p, q, g, max_key_generator_number);
 
             // Initialize the database
-            Database::new(config.database_path())
+            KvStoreBuilder::default()
+                .set_default_lock_timeout(5000)
+                .set_txn_lock_timeout(5000)
+                .build(config.database_path())
                 .map_err(error::Error::Database)?
                 .init();
 
