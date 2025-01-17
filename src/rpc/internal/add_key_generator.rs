@@ -1,7 +1,12 @@
-use radius_sdk::{json_rpc::client::Id, signature::Address};
-use tracing::info;
+use radius_sdk::signature::Address;
 
 use crate::rpc::{cluster::SyncKeyGenerator, prelude::*};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AddKeyGenerator {
+    // signature: Signature, // TODO: Uncomment this code
+    message: AddKeyGeneratorMessage,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct AddKeyGeneratorMessage {
@@ -10,35 +15,32 @@ struct AddKeyGeneratorMessage {
     external_rpc_url: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct AddKeyGenerator {
-    // signature: Signature, // TODO: Uncomment this code
-    message: AddKeyGeneratorMessage,
-}
+impl RpcParameter<AppState> for AddKeyGenerator {
+    type Response = ();
 
-impl AddKeyGenerator {
-    pub const METHOD_NAME: &'static str = "add_key_generator";
+    fn method() -> &'static str {
+        "add_key_generator"
+    }
 
-    pub async fn handler(parameter: RpcParameter, _context: Arc<AppState>) -> Result<(), RpcError> {
-        let parameter = parameter.parse::<Self>()?;
-        info!(
+    async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
+        tracing::info!(
             "Add distributed key generation - address: {:?} / cluster_rpc_url: {:?} / external_rpc_url: {:?}",
-            parameter.message.address.as_hex_string(),
-            parameter.message.cluster_rpc_url,
-            parameter.message.external_rpc_url
+            self.message.address.as_hex_string(),
+            self.message.cluster_rpc_url,
+            self.message.external_rpc_url
         );
 
         // TODO: Uncomment this code
-        // parameter.signature.verify_signature(
-        //     serialize_to_bincode(&parameter.message)?.as_slice(),
+        // self.signature.verify_signature(
+        //     serialize_to_bincode(&self.message)?.as_slice(),
         //     context.config().radius_foundation_address().as_slice(),
         //     context.config().chain_type().clone(),
         // )?;
 
         let key_generator = KeyGenerator::new(
-            parameter.message.address.clone(),
-            parameter.message.cluster_rpc_url.clone(),
-            parameter.message.external_rpc_url.clone(),
+            self.message.address.clone(),
+            self.message.cluster_rpc_url.clone(),
+            self.message.external_rpc_url.clone(),
         );
 
         let key_generator_address_list = KeyGeneratorList::get()?;
@@ -50,7 +52,7 @@ impl AddKeyGenerator {
             key_generator_list.insert(key_generator);
         })?;
 
-        sync_key_generator(parameter);
+        sync_key_generator(self);
 
         Ok(())
     }
@@ -62,7 +64,7 @@ pub fn sync_key_generator(parameter: AddKeyGenerator) {
         .get_all_key_generator_rpc_url_list();
 
     tokio::spawn(async move {
-        info!(
+        tracing::info!(
             "Sync distributed key generation - address: {:?} / cluster_rpc_url: {:?} / rpc_client_count: {:?}",
             parameter.message.address.as_hex_string(),
             parameter.message.cluster_rpc_url,
@@ -73,10 +75,11 @@ pub fn sync_key_generator(parameter: AddKeyGenerator) {
         rpc_client
             .multicast(
                 other_key_generator_rpc_url_list,
-                SyncKeyGenerator::METHOD_NAME,
+                SyncKeyGenerator::method(),
                 &parameter,
                 Id::Null,
             )
-            .await;
+            .await
+            .unwrap();
     });
 }

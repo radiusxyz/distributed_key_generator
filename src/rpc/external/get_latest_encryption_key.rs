@@ -9,13 +9,14 @@ pub struct GetLatestEncryptionKeyResponse {
     pub encryption_key: String,
 }
 
-impl GetLatestEncryptionKey {
-    pub const METHOD_NAME: &'static str = "get_latest_encryption_key";
+impl RpcParameter<AppState> for GetLatestEncryptionKey {
+    type Response = GetLatestEncryptionKeyResponse;
 
-    pub async fn handler(
-        _parameter: RpcParameter,
-        _context: Arc<AppState>,
-    ) -> Result<GetLatestEncryptionKeyResponse, RpcError> {
+    fn method() -> &'static str {
+        "get_latest_encryption_key"
+    }
+
+    async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
         let mut key_id = KeyId::get()?;
 
         loop {
