@@ -1,7 +1,10 @@
 use std::time::Duration;
 
 use radius_sdk::{
-    json_rpc::client::{Id, RpcClient},
+    json_rpc::{
+        client::{Id, RpcClient},
+        server::RpcParameter,
+    },
     signature::Address,
 };
 use skde::{
@@ -9,7 +12,6 @@ use skde::{
     key_aggregation::{aggregate_key, AggregatedKey as SkdeAggregatedKey},
 };
 use tokio::time::sleep;
-use tracing::info;
 
 use crate::{
     rpc::cluster::{RunGeneratePartialKey, SyncAggregatedKey},
@@ -51,9 +53,10 @@ pub fn run_single_key_generator(context: AppState) {
                 let aggregated_key = AggregatedKey::new(skde_aggregated_key.clone());
                 aggregated_key.put(current_key_id).unwrap();
 
-                info!(
+                tracing::info!(
                     "Completed to generate encryption key - key id: {:?} / encryption key: {:?}",
-                    current_key_id, skde_aggregated_key.u
+                    current_key_id,
+                    skde_aggregated_key.u
                 );
 
                 sync_aggregated_key(
@@ -68,9 +71,10 @@ pub fn run_single_key_generator(context: AppState) {
                 let decryption_key = DecryptionKey::new(secure_key.sk.clone());
                 decryption_key.put(current_key_id).unwrap();
 
-                info!(
+                tracing::info!(
                     "Complete to get decryption key - key_id: {:?} / decryption key: {:?}",
-                    current_key_id, decryption_key
+                    current_key_id,
+                    decryption_key
                 );
             });
         }
@@ -89,11 +93,12 @@ pub fn run_generate_partial_key(key_id: KeyId) {
         rpc_client
             .multicast(
                 all_key_generator_rpc_url_list,
-                RunGeneratePartialKey::METHOD_NAME,
+                RunGeneratePartialKey::method(),
                 &parameter,
                 Id::Null,
             )
-            .await;
+            .await
+            .unwrap();
     });
 }
 
@@ -118,10 +123,11 @@ pub fn sync_aggregated_key(
         rpc_client
             .multicast(
                 other_key_generator_rpc_url_list,
-                SyncAggregatedKey::METHOD_NAME,
+                SyncAggregatedKey::method(),
                 &parameter,
                 Id::Null,
             )
-            .await;
+            .await
+            .unwrap();
     });
 }

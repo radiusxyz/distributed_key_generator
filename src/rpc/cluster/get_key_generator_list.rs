@@ -1,9 +1,4 @@
-use std::sync::Arc;
-
-use radius_sdk::json_rpc::server::{RpcError, RpcParameter};
-use serde::{Deserialize, Serialize};
-
-use crate::{state::AppState, types::KeyGeneratorList};
+use crate::rpc::prelude::*;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetKeyGeneratorList;
@@ -20,13 +15,14 @@ pub struct GetKeyGeneratorRpcUrlListResponse {
     pub key_generator_rpc_url_list: Vec<KeyGeneratorRpcInfo>,
 }
 
-impl GetKeyGeneratorList {
-    pub const METHOD_NAME: &'static str = "get_key_generator_list";
+impl RpcParameter<AppState> for GetKeyGeneratorList {
+    type Response = GetKeyGeneratorRpcUrlListResponse;
 
-    pub async fn handler(
-        _: RpcParameter,
-        _: Arc<AppState>,
-    ) -> Result<GetKeyGeneratorRpcUrlListResponse, RpcError> {
+    fn method() -> &'static str {
+        "get_key_generator_list"
+    }
+
+    async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
         let key_generator_list = KeyGeneratorList::get()?;
 
         let key_generator_rpc_url_list: Vec<KeyGeneratorRpcInfo> = key_generator_list

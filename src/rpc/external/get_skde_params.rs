@@ -8,13 +8,14 @@ pub struct GetSkdeParamsResponse {
     skde_params: skde::delay_encryption::SkdeParams,
 }
 
-impl GetSkdeParams {
-    pub const METHOD_NAME: &'static str = "get_skde_params";
+impl RpcParameter<AppState> for GetSkdeParams {
+    type Response = GetSkdeParamsResponse;
 
-    pub async fn handler(
-        _parameter: RpcParameter,
-        context: Arc<AppState>,
-    ) -> Result<GetSkdeParamsResponse, RpcError> {
+    fn method() -> &'static str {
+        "get_skde_params"
+    }
+
+    async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let skde_params = context.skde_params();
 
         Ok(GetSkdeParamsResponse {

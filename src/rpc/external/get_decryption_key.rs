@@ -11,16 +11,15 @@ pub struct GetDecryptionKeyResponse {
     pub decryption_key: String,
 }
 
-impl GetDecryptionKey {
-    pub const METHOD_NAME: &'static str = "get_decryption_key";
+impl RpcParameter<AppState> for GetDecryptionKey {
+    type Response = GetDecryptionKeyResponse;
 
-    pub async fn handler(
-        parameter: RpcParameter,
-        _context: Arc<AppState>,
-    ) -> Result<GetDecryptionKeyResponse, RpcError> {
-        let parameter = parameter.parse::<Self>()?;
+    fn method() -> &'static str {
+        "get_decryption_key"
+    }
 
-        let decryption_key = DecryptionKey::get(parameter.key_id)?;
+    async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
+        let decryption_key = DecryptionKey::get(self.key_id)?;
 
         Ok(GetDecryptionKeyResponse {
             decryption_key: decryption_key.as_string(),
