@@ -12,7 +12,6 @@ use skde::{
     key_aggregation::{aggregate_key, AggregatedKey as SkdeAggregatedKey},
 };
 use tokio::time::sleep;
-use tracing::info;
 
 use crate::{
     rpc::cluster::{RunGeneratePartialKey, SyncAggregatedKey},
@@ -54,9 +53,10 @@ pub fn run_single_key_generator(context: AppState) {
                 let aggregated_key = AggregatedKey::new(skde_aggregated_key.clone());
                 aggregated_key.put(current_key_id).unwrap();
 
-                info!(
+                tracing::info!(
                     "Completed to generate encryption key - key id: {:?} / encryption key: {:?}",
-                    current_key_id, skde_aggregated_key.u
+                    current_key_id,
+                    skde_aggregated_key.u
                 );
 
                 sync_aggregated_key(
@@ -71,9 +71,10 @@ pub fn run_single_key_generator(context: AppState) {
                 let decryption_key = DecryptionKey::new(secure_key.sk.clone());
                 decryption_key.put(current_key_id).unwrap();
 
-                info!(
+                tracing::info!(
                     "Complete to get decryption key - key_id: {:?} / decryption key: {:?}",
-                    current_key_id, decryption_key
+                    current_key_id,
+                    decryption_key
                 );
             });
         }

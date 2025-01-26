@@ -7,9 +7,8 @@ use skde::{
     delay_encryption::solve_time_lock_puzzle,
     key_aggregation::{aggregate_key, AggregatedKey as SkdeAggregatedKey},
 };
-use tracing::info;
 
-use crate::{state::AppState, types::*};
+use crate::rpc::prelude::*;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncAggregatedKey {
@@ -37,9 +36,10 @@ impl RpcParameter<AppState> for SyncAggregatedKey {
         let aggregated_key = AggregatedKey::new(skde_aggregated_key.clone());
         aggregated_key.put(self.key_id)?;
 
-        info!(
+        tracing::info!(
             "Completed to generate encryption key - key id: {:?} / encryption key: {:?}",
-            self.key_id, skde_aggregated_key.u
+            self.key_id,
+            skde_aggregated_key.u
         );
 
         tokio::spawn(async move {
@@ -48,9 +48,10 @@ impl RpcParameter<AppState> for SyncAggregatedKey {
             let decryption_key = DecryptionKey::new(decryption_key.sk.clone());
 
             decryption_key.put(self.key_id).unwrap();
-            info!(
+            tracing::info!(
                 "Complete to get decryption key - key_id: {:?} / decryption key: {:?}",
-                self.key_id, decryption_key
+                self.key_id,
+                decryption_key
             );
         });
 

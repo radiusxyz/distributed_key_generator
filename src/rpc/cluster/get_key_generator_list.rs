@@ -1,7 +1,4 @@
-use radius_sdk::json_rpc::server::{RpcError, RpcParameter};
-use serde::{Deserialize, Serialize};
-
-use crate::{state::AppState, types::KeyGeneratorList};
+use crate::rpc::prelude::*;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetKeyGeneratorList;

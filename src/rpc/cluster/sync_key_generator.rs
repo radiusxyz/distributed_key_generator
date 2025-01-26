@@ -11,16 +11,16 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SyncKeyGenerator {
+    // signature: Signature, // TODO: Uncomment this code
+    message: SyncKeyGeneratorMessage,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct SyncKeyGeneratorMessage {
     address: Address,
     cluster_rpc_url: String,
     external_rpc_url: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SyncKeyGenerator {
-    // signature: Signature, // TODO: Uncomment this code
-    message: SyncKeyGeneratorMessage,
 }
 
 impl RpcParameter<AppState> for SyncKeyGenerator {

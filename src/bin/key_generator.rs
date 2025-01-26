@@ -106,12 +106,11 @@ async fn main() -> Result<(), Error> {
                 // Initialize the cluster RPC server
                 let rpc_client = RpcClient::new()?;
 
-                let parameter = GetKeyGeneratorList {};
                 let key_generator_list: KeyGeneratorList = rpc_client
                     .request(
                         seed_rpc_url,
                         GetKeyGeneratorList::method(),
-                        &parameter,
+                        &GetKeyGeneratorList,
                         Id::Null,
                     )
                     .await?;

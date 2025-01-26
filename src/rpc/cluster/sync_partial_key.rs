@@ -6,9 +6,8 @@ use serde::{Deserialize, Serialize};
 use skde::key_generation::{
     verify_partial_key_validity, PartialKey as SkdePartialKey, PartialKeyProof,
 };
-use tracing::info;
 
-use crate::{state::AppState, types::*};
+use crate::rpc::prelude::*;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncPartialKey {
@@ -27,7 +26,7 @@ impl RpcParameter<AppState> for SyncPartialKey {
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         if KeyGeneratorList::get()?.is_key_generator_in_cluster(&self.address) {
-            info!(
+            tracing::info!(
                 "Sync partial key - key_id: {:?}, address: {:?}",
                 self.key_id,
                 self.address.as_hex_string(),
