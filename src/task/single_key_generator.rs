@@ -1,7 +1,10 @@
 use std::time::Duration;
 
 use radius_sdk::{
-    json_rpc::client::{Id, RpcClient},
+    json_rpc::{
+        client::{Id, RpcClient},
+        server::RpcParameter,
+    },
     signature::Address,
 };
 use skde::{
@@ -89,11 +92,12 @@ pub fn run_generate_partial_key(key_id: KeyId) {
         rpc_client
             .multicast(
                 all_key_generator_rpc_url_list,
-                RunGeneratePartialKey::METHOD_NAME,
+                RunGeneratePartialKey::method(),
                 &parameter,
                 Id::Null,
             )
-            .await;
+            .await
+            .unwrap();
     });
 }
 
@@ -118,10 +122,11 @@ pub fn sync_aggregated_key(
         rpc_client
             .multicast(
                 other_key_generator_rpc_url_list,
-                SyncAggregatedKey::METHOD_NAME,
+                SyncAggregatedKey::method(),
                 &parameter,
                 Id::Null,
             )
-            .await;
+            .await
+            .unwrap();
     });
 }

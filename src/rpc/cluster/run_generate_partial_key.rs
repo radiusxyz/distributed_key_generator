@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use radius_sdk::{
     json_rpc::{
         client::{Id, RpcClient},
@@ -23,12 +21,14 @@ pub struct RunGeneratePartialKey {
     pub key_id: KeyId,
 }
 
-impl RunGeneratePartialKey {
-    pub const METHOD_NAME: &'static str = "run_generate_partial_key";
+impl RpcParameter<AppState> for RunGeneratePartialKey {
+    type Response = ();
 
-    pub async fn handler(parameter: RpcParameter, context: Arc<AppState>) -> Result<(), RpcError> {
-        let parameter = parameter.parse::<Self>()?;
+    fn method() -> &'static str {
+        "run_generate_partial_key"
+    }
 
+    async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let skde_params = context.skde_params();
 
         let (secret_value, partial_key) = generate_partial_key(skde_params);
@@ -37,9 +37,9 @@ impl RunGeneratePartialKey {
 
         sync_partial_key(
             context.config().signer().address().clone(),
-            parameter.key_id,
+            self.key_id,
             partial_key,
-            partial_key_proof
+            partial_key_proof,
         );
 
         Ok(())
@@ -68,10 +68,11 @@ pub fn sync_partial_key(
         rpc_client
             .multicast(
                 all_key_generator_rpc_url_list,
-                SyncPartialKey::METHOD_NAME,
+                SyncPartialKey::method(),
                 &parameter,
                 Id::Null,
             )
-            .await;
+            .await
+            .unwrap();
     });
 }

@@ -14,7 +14,7 @@ use distributed_key_generation::{
 use radius_sdk::{
     json_rpc::{
         client::{Id, RpcClient},
-        server::RpcServer,
+        server::{RpcParameter, RpcServer},
     },
     kvstore::KvStoreBuilder,
 };
@@ -104,14 +104,14 @@ async fn main() -> Result<(), Error> {
             if let Some(seed_rpc_url) = config.seed_cluster_rpc_url() {
                 // Follow
                 // Initialize the cluster RPC server
-
                 let rpc_client = RpcClient::new()?;
 
+                let parameter = GetKeyGeneratorList {};
                 let key_generator_list: KeyGeneratorList = rpc_client
                     .request(
                         seed_rpc_url,
-                        GetKeyGeneratorList::METHOD_NAME,
-                        &GetKeyGeneratorList,
+                        GetKeyGeneratorList::method(),
+                        &parameter,
                         Id::Null,
                     )
                     .await?;
@@ -149,10 +149,7 @@ async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Erro
 
     // Initialize the internal RPC server.
     let internal_rpc_server = RpcServer::new(app_state.clone())
-        .register_rpc_method(
-            internal::AddKeyGenerator::METHOD_NAME,
-            internal::AddKeyGenerator::handler,
-        )?
+        .register_rpc_method::<internal::AddKeyGenerator>()?
         .init(app_state.config().internal_rpc_url().to_string())
         .await
         .map_err(error::Error::RpcServerError)?;
@@ -173,26 +170,11 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
     let cluster_rpc_url = anywhere(&app_state.config().cluster_port()?);
 
     let key_generator_rpc_server = RpcServer::new(app_state.clone())
-        .register_rpc_method(
-            cluster::GetKeyGeneratorList::METHOD_NAME,
-            cluster::GetKeyGeneratorList::handler,
-        )?
-        .register_rpc_method(
-            cluster::SyncKeyGenerator::METHOD_NAME,
-            cluster::SyncKeyGenerator::handler,
-        )?
-        .register_rpc_method(
-            cluster::SyncAggregatedKey::METHOD_NAME,
-            cluster::SyncAggregatedKey::handler,
-        )?
-        .register_rpc_method(
-            cluster::SyncPartialKey::METHOD_NAME,
-            cluster::SyncPartialKey::handler,
-        )?
-        .register_rpc_method(
-            cluster::RunGeneratePartialKey::METHOD_NAME,
-            cluster::RunGeneratePartialKey::handler,
-        )?
+        .register_rpc_method::<cluster::GetKeyGeneratorList>()?
+        .register_rpc_method::<cluster::SyncKeyGenerator>()?
+        .register_rpc_method::<cluster::SyncAggregatedKey>()?
+        .register_rpc_method::<cluster::SyncPartialKey>()?
+        .register_rpc_method::<cluster::RunGeneratePartialKey>()?
         .init(cluster_rpc_url.clone())
         .await
         .map_err(error::Error::RpcServerError)?;
@@ -214,22 +196,10 @@ async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHand
 
     // Initialize the external RPC server.
     let external_rpc_server = RpcServer::new(app_state.clone())
-        .register_rpc_method(
-            external::GetEncryptionKey::METHOD_NAME,
-            external::GetEncryptionKey::handler,
-        )?
-        .register_rpc_method(
-            external::GetDecryptionKey::METHOD_NAME,
-            external::GetDecryptionKey::handler,
-        )?
-        .register_rpc_method(
-            external::GetLatestEncryptionKey::METHOD_NAME,
-            external::GetLatestEncryptionKey::handler,
-        )?
-        .register_rpc_method(
-            external::GetSkdeParams::METHOD_NAME,
-            external::GetSkdeParams::handler,
-        )?
+        .register_rpc_method::<external::GetEncryptionKey>()?
+        .register_rpc_method::<external::GetDecryptionKey>()?
+        .register_rpc_method::<external::GetLatestEncryptionKey>()?
+        .register_rpc_method::<external::GetSkdeParams>()?
         .init(external_rpc_url.clone())
         .await
         .map_err(error::Error::RpcServerError)?;
