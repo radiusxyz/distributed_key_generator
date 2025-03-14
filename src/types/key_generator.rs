@@ -2,7 +2,7 @@ use std::collections::{hash_set::Iter, HashSet};
 
 use radius_sdk::{kvstore::Model, signature::Address};
 
-use crate::types::prelude::*;
+use crate::{rpc::cluster::KeyGeneratorRpcInfo, types::prelude::*};
 
 #[derive(Clone, Hash, Eq, PartialEq, Debug, Deserialize, Serialize)]
 
@@ -31,6 +31,15 @@ impl KeyGenerator {
 
     pub fn external_rpc_url(&self) -> &str {
         &self.external_rpc_url
+    }
+}
+
+impl From<KeyGeneratorRpcInfo> for KeyGenerator {
+    fn from(info: KeyGeneratorRpcInfo) -> Self {
+        let decoded_bytes =
+            const_hex::decode(&info.address).expect("Invalid hex string in KeyGeneratorRpcInfo");
+        let address: Address = Address::from(decoded_bytes);
+        KeyGenerator::new(address, info.cluster_rpc_url, info.external_rpc_url)
     }
 }
 
@@ -97,5 +106,12 @@ impl KeyGeneratorList {
         }
 
         Ok(())
+    }
+}
+
+impl From<Vec<KeyGeneratorRpcInfo>> for KeyGeneratorList {
+    fn from(info_vec: Vec<KeyGeneratorRpcInfo>) -> Self {
+        let set: HashSet<KeyGenerator> = info_vec.into_iter().map(Into::into).collect();
+        KeyGeneratorList(set)
     }
 }
