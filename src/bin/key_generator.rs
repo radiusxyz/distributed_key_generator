@@ -198,6 +198,7 @@ async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHand
         .register_rpc_method::<external::GetEncryptionKey>()?
         .register_rpc_method::<external::GetDecryptionKey>()?
         .register_rpc_method::<external::GetLatestEncryptionKey>()?
+        .register_rpc_method::<external::GetLatestKeyId>()?
         .register_rpc_method::<external::GetSkdeParams>()?
         .init(external_rpc_url.clone())
         .await
