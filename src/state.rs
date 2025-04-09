@@ -59,7 +59,7 @@ impl AppState {
         self.config().is_verifier()
     }
 
-    pub fn role(&self) -> Option<&Role> {
-        self.config().role().as_ref()
+    pub fn role(&self) -> &Role {
+        self.config().role()
     }
 }

@@ -30,7 +30,7 @@ pub struct Config {
     internal_rpc_url: String,
     cluster_rpc_url: String,
     leader_cluster_rpc_url: Option<String>,
-    role: Option<Role>,
+    role: Role,
 
     signer: PrivateKeySigner,
 
@@ -134,14 +134,14 @@ impl Config {
         // Parse role if provided
         let role = if let Some(role_str) = &merged_config_option.role {
             match role_str.parse::<Role>() {
-                Ok(role) => Some(role),
+                Ok(role) => role,
                 Err(e) => {
                     tracing::warn!("Invalid role: {}, ignoring role setting", e);
-                    None
+                    Role::Committee
                 }
             }
         } else {
-            Some(Role::Committee)
+            Role::Committee
         };
 
         Ok(Config {
@@ -216,34 +216,34 @@ impl Config {
         &self.leader_cluster_rpc_url
     }
 
-    pub fn role(&self) -> &Option<Role> {
+    pub fn role(&self) -> &Role {
         &self.role
     }
 
     pub fn is_leader(&self) -> bool {
         match &self.role {
-            Some(Role::Leader) => true,
+            Role::Leader => true,
             _ => self.leader_cluster_rpc_url.is_none(), // For backward compatibility
         }
     }
 
     pub fn is_committee(&self) -> bool {
         match &self.role {
-            Some(Role::Committee) => true,
+            Role::Committee => true,
             _ => true, // Default behavior is committee
         }
     }
 
     pub fn is_solver(&self) -> bool {
         match &self.role {
-            Some(Role::Solver) => true,
+            Role::Solver => true,
             _ => false,
         }
     }
 
     pub fn is_verifier(&self) -> bool {
         match &self.role {
-            Some(Role::Verifier) => true,
+            Role::Verifier => true,
             _ => false,
         }
     }

@@ -125,18 +125,7 @@ async fn main() -> Result<(), Error> {
             let app_state = AppState::new(config.clone(), skde_params);
 
             // Log node role
-            if let Some(role) = config.role() {
-                tracing::info!("Node started with role: {}", role);
-            } else {
-                tracing::info!(
-                    "Node started with default role: {}",
-                    if config.is_leader() {
-                        "leader"
-                    } else {
-                        "committee"
-                    }
-                );
-            }
+            tracing::info!("Node started with role: {}", config.role());
 
             // Based on the role, start appropriate services
             if config.is_leader() {
