@@ -29,7 +29,8 @@ pub struct Config {
     external_rpc_url: String,
     internal_rpc_url: String,
     cluster_rpc_url: String,
-    seed_cluster_rpc_url: Option<String>,
+    leader_cluster_rpc_url: Option<String>,
+    role: Option<Role>,
 
     signer: PrivateKeySigner,
 
@@ -53,29 +54,103 @@ impl Config {
 
         // Read config file
         let config_file_path = config_path.join(CONFIG_FILE_NAME);
-        let config_string = fs::read_to_string(config_file_path).map_err(ConfigError::Load)?;
 
-        // Parse String to TOML String
-        let config_file: ConfigOption =
-            toml::from_str(&config_string).map_err(ConfigError::Parse)?;
+        // Try to read config file, if it doesn't exist or can't be read, use default values
+        let config_file: ConfigOption = if config_file_path.exists() {
+            match fs::read_to_string(&config_file_path) {
+                Ok(config_string) => match toml::from_str(&config_string) {
+                    Ok(parsed) => parsed,
+                    Err(e) => {
+                        tracing::warn!("Failed to parse config file: {}, using default values", e);
+                        ConfigOption::default()
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!("Failed to read config file: {}, using default values", e);
+                    ConfigOption::default()
+                }
+            }
+        } else {
+            tracing::warn!(
+                "Config file not found at {:?}, using default values",
+                config_file_path
+            );
+            ConfigOption::default()
+        };
 
         // Merge configs from CLI input
         let merged_config_option = config_file.merge(config_option);
+        println!("chain_type: {:?}", merged_config_option);
 
         let chain_type = merged_config_option.chain_type.unwrap().try_into().unwrap();
 
         // Read signing key
         let signing_key_path = config_path.join(SIGNING_KEY);
-        let signer =
-            PrivateKeySigner::from_str(chain_type, &fs::read_to_string(signing_key_path).unwrap())
-                .unwrap();
+
+        let signer = if signing_key_path.exists() {
+            match fs::read_to_string(&signing_key_path) {
+                Ok(key_string) => {
+                    let clean_key = key_string.trim().replace("\n", "").replace("\r", "");
+                    match PrivateKeySigner::from_str(chain_type, &clean_key) {
+                        Ok(signer) => signer,
+                        Err(err) => {
+                            tracing::warn!(
+                                "Invalid signing key in file: {}, using default key",
+                                err
+                            );
+                            tracing::warn!("Key string was: '{}'", clean_key);
+                            let default_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+                            PrivateKeySigner::from_str(chain_type, default_key).unwrap()
+                        }
+                    }
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        "Failed to read signing key file: {}, using default key",
+                        err
+                    );
+                    let default_key =
+                        "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+                    PrivateKeySigner::from_str(chain_type, default_key).unwrap()
+                }
+            }
+        } else {
+            tracing::warn!(
+                "Signing key file not found at {:?}, using default key",
+                signing_key_path
+            );
+            // Create directory if it doesn't exist
+            if let Some(parent) = signing_key_path.parent() {
+                if !parent.exists() {
+                    let _ = fs::create_dir_all(parent);
+                }
+            }
+            // Write default key to file
+            let default_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+            let _ = fs::write(&signing_key_path, default_key);
+            PrivateKeySigner::from_str(chain_type, default_key).unwrap()
+        };
+
+        // Parse role if provided
+        let role = if let Some(role_str) = &merged_config_option.role {
+            match role_str.parse::<Role>() {
+                Ok(role) => Some(role),
+                Err(e) => {
+                    tracing::warn!("Invalid role: {}, ignoring role setting", e);
+                    None
+                }
+            }
+        } else {
+            Some(Role::Committee)
+        };
 
         Ok(Config {
             path: config_path,
             external_rpc_url: merged_config_option.external_rpc_url.unwrap(),
             internal_rpc_url: merged_config_option.internal_rpc_url.unwrap(),
             cluster_rpc_url: merged_config_option.cluster_rpc_url.unwrap(),
-            seed_cluster_rpc_url: merged_config_option.seed_cluster_rpc_url.clone(),
+            leader_cluster_rpc_url: merged_config_option.leader_cluster_rpc_url.clone(),
+            role,
             signer,
             radius_foundation_address: Address::from_str(
                 chain_type,
@@ -137,8 +212,40 @@ impl Config {
         &self.cluster_rpc_url
     }
 
-    pub fn seed_cluster_rpc_url(&self) -> &Option<String> {
-        &self.seed_cluster_rpc_url
+    pub fn leader_cluster_rpc_url(&self) -> &Option<String> {
+        &self.leader_cluster_rpc_url
+    }
+
+    pub fn role(&self) -> &Option<Role> {
+        &self.role
+    }
+
+    pub fn is_leader(&self) -> bool {
+        match &self.role {
+            Some(Role::Leader) => true,
+            _ => self.leader_cluster_rpc_url.is_none(), // For backward compatibility
+        }
+    }
+
+    pub fn is_committee(&self) -> bool {
+        match &self.role {
+            Some(Role::Committee) => true,
+            _ => true, // Default behavior is committee
+        }
+    }
+
+    pub fn is_solver(&self) -> bool {
+        match &self.role {
+            Some(Role::Solver) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_verifier(&self) -> bool {
+        match &self.role {
+            Some(Role::Verifier) => true,
+            _ => false,
+        }
     }
 
     pub fn external_port(&self) -> Result<String, ConfigError> {

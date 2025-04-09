@@ -25,4 +25,7 @@ KEY_GENERATOR_INTERNAL_RPC_URL="http://127.0.0.1:7200"  # Internal IP - Please c
 KEY_GENERATOR_CLUSTER_RPC_URL="http://127.0.0.1:7300"   # External IP - Please change this IP.
 KEY_GENERATOR_EXTERNAL_RPC_URL="http://127.0.0.1:7100"  # External IP - Please change this IP.
 
+# For non-leader nodes, specify the leader's cluster RPC URL
+LEADER_CLUSTER_RPC_URL="http://127.0.0.1:7300"          # Leader's cluster RPC URL - Please change this IP.
+
 KEY_GENERATOR_PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" # Please change this private key.

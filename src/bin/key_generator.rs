@@ -101,14 +101,14 @@ async fn main() -> Result<(), Error> {
                 config.database_path(),
             );
 
-            if let Some(seed_rpc_url) = config.seed_cluster_rpc_url() {
-                // Follow
-                // Initialize the cluster RPC server
+            // If not a leader, get the key generator list from leader
+            if let Some(leader_rpc_url) = config.leader_cluster_rpc_url() {
+                // Non-leader node
                 let rpc_client = RpcClient::new()?;
 
                 let key_generator_list: KeyGeneratorList = rpc_client
                     .request(
-                        seed_rpc_url,
+                        leader_rpc_url,
                         GetKeyGeneratorList::method(),
                         &GetKeyGeneratorList,
                         Id::Null,
@@ -119,11 +119,25 @@ async fn main() -> Result<(), Error> {
             }
 
             // Initialize an application-wide state instance
-            let app_state = AppState::new(config, skde_params);
+            let app_state = AppState::new(config.clone(), skde_params);
 
-            if app_state.config().seed_cluster_rpc_url().is_none() {
-                // Leader
-                // Run the single key generator task
+            // Log node role
+            if let Some(role) = config.role() {
+                tracing::info!("Node started with role: {}", role);
+            } else {
+                tracing::info!(
+                    "Node started with default role: {}",
+                    if config.is_leader() {
+                        "leader"
+                    } else {
+                        "committee"
+                    }
+                );
+            }
+
+            // Based on the role, start appropriate services
+            if config.is_leader() {
+                tracing::info!("Starting leader node operations...");
                 run_single_key_generator(app_state.clone());
             }
 
@@ -133,7 +147,7 @@ async fn main() -> Result<(), Error> {
             // Initialize the cluster RPC server
             initialize_cluster_rpc_server(&app_state).await?;
 
-            // Initialize the external RPC server.
+            // Initialize the external RPC server
             let server_handle = initialize_external_rpc_server(&app_state).await?;
 
             server_handle.await.unwrap();
