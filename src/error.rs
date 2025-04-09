@@ -1,3 +1,5 @@
+use radius_sdk::kvstore::{KvStore, KvStoreError};
+
 #[derive(Debug)]
 pub enum Error {
     Config(crate::types::ConfigError),
@@ -11,6 +13,7 @@ pub enum Error {
     CreateConfigDirectory,
     CreateConfigFile,
     CreatePrivateKeyFile,
+    HexDecodeError,
 
     NotFound,
 }
@@ -24,6 +27,12 @@ impl std::fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+impl From<KvStoreError> for Error {
+    fn from(err: KvStoreError) -> Self {
+        Self::Database(err)
+    }
+}
 
 impl From<crate::types::ConfigError> for Error {
     fn from(value: crate::types::ConfigError) -> Self {
