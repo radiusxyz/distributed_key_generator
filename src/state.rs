@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::types::Config;
+use crate::types::{Config, Role};
 
 pub struct AppState {
     inner: Arc<AppStateInner>,
@@ -26,7 +26,6 @@ impl AppState {
     pub fn new(config: Config, skde_params: skde::delay_encryption::SkdeParams) -> Self {
         let inner = AppStateInner {
             config,
-
             skde_params,
         };
 
@@ -41,5 +40,26 @@ impl AppState {
 
     pub fn skde_params(&self) -> &skde::delay_encryption::SkdeParams {
         &self.inner.skde_params
+    }
+
+    // Helper methods for role-based configuration
+    pub fn is_leader(&self) -> bool {
+        self.config().is_leader()
+    }
+
+    pub fn is_committee(&self) -> bool {
+        self.config().is_committee()
+    }
+
+    pub fn is_solver(&self) -> bool {
+        self.config().is_solver()
+    }
+
+    pub fn is_verifier(&self) -> bool {
+        self.config().is_verifier()
+    }
+
+    pub fn role(&self) -> &Role {
+        self.config().role()
     }
 }
