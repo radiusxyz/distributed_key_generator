@@ -17,7 +17,7 @@ toml = "0.8.13"
 tracing = "0.1.37"
 tracing-subscriber = "0.3.17"
 
-skde = { git = "https://github.com/radiusxyz/skde", rev="d46d66fa1e59aa5d555a1124cf3b89cef4753fd1"}
+skde = { git = "https://github.com/radiusxyz/skde", rev="d6ef27d4f1e34b391eddb039cf0b9f994f7cc2fe"}
 radius-sdk = { git = "https://github.com/radiusxyz/radius-sdk-rs", tag = "v0.1", features = ["full"] }
 const-hex = "1.14.0"
 anyhow = "1.0.97"
