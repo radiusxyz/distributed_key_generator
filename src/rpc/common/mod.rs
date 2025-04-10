@@ -3,9 +3,9 @@ use radius_sdk::{
     json_rpc::server::RpcError,
     signature::{Address, Signature},
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-pub fn generate_dummy_signature<T: Serialize>(_message: &T) -> Signature {
+pub fn create_signature<T: Serialize>(_message: &T) -> Signature {
     let signature = Signature::from(vec![0; 64]);
     signature
 }

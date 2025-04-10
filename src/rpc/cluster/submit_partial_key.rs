@@ -1,4 +1,3 @@
-use bincode::serialize as serialize_to_bincode;
 use radius_sdk::{
     json_rpc::server::{RpcError, RpcParameter},
     signature::{Address, Signature},
@@ -13,27 +12,28 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SubmitPartialKey {
+pub struct SignedPartialKey {
     pub signature: Signature,
-    pub message: SubmitPartialKeyMessage,
+    pub payload: PartialKeyPayload,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SubmitPartialKeyMessage {
-    pub session_id: crate::types::SessionId,
+pub struct PartialKeyPayload {
+    pub sender: Address,
     pub key_id: KeyId,
     pub partial_key: SkdePartialKey,
     pub proof: PartialKeyProof,
-    pub timestamp: u64,
+    pub submit_timestamp: u64,
+    pub session_id: SessionId,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SubmitPartialKeyResponse {
+pub struct PartialKeyResponse {
     pub success: bool,
 }
 
-impl RpcParameter<AppState> for SubmitPartialKey {
-    type Response = SubmitPartialKeyResponse;
+impl RpcParameter<AppState> for SignedPartialKey {
+    type Response = PartialKeyResponse;
 
     fn method() -> &'static str {
         "submit_partial_key"
@@ -41,17 +41,17 @@ impl RpcParameter<AppState> for SubmitPartialKey {
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         // TODO: Add to verify actual signature
-        let sender_address = verify_signature(&self.signature, &self.message)?;
+        let sender_address = verify_signature(&self.signature, &self.payload)?;
 
         info!(
             "Received partial key - session_id: {}, key_id: {:?}, sender: {}, timestamp: {}",
-            self.message.session_id,
-            self.message.key_id,
+            self.payload.session_id,
+            self.payload.key_id,
             sender_address.as_hex_string(),
-            self.message.timestamp
+            self.payload.submit_timestamp
         );
 
-        // 클러스터 내 키 생성기 확인
+        // Check if key generator is registered in the cluster
         // if !KeyGeneratorList::get()?.is_key_generator_in_cluster(&sender_address) {
         //     return Err(RpcError {
         //         code: -32603,
@@ -64,11 +64,11 @@ impl RpcParameter<AppState> for SubmitPartialKey {
         //     });
         // }
 
-        // 부분 키 유효성 검증
-        let is_valid = skde::key_generation::verify_partial_key_validity(
+        // Verify partial key validity
+        let _is_valid = skde::key_generation::verify_partial_key_validity(
             context.skde_params(),
-            self.message.partial_key.clone(),
-            self.message.proof,
+            self.payload.partial_key.clone(),
+            self.payload.proof,
         );
 
         // if !is_valid {
@@ -79,20 +79,20 @@ impl RpcParameter<AppState> for SubmitPartialKey {
         //     });
         // }
 
-        // 키 ID에 대한 부분 키 주소 목록 초기화
-        PartialKeyAddressList::initialize(self.message.key_id)?;
+        // Initialize partial key address list for this key ID
+        PartialKeyAddressList::initialize(self.payload.key_id)?;
 
-        // 부분 키 주소 목록에 발신자 주소 추가
-        PartialKeyAddressList::apply(self.message.key_id, |list| {
+        // Add sender address to the partial key address list
+        PartialKeyAddressList::apply(self.payload.key_id, |list| {
             list.insert(sender_address.clone());
         })?;
 
-        // 부분 키 저장
-        let partial_key = PartialKey::new(self.message.partial_key.clone());
-        partial_key.put(self.message.key_id, &sender_address)?;
+        // Store the partial key
+        let partial_key = PartialKey::new(self.payload.partial_key.clone());
+        partial_key.put(self.payload.key_id, &sender_address)?;
 
-        // TODO: ACK 메시지 생성 및 브로드캐스트 (차후 ack_partial_key 메서드에서 구현)
+        // TODO: Generate and broadcast ACK message (to be implemented in ack_partial_key method)
 
-        Ok(SubmitPartialKeyResponse { success: true })
+        Ok(PartialKeyResponse { success: true })
     }
 }

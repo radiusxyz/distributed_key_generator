@@ -1,6 +1,3 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use bincode::serialize as serialize_to_bincode;
 use radius_sdk::{
     json_rpc::server::{RpcError, RpcParameter},
     signature::{Address, Signature},
@@ -8,50 +5,46 @@ use radius_sdk::{
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::rpc::{
-    common::{generate_dummy_signature, verify_signature},
-    prelude::*,
-};
+use crate::rpc::{common::verify_signature, prelude::*};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SubmitDecryptionKey {
+pub struct SignedDecryptionKey {
     pub signature: Signature,
-    pub message: SubmitDecryptionKeyMessage,
+    pub payload: DecryptionKeyPayload,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SubmitDecryptionKeyMessage {
-    pub session_id: SessionId,
-    pub key_id: KeyId,
+pub struct DecryptionKeyPayload {
+    pub sender: Address,
     pub decryption_key: String,
+    pub session_id: SessionId,
     pub timestamp: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SubmitDecryptionKeyResponse {
+pub struct DecryptionKeyResponse {
     pub success: bool,
 }
 
-impl RpcParameter<AppState> for SubmitDecryptionKey {
-    type Response = SubmitDecryptionKeyResponse;
+impl RpcParameter<AppState> for SignedDecryptionKey {
+    type Response = DecryptionKeyResponse;
 
     fn method() -> &'static str {
         "submit_decryption_key"
     }
 
-    async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        // TODO: Add to make actual signature
-        let sender_address = verify_signature(&self.signature, &self.message)?;
+    async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
+        // TODO: Add to verify actual signature
+        let sender_address = verify_signature(&self.signature, &self.payload)?;
 
         info!(
-            "Received decryption key - session_id: {}, key_id: {:?}, sender: {}, timestamp: {}",
-            self.message.session_id,
-            self.message.key_id,
+            "Received decryption key - session_id: {}, sender: {}, timestamp: {}",
+            self.payload.session_id,
             sender_address.as_hex_string(),
-            self.message.timestamp
+            self.payload.timestamp
         );
 
-        // 검증 로직 - 이 예제에서는 Solver가 클러스터 내에 등록된 노드인지만 확인
+        // Validation logic - in this example, only checking if Solver is registered in the cluster
         // if !KeyGeneratorList::get()?.is_key_generator_in_cluster(&sender_address) {
         //     return Err(RpcError::InvalidParams(format!(
         //         "Address {} is not a registered key generator",
@@ -59,13 +52,13 @@ impl RpcParameter<AppState> for SubmitDecryptionKey {
         //     )));
         // }
 
-        // 복호화 키 저장
-        let decryption_key = DecryptionKey::new(self.message.decryption_key.clone());
-        decryption_key.put(self.message.key_id)?;
+        // Store decryption key
+        let _decryption_key = DecryptionKey::new(self.payload.decryption_key.clone());
+        // decryption_key.put(self.payload.key_id)?;
 
-        // TODO: 이 지점에서 ack_decryption_key를 통해 승인 메시지 브로드캐스트 로직 추가
-        // 여기서는 직접 구현하지 않고, 별도 함수로 분리 예정
+        // TODO: Add broadcast logic via ack_decryption_key at this point
+        // This will be implemented in a separate function
 
-        Ok(SubmitDecryptionKeyResponse { success: true })
+        Ok(DecryptionKeyResponse { success: true })
     }
 }

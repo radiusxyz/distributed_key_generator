@@ -12,72 +12,60 @@ use serde::{Deserialize, Serialize};
 use skde::key_generation::{PartialKey as SkdePartialKey, PartialKeyProof};
 use tracing::info;
 
-use crate::rpc::{common::generate_dummy_signature, prelude::*};
+use crate::rpc::{common::create_signature, prelude::*};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct AckPartialKey {
+pub struct SignedPartialKeyAck {
     pub signature: Signature,
-    pub message: AckPartialKeyMessage,
+    pub payload: PartialKeyAckPayload,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct AckPartialKeyMessage {
-    pub session_id: SessionId,
-    pub recipient: Address,
-    pub key_id: KeyId,
+pub struct PartialKeyAckPayload {
+    pub partial_key_sender: Address,
     pub partial_key: SkdePartialKey,
     pub proof: PartialKeyProof,
     pub index: usize,
-    pub original_timestamp: u64,
+    pub session_id: SessionId,
+    pub submit_timestamp: u64,
     pub ack_timestamp: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct AckPartialKeyResponse {
+pub struct PartialKeyAckResponse {
     pub success: bool,
 }
 
-impl RpcParameter<AppState> for AckPartialKey {
-    type Response = AckPartialKeyResponse;
+impl RpcParameter<AppState> for SignedPartialKeyAck {
+    type Response = PartialKeyAckResponse;
 
     fn method() -> &'static str {
         "ack_partial_key"
     }
 
-    async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        // let sender_address = verify_signature(&self.signature, &self.message)?;
+    async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
+        // let sender_address = verify_signature(&self.signature, &self.payload)?;
 
         info!(
-            "Received partial key ACK - session_id: {}, key_id: {:?}, recipient: {}, index: {}, timestamp: {}",
-            self.message.session_id,
-            self.message.key_id,
-            self.message.recipient.as_hex_string(),
-            self.message.index,
-            self.message.ack_timestamp
+            "Received partial key ACK - session_id: {}, index: {}, timestamp: {}",
+            self.payload.session_id, self.payload.index, self.payload.ack_timestamp
         );
 
-        // 리더 검증 (리더만 ACK 가능)
-        let my_address = context.config().signer().address();
-        if &self.message.recipient != my_address {
-            // 내게 온 ACK가 아니면 무시
-            return Ok(AckPartialKeyResponse { success: true });
-        }
+        // TODO: Leader verification (only leader can send ACK)
 
-        // TODO: 부분 키 인덱스 저장 및 추가 처리
-        // (실제 구현에서는 인덱스 정보를 저장할 구조체가 필요)
+        // TODO: Store and process partial key index information
+        // (In actual implementation, a structure to store index information is needed)
 
-        Ok(AckPartialKeyResponse { success: true })
+        Ok(PartialKeyAckResponse { success: true })
     }
 }
 
-// 리더가 부분 키 승인을 전체 네트워크에 브로드캐스트
+// Broadcast partial key acknowledgment from leader to the entire network
 pub fn broadcast_partial_key_ack(
     session_id: SessionId,
-    recipient: Address,
-    key_id: KeyId,
     partial_key: SkdePartialKey,
     proof: PartialKeyProof,
-    original_timestamp: u64,
+    submit_timestamp: u64,
     index: usize,
     context: &AppState,
 ) -> Result<(), Error> {
@@ -89,28 +77,27 @@ pub fn broadcast_partial_key_ack(
         .unwrap_or_default()
         .as_secs();
 
-    let message = AckPartialKeyMessage {
+    let payload = PartialKeyAckPayload {
+        partial_key_sender: context.config().signer().address().clone(),
         session_id,
-        recipient,
-        key_id,
         partial_key,
         proof,
         index,
-        original_timestamp,
+        submit_timestamp,
         ack_timestamp,
     };
 
     // TODO: Add to make actual signature
-    let signature = generate_dummy_signature(&serialize_to_bincode(&message).unwrap());
+    let signature = create_signature(&serialize_to_bincode(&payload).unwrap());
 
-    let parameter = AckPartialKey { signature, message };
+    let parameter = SignedPartialKeyAck { signature, payload };
 
     tokio::spawn(async move {
         if let Ok(rpc_client) = RpcClient::new() {
             let _ = rpc_client
                 .multicast(
                     all_key_generator_rpc_url_list,
-                    AckPartialKey::method(),
+                    SignedPartialKeyAck::method(),
                     &parameter,
                     Id::Null,
                 )

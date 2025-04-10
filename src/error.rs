@@ -1,4 +1,4 @@
-use radius_sdk::kvstore::{KvStore, KvStoreError};
+use radius_sdk::kvstore::KvStoreError;
 
 #[derive(Debug)]
 pub enum Error {
