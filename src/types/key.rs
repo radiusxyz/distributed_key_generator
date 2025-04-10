@@ -74,7 +74,7 @@ impl PartialKeyAddressList {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Model)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Model, Default)]
 #[kvstore(key())]
 pub struct KeyId(u64);
 
