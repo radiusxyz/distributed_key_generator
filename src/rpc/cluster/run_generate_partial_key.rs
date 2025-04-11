@@ -27,9 +27,9 @@ impl RpcParameter<AppState> for RunGeneratePartialKey {
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let skde_params = context.skde_params();
 
-        let (secret_value, partial_key) = generate_partial_key(skde_params);
+        let (secret_value, partial_key) = generate_partial_key(skde_params).unwrap();
 
-        let partial_key_proof = prove_partial_key_validity(skde_params, &secret_value);
+        let partial_key_proof = prove_partial_key_validity(skde_params, &secret_value).unwrap();
 
         sync_partial_key(
             context.config().signer().address().clone(),

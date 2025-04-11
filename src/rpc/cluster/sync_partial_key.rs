@@ -38,7 +38,8 @@ impl RpcParameter<AppState> for SyncPartialKey {
                 context.skde_params(),
                 self.skde_partial_key.clone(),
                 self.partial_key_proof,
-            );
+            )
+            .unwrap();
 
             if !is_valid {
                 return Ok(());
