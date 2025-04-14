@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 use distributed_key_generation::{
     error::{self, Error},
     rpc::{
-        cluster::{self, GetKeyGeneratorList},
+        cluster::{self, GetKeyGeneratorList, GetKeyGeneratorRpcUrlListResponse},
         external, internal,
     },
     state::AppState,
@@ -104,9 +104,9 @@ async fn main() -> Result<(), Error> {
             if let Some(seed_rpc_url) = config.seed_cluster_rpc_url() {
                 // Follow
                 // Initialize the cluster RPC server
-                let rpc_client = RpcClient::new()?;
+                let rpc_client: RpcClient = RpcClient::new()?;
 
-                let key_generator_list: KeyGeneratorList = rpc_client
+                let response: GetKeyGeneratorRpcUrlListResponse = rpc_client
                     .request(
                         seed_rpc_url,
                         GetKeyGeneratorList::method(),
@@ -115,7 +115,10 @@ async fn main() -> Result<(), Error> {
                     )
                     .await?;
 
-                key_generator_list.put().map_err(error::Error::Database)?;
+                let key_generator_list: KeyGeneratorList =
+                    response.key_generator_rpc_url_list.into();
+
+                key_generator_list.put()?;
             }
 
             // Initialize an application-wide state instance
