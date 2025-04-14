@@ -5,6 +5,7 @@ use std::{
 
 use clap::Parser;
 use serde::{Deserialize, Serialize};
+use crate::util::clear_dir;
 
 use crate::types::{
     config::{config_option::ConfigOption, ConfigError},
@@ -46,7 +47,7 @@ impl ConfigPath {
     pub fn init(&self) -> Result<(), ConfigError> {
         // Remove the directory if it exists.
         if self.as_ref().exists() {
-            fs::remove_dir_all(self).map_err(ConfigError::RemoveConfigDirectory)?;
+            clear_dir(self).map_err(ConfigError::RemoveConfigDirectory)?;
         }
 
         // Create the directory
