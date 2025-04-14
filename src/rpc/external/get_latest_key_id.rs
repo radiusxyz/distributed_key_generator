@@ -18,10 +18,10 @@ impl RpcParameter<AppState> for GetLatestKeyId {
     async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
         let key_id = KeyId::get()?;
 
-        loop {
+        // loop {
             return Ok(GetLatestKeyIdResponse {
                 latest_key_id: key_id,
             });
-        }
+        // }
     }
 }

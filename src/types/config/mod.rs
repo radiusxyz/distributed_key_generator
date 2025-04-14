@@ -30,6 +30,7 @@ pub struct Config {
     internal_rpc_url: String,
     cluster_rpc_url: String,
     leader_cluster_rpc_url: Option<String>,
+    authority_rpc_url: Option<String>,
     role: Role,
 
     signer: PrivateKeySigner,
@@ -150,6 +151,7 @@ impl Config {
             internal_rpc_url: merged_config_option.internal_rpc_url.unwrap(),
             cluster_rpc_url: merged_config_option.cluster_rpc_url.unwrap(),
             leader_cluster_rpc_url: merged_config_option.leader_cluster_rpc_url.clone(),
+            authority_rpc_url: merged_config_option.authority_rpc_url.clone(),
             role,
             signer,
             radius_foundation_address: Address::from_str(
@@ -232,6 +234,10 @@ impl Config {
             Role::Committee => true,
             _ => true, // Default behavior is committee
         }
+    }
+
+    pub fn authority_rpc_url(&self) -> Option<&str> {
+        self.authority_rpc_url.as_deref()
     }
 
     pub fn is_solver(&self) -> bool {

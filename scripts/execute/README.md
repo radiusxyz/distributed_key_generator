@@ -4,21 +4,33 @@ This directory contains scripts for running the distributed key generator with m
 
 ## Quick Guide
 
-1. `./01_cleanup_nodes.sh` - Clean previous environment
-2. `./02_run_leader.sh` - Setup and run Node 1 (Leader) in terminal 1
-3. `./03_run_committee.sh` - Setup and run Node 2 (Committee) in terminal 2
-4. `./04_register_nodes.sh` - Register nodes with each other in terminal 3
+1. `./00_cleanup_nodes.sh` - Clean previous environment
+2. `./01_run_all_nodes.sh` - Start all nodes (Authority → Leader → Committee) in one go
+3. `./02_run_authority.sh` - Start the authority node that manages SKDE parameters 
+4. `./03_run_leader.sh` - Setup and run Node 1 (Leader) in terminal 1
+5. `./04_run_committee.sh` - Setup and run Node 2 (Committee) in terminal 2
+6. `./05_register_nodes.sh` - Register nodes with each other in terminal 3
 
 ## Scripts
 
-### 01_cleanup_nodes.sh
+### 00_cleanup_nodes.sh
 Stops all processes and removes data directories.
 
-### 02_run_leader.sh
+### 01_run_all_nodes.sh
+Cleans up previous data, builds necessary binaries, and starts all nodes in the correct order:
+1. Authority node
+2. Leader node (waits for authority)
+3. Committee node
+
+### 02_run_authority.sh
+Starts the `authority_node` binary.  
+This node securely initializes and exposes SKDE parameters used by the leader.
+
+### 03_run_leader.sh
 Sets up and starts Node 1 (Leader) with proper configuration.
 
-### 03_run_committee.sh
+### 04_run_committee.sh
 Sets up and starts Node 2 (Committee) with proper configuration.
 
-### 04_register_nodes.sh
+### 05_register_nodes.sh
 Registers nodes with each other and verifies the connection.

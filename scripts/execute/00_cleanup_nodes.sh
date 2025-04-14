@@ -17,8 +17,9 @@ lsof -i :7100 -i :7200 -i :7300 -i :7101 -i :7201 -i :7301 || echo "No processes
 # Check if the nodes have been set up
 NODE1_DATA_PATH="$PROJECT_ROOT_PATH/data/node1"
 NODE2_DATA_PATH="$PROJECT_ROOT_PATH/data/node2"
+AUTHORITY_DATA_PATH="$PROJECT_ROOT_PATH/data/authority"
 
-if [ ! -d "$NODE1_DATA_PATH" ] && [ ! -d "$NODE2_DATA_PATH" ]; then
+if [ ! -d "$NODE1_DATA_PATH" ] && [ ! -d "$NODE2_DATA_PATH" ] && [ ! -d "$AUTHORITY_DATA_PATH" ]; then
   echo "No nodes found to clean up."
   exit 0
 fi
@@ -41,6 +42,14 @@ else
   echo "Node 2 is not running."
 fi
 
+if pgrep -f "$AUTHORITY_DATA_PATH/authority_node" > /dev/null; then
+  echo "authority_node is running. Stopping it..."
+  pkill -f "$AUTHORITY_DATA_PATH/authority_node"
+  echo "authority_node stopped."
+else
+  echo "authority_node is not running."
+fi
+
 # Remove the data directories
 echo "Removing node data directories..."
 if [ -d "$NODE1_DATA_PATH" ]; then
@@ -51,6 +60,11 @@ fi
 if [ -d "$NODE2_DATA_PATH" ]; then
   rm -rf "$NODE2_DATA_PATH"
   echo "Removed $NODE2_DATA_PATH"
+fi
+
+if [ -d "$AUTHORITY_DATA_PATH" ]; then
+  rm -rf "$AUTHORITY_DATA_PATH"
+  echo "Removed $AUTHORITY_DATA_PATH"
 fi
 
 echo "Cleanup complete!" 
