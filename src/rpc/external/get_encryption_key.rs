@@ -22,8 +22,6 @@ impl RpcParameter<AppState> for GetEncryptionKey {
         let aggregated_key = AggregatedKey::get(self.key_id)?;
         let encryption_key = aggregated_key.encryption_key();
 
-        Ok(GetEncryptionKeyResponse {
-            encryption_key,
-        })
+        Ok(GetEncryptionKeyResponse { encryption_key })
     }
 }

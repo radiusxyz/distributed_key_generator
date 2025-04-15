@@ -2,12 +2,15 @@ use clap::{Parser, Subcommand};
 use distributed_key_generation::{
     error::{self, Error},
     rpc::{
+        authority::GetAuthorizedSkdeParams,
         cluster::{self, GetKeyGeneratorList, GetKeyGeneratorRpcUrlListResponse},
         external, internal,
     },
     skde_params::fetch_skde_params_with_retry,
     state::AppState,
-    task::single_key_generator::run_single_key_generator,
+    task::{
+        authority_setup::run_setup_skde_params, single_key_generator::run_single_key_generator,
+    },
     types::*,
 };
 use radius_sdk::{
@@ -18,6 +21,7 @@ use radius_sdk::{
     kvstore::KvStoreBuilder,
 };
 pub use serde::{Deserialize, Serialize};
+// use skde::{delay_encryption::setup, BigUint};
 use tokio::task::JoinHandle;
 
 #[derive(Debug, Deserialize, Parser, Serialize)]
@@ -41,6 +45,10 @@ pub enum Commands {
         #[clap(flatten)]
         config_path: Box<ConfigPath>,
     },
+    SetupSkdeParams {
+        #[clap(flatten)]
+        config_path: Box<ConfigPath>,
+    },
 
     /// Starts the node
     Start {
@@ -57,6 +65,11 @@ async fn main() -> Result<(), Error> {
 
     match cli.command {
         Commands::Init { ref config_path } => ConfigPath::init(config_path)?,
+        // Only for authority node: generate and write SKDE params
+        Commands::SetupSkdeParams { ref config_path } => {
+            ConfigPath::init(config_path)?; // ensure dir exists
+            run_setup_skde_params(config_path);
+        }
         Commands::Start {
             ref mut config_option,
         } => {
@@ -69,6 +82,16 @@ async fn main() -> Result<(), Error> {
             );
 
             let skde_params = fetch_skde_params_with_retry(&config).await;
+
+            if config.is_authority() {
+                let app_state = AppState::new(config.clone(), skde_params);
+
+                tracing::info!("Authority node: serving get_authorized_skde_params");
+                let handle = initialize_authority_rpc_server(&app_state).await?;
+                handle.await.unwrap();
+
+                return Ok(());
+            }
 
             // Initialize the database
             KvStoreBuilder::default()
@@ -165,6 +188,7 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
         .register_rpc_method::<cluster::SyncAggregatedKey>()?
         .register_rpc_method::<cluster::SyncPartialKey>()?
         .register_rpc_method::<cluster::RunGeneratePartialKey>()?
+        .register_rpc_method::<cluster::GetSkdeParams>()?
         .init(cluster_rpc_url.clone())
         .await
         .map_err(error::Error::RpcServerError)?;
@@ -209,4 +233,25 @@ async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHand
 
 pub fn anywhere(port: &str) -> String {
     format!("0.0.0.0:{}", port)
+}
+
+async fn initialize_authority_rpc_server(app_state: &AppState) -> Result<JoinHandle<()>, Error> {
+    let authority_rpc_url = anywhere(&app_state.config().authority_port()?);
+
+    let rpc_server = RpcServer::new(app_state.clone())
+        .register_rpc_method::<GetAuthorizedSkdeParams>()?
+        .init(authority_rpc_url.clone())
+        .await
+        .map_err(Error::RpcServerError)?;
+
+    tracing::info!(
+        "Successfully started the authority RPC server: {}",
+        authority_rpc_url
+    );
+
+    let handle = tokio::spawn(async move {
+        rpc_server.stopped().await;
+    });
+
+    Ok(handle)
 }

@@ -63,8 +63,10 @@ if [ -d "$NODE2_DATA_PATH" ]; then
 fi
 
 if [ -d "$AUTHORITY_DATA_PATH" ]; then
-  rm -rf "$AUTHORITY_DATA_PATH"
-  echo "Removed $AUTHORITY_DATA_PATH"
+  echo "Cleaning $AUTHORITY_DATA_PATH except skde_params.json..."
+  find "$AUTHORITY_DATA_PATH" ! -name 'skde_params.json' -type f -exec rm -f {} +
+  find "$AUTHORITY_DATA_PATH" ! -name 'skde_params.json' -type d -mindepth 1 -exec rm -rf {} +
+  echo "Cleaned $AUTHORITY_DATA_PATH (skde_params.json preserved)"
 fi
 
 echo "Cleanup complete!" 

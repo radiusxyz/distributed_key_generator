@@ -1,7 +1,7 @@
-use std::str::FromStr;
+use std::{fs, str::FromStr};
 
 use radius_sdk::json_rpc::{
-    client::{Id, RpcClient},
+    client::{Id, RpcClient, RpcClientError},
     server::RpcParameter,
 };
 use skde::{delay_encryption::SkdeParams, BigUint};
@@ -14,38 +14,60 @@ use crate::rpc::{
 
 async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
     match config.role() {
-        Role::Authority => Some(default_skde_params()),
+        Role::Authority => {
+            let skde_path = config.path().join("skde_params.json");
+            tracing::info!("Attempting to load SKDE params from: {:?}", skde_path);
+
+            match fs::read_to_string(&skde_path) {
+                Ok(data) => {
+                    tracing::info!("Successfully read SKDE param file, length: {}", data.len());
+                    match serde_json::from_str::<SkdeParams>(&data) {
+                        Ok(parsed) => {
+                            tracing::info!("SKDE params successfully parsed: {:?}", parsed);
+                            Some(parsed)
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to parse SKDE param file: {}", e);
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to read SKDE param file at {:?}: {}", skde_path, e);
+                    tracing::warn!(
+                        "Authority node must run `setup-skde-params` to initialize SKDE parameters."
+                    );
+                    None
+                }
+            }
+        }
 
         Role::Leader => {
-            if let Some(authority_url) = config.authority_rpc_url() {
-                let client = match RpcClient::new() {
-                    Ok(c) => c,
-                    Err(err) => {
-                        tracing::warn!("Failed to create RPC client: {}", err);
-                        return None;
-                    }
-                };
+            let authority_url = config.authority_rpc_url(); // &String
 
-                let response: GetAuthorizedSkdeParamsResponse = match client
-                    .request(
-                        authority_url,
-                        GetAuthorizedSkdeParams::method(),
-                        &GetAuthorizedSkdeParams,
-                        Id::Null,
-                    )
-                    .await
-                {
-                    Ok(res) => res,
-                    Err(err) => {
-                        tracing::warn!("Failed to fetch SkdeParams from authority: {}", err);
-                        return None;
-                    }
-                };
+            let client = match RpcClient::new() {
+                Ok(c) => c,
+                Err(err) => {
+                    tracing::warn!("Failed to create RPC client: {}", err);
+                    return None;
+                }
+            };
 
-                Some(response.into_skde_params())
-            } else {
-                tracing::warn!("Missing authority_rpc_url in config");
-                None
+            let result: Result<GetAuthorizedSkdeParamsResponse, RpcClientError> = client
+                .request(
+                    authority_url,
+                    GetAuthorizedSkdeParams::method(),
+                    &GetAuthorizedSkdeParams,
+                    Id::Null,
+                )
+                .await;
+
+            match result {
+                Ok(response) => Some(response.into_skde_params()),
+                Err(err) => {
+                    tracing::warn!("Failed to fetch SkdeParams from authority: {}", err);
+                    None
+                }
             }
         }
 

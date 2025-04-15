@@ -29,9 +29,9 @@ authority_rpc_url = "http://127.0.0.1:7400"
 role = "authority"
 
 # The following are unused by authority, but required for Config::load
-external_rpc_url = "http://127.0.0.1:3000"
-internal_rpc_url = "http://127.0.0.1:4000"
-cluster_rpc_url = "http://127.0.0.1:5000"
+external_rpc_url = "http://127.0.0.1:7102"
+internal_rpc_url = "http://127.0.0.1:7202"
+cluster_rpc_url = "http://127.0.0.1:7302"
 
 radius_foundation_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 chain_type = "ethereum"
@@ -46,7 +46,13 @@ if [ ! -f "$SIGNING_KEY_PATH" ]; then
     echo "Default signing key generated."
 fi
 
-# Copy and run binary
+# Copy binary to authority directory
 cp -f "$BINARY_PATH" "$AUTHORITY_DATA_DIR/key-generator"
 chmod 755 "$AUTHORITY_DATA_DIR/key-generator"
-cd "$AUTHORITY_DATA_DIR" && ./key-generator start --path .
+
+# Run setup-skde-params to generate skde_params.json
+cd "$AUTHORITY_DATA_DIR"
+./key-generator setup-skde-params --path .
+
+# Start authority node
+./key-generator start --path .
