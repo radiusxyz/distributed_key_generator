@@ -4,14 +4,14 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT_PATH="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
-# Build authority_node binary if needed
-BINARY_PATH="$PROJECT_ROOT_PATH/target/release/authority_node"
+# Build key-generator binary if needed
+BINARY_PATH="$PROJECT_ROOT_PATH/target/release/key-generator"
 if [ ! -f "$BINARY_PATH" ]; then
-    echo "Building authority_node binary..."
-    cd "$PROJECT_ROOT_PATH" && cargo build --release --bin authority_node
+    echo "Building key-generator binary..."
+    cd "$PROJECT_ROOT_PATH" && cargo build --release --bin key-generator
 
     if [ ! -f "$BINARY_PATH" ]; then
-        echo "Error: Failed to build authority_node binary"
+        echo "Error: Failed to build key-generator binary"
         exit 1
     fi
 fi
@@ -22,13 +22,13 @@ AUTHORITY_DATA_DIR="$DATA_DIR/authority"
 mkdir -p "$AUTHORITY_DATA_DIR"
 chmod -R 755 "$DATA_DIR" "$AUTHORITY_DATA_DIR" 2>/dev/null
 
-# Create Authority Node config file (including dummy RPCs to satisfy Config::load)
+# Create Authority Node config file
 cat > "$AUTHORITY_DATA_DIR/Config.toml" << EOL
 # NODE CONFIG: Authority Node
 authority_rpc_url = "http://127.0.0.1:7400"
 role = "authority"
 
-# These are not used in authority, but required for Config::load
+# The following are unused by authority, but required for Config::load
 external_rpc_url = "http://127.0.0.1:3000"
 internal_rpc_url = "http://127.0.0.1:4000"
 cluster_rpc_url = "http://127.0.0.1:5000"
@@ -47,6 +47,6 @@ if [ ! -f "$SIGNING_KEY_PATH" ]; then
 fi
 
 # Copy and run binary
-cp -f "$BINARY_PATH" "$AUTHORITY_DATA_DIR/authority_node"
-chmod 755 "$AUTHORITY_DATA_DIR/authority_node"
-cd "$AUTHORITY_DATA_DIR" && ./authority_node start --path .
+cp -f "$BINARY_PATH" "$AUTHORITY_DATA_DIR/key-generator"
+chmod 755 "$AUTHORITY_DATA_DIR/key-generator"
+cd "$AUTHORITY_DATA_DIR" && ./key-generator start --path .

@@ -7,10 +7,6 @@ edition = "2021"
 name = "key-generator"
 path = "src/bin/key_generator.rs"
 
-[[bin]]
-name = "authority_node"
-path = "src/bin/authority_node.rs"
-
 [dependencies]
 bincode = "1.3.3"
 tokio = { version = "1.37.0", features = ["full"] }

@@ -23,7 +23,7 @@ impl RpcParameter<AppState> for GetEncryptionKey {
         let encryption_key = aggregated_key.encryption_key();
 
         Ok(GetEncryptionKeyResponse {
-            encryption_key: encryption_key,
+            encryption_key,
         })
     }
 }

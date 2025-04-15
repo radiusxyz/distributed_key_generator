@@ -2,6 +2,7 @@ pub mod config;
 mod key;
 mod key_generator;
 mod session;
+pub mod skde_params;
 
 pub use config::*;
 pub use key::*;

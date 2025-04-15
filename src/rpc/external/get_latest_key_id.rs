@@ -19,9 +19,9 @@ impl RpcParameter<AppState> for GetLatestKeyId {
         let key_id = KeyId::get()?;
 
         // loop {
-            return Ok(GetLatestKeyIdResponse {
-                latest_key_id: key_id,
-            });
+        return Ok(GetLatestKeyIdResponse {
+            latest_key_id: key_id,
+        });
         // }
     }
 }

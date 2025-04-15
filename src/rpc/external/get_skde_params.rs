@@ -8,6 +8,12 @@ pub struct GetSkdeParamsResponse {
     skde_params: skde::delay_encryption::SkdeParams,
 }
 
+impl GetSkdeParamsResponse {
+    pub fn into_skde_params(self) -> skde::delay_encryption::SkdeParams {
+        self.skde_params
+    }
+}
+
 impl RpcParameter<AppState> for GetSkdeParams {
     type Response = GetSkdeParamsResponse;
 

@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use clap::{Parser, Subcommand};
 use distributed_key_generation::{
     error::{self, Error},
@@ -7,6 +5,7 @@ use distributed_key_generation::{
         cluster::{self, GetKeyGeneratorList, GetKeyGeneratorRpcUrlListResponse},
         external, internal,
     },
+    skde_params::fetch_skde_params_with_retry,
     state::AppState,
     task::single_key_generator::run_single_key_generator,
     types::*,
@@ -19,7 +18,6 @@ use radius_sdk::{
     kvstore::KvStoreBuilder,
 };
 pub use serde::{Deserialize, Serialize};
-use skde::{delay_encryption::SkdeParams, BigUint};
 use tokio::task::JoinHandle;
 
 #[derive(Debug, Deserialize, Parser, Serialize)]
@@ -70,28 +68,7 @@ async fn main() -> Result<(), Error> {
                 config.path(),
             );
 
-            // TODO: remove this values
-            const MOD_N: &str = "26737688233630987849749538623559587294088037102809480632570023773459222152686633609232230584184543857897813615355225270819491245893096628373370101798393754657209853664433779631579690734503677773804892912774381357280025811519740953667880409246987453978226997595139808445552217486225687511164958368488319372068289768937729234964502681229612929764203977349037219047813560623373035187038018937232123821089208711930458219009895581132844064176371047461419609098259825422421077554570457718558971463292559934623518074946858187287041522976374186587813034651849410990884606427758413847140243755163116582922090226726575253150079";
-            const GENERATOR: &str = "4";
-            const TIME_PARAM_T: u32 = 2;
-            const MAX_KEY_GENERATOR_NUMBER: u32 = 2;
-
-            let n = BigUint::from_str(MOD_N).expect("Invalid MOD_N");
-            let g = BigUint::from_str(GENERATOR).expect("Invalid GENERATOR");
-            let max_key_generator_number = BigUint::from(MAX_KEY_GENERATOR_NUMBER);
-            let t = 2_u32.pow(TIME_PARAM_T);
-            let mut h = g.clone();
-            (0..t).for_each(|_| {
-                h = (&h * &h) % n.clone();
-            });
-
-            let skde_params = SkdeParams {
-                t,
-                n: n.to_str_radix(10),
-                g: g.to_str_radix(10),
-                h: h.to_str_radix(10),
-                max_sequencer_number: max_key_generator_number.to_str_radix(10),
-            };
+            let skde_params = fetch_skde_params_with_retry(&config).await;
 
             // Initialize the database
             KvStoreBuilder::default()
