@@ -9,7 +9,7 @@ use radius_sdk::{
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use super::{SignedDecryptionKeyAck, SignedPartialKeyAck};
+use super::{SignedDecryptionKeyAck, SubmitPartialKeyAck};
 use crate::rpc::{common::create_signature, prelude::*};
 
 // Message from leader to verifiers
@@ -23,7 +23,7 @@ pub struct SignedFinalReveal {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FinalRevealPayload {
     pub session_id: SessionId,
-    pub partial_keys: Vec<SignedPartialKeyAck>,
+    pub partial_keys: Vec<SubmitPartialKeyAck>,
     pub decryption_ack: SignedDecryptionKeyAck,
 }
 
@@ -41,7 +41,7 @@ impl RpcParameter<AppState> for SignedFinalReveal {
 
     async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
         info!(
-            "Received final reveal - session_id: {}, partial_keys: {}",
+            "Received final reveal - session_id: {:?}, partial_keys: {}",
             self.payload.session_id,
             self.payload.partial_keys.len()
         );
@@ -59,7 +59,7 @@ impl RpcParameter<AppState> for SignedFinalReveal {
 // Broadcast final reveal information from leader
 pub fn broadcast_final_reveal(
     session_id: SessionId,
-    partial_keys: Vec<SignedPartialKeyAck>,
+    partial_keys: Vec<SubmitPartialKeyAck>,
     decryption_ack: SignedDecryptionKeyAck,
     _context: &AppState,
 ) -> Result<(), Error> {

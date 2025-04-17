@@ -43,7 +43,7 @@ impl RpcParameter<AppState> for SignedDecryptionKeyAck {
         // let sender_address = verify_signature(&self.signature, &self.payload, &_context)?;
 
         info!(
-            "Received decryption key ACK - session_id: {}, timestamps: {} / {}",
+            "Received decryption key ACK - session_id: {:?}, timestamps: {} / {}",
             self.payload.session_id, self.payload.solve_timestamp, self.payload.ack_solve_timestamp
         );
 

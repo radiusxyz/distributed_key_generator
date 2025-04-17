@@ -38,7 +38,7 @@ impl RpcParameter<AppState> for SignedDecryptionKey {
         let sender_address = verify_signature(&self.signature, &self.payload)?;
 
         info!(
-            "Received decryption key - session_id: {}, sender: {}, timestamp: {}",
+            "Received decryption key - session_id: {:?}, sender: {}, timestamp: {}",
             self.payload.session_id,
             sender_address.as_hex_string(),
             self.payload.timestamp

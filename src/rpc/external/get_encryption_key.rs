@@ -3,7 +3,7 @@ use crate::rpc::prelude::*;
 /// 09/05
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetEncryptionKey {
-    key_id: KeyId,
+    session_id: SessionId,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -19,7 +19,7 @@ impl RpcParameter<AppState> for GetEncryptionKey {
     }
 
     async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
-        let aggregated_key = AggregatedKey::get(self.key_id)?;
+        let aggregated_key = AggregatedKey::get(self.session_id)?;
         let encryption_key = aggregated_key.encryption_key();
 
         Ok(GetEncryptionKeyResponse {

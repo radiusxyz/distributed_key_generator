@@ -44,21 +44,28 @@ pub struct TestPorts {
 /// Predefined test ports for common test scenarios
 pub struct TestPortConfig {
     pub leader: TestPorts,
-    pub follower: TestPorts,
+    pub committee: TestPorts,
+    pub solver: TestPorts,
+    // pub verifier: TestPorts,
 }
 
 impl Default for TestPortConfig {
     fn default() -> Self {
         Self {
             leader: TestPorts {
-                cluster: 8545,
-                external: 8546,
-                internal: 8547,
+                cluster: 7001,
+                external: 7002,
+                internal: 7003,
             },
-            follower: TestPorts {
-                cluster: 8548,
-                external: 8549,
-                internal: 8550,
+            committee: TestPorts {
+                cluster: 8001,
+                external: 8002,
+                internal: 8003,
+            },
+            solver: TestPorts {
+                cluster: 9001,
+                external: 9002,
+                internal: 9003,
             },
         }
     }

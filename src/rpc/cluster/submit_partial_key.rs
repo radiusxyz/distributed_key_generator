@@ -1,3 +1,4 @@
+use bincode::serialize as serialize_to_bincode;
 use radius_sdk::{
     json_rpc::server::{RpcError, RpcParameter},
     signature::{Address, Signature},
@@ -7,12 +8,17 @@ use skde::key_generation::{PartialKey as SkdePartialKey, PartialKeyProof};
 use tracing::info;
 
 use crate::{
-    rpc::{common::verify_signature, prelude::*},
-    types::{KeyId, SessionId},
+    error::KeyGenerationError,
+    rpc::{
+        cluster::{broadcast_partial_key_ack, PartialKeyAckPayload, SubmitPartialKeyAck},
+        common::{create_signature, verify_signature},
+        prelude::*,
+    },
+    types::SessionId,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SignedPartialKey {
+pub struct SubmitPartialKey {
     pub signature: Signature,
     pub payload: PartialKeyPayload,
 }
@@ -20,7 +26,6 @@ pub struct SignedPartialKey {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PartialKeyPayload {
     pub sender: Address,
-    pub key_id: KeyId,
     pub partial_key: SkdePartialKey,
     pub proof: PartialKeyProof,
     pub submit_timestamp: u64,
@@ -28,12 +33,12 @@ pub struct PartialKeyPayload {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct PartialKeyResponse {
+pub struct SubmitPartialKeyResponse {
     pub success: bool,
 }
 
-impl RpcParameter<AppState> for SignedPartialKey {
-    type Response = PartialKeyResponse;
+impl RpcParameter<AppState> for SubmitPartialKey {
+    type Response = SubmitPartialKeyResponse;
 
     fn method() -> &'static str {
         "submit_partial_key"
@@ -41,58 +46,54 @@ impl RpcParameter<AppState> for SignedPartialKey {
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         // TODO: Add to verify actual signature
-        let sender_address = verify_signature(&self.signature, &self.payload)?;
+        let _ = verify_signature(&self.signature, &self.payload)?;
+        let sender_address = self.payload.sender.clone();
 
         info!(
-            "Received partial key - session_id: {}, key_id: {:?}, sender: {}, timestamp: {}",
+            "Received partial key - session_id: {:?}, sender: {}, timestamp: {}",
             self.payload.session_id,
-            self.payload.key_id,
             sender_address.as_hex_string(),
             self.payload.submit_timestamp
         );
 
         // Check if key generator is registered in the cluster
-        // if !KeyGeneratorList::get()?.is_key_generator_in_cluster(&sender_address) {
-        //     return Err(RpcError {
-        //         code: -32603,
-        //         message: format!(
-        //             "Address {} is not a registered key generator",
-        //             sender_address.as_hex_string()
-        //         )
-        //         .into(),
-        //         data: None,
-        //     });
-        // }
+        let key_generator_list = KeyGeneratorList::get()?;
+        info!("Key generator list: {:?}", key_generator_list);
+        if !key_generator_list.is_key_generator_in_cluster(&sender_address) {
+            return Err(RpcError::from(KeyGenerationError::NotRegisteredGenerator(
+                sender_address.as_hex_string(),
+            )));
+        }
 
         // Verify partial key validity
-        let _is_valid = skde::key_generation::verify_partial_key_validity(
+        let is_valid = skde::key_generation::verify_partial_key_validity(
             context.skde_params(),
             self.payload.partial_key.clone(),
-            self.payload.proof,
-        );
+            self.payload.proof.clone(),
+        )
+        .unwrap();
 
-        // if !is_valid {
-        //     return Err(RpcError {
-        //         code: -32603,
-        //         message: "Invalid partial key".into(),
-        //         data: None,
-        //     });
-        // }
-
-        // Initialize partial key address list for this key ID
-        PartialKeyAddressList::initialize(self.payload.key_id)?;
-
-        // Add sender address to the partial key address list
-        PartialKeyAddressList::apply(self.payload.key_id, |list| {
-            list.insert(sender_address.clone());
-        })?;
+        if !is_valid {
+            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+                format!("{:?}", self.payload.partial_key),
+            )));
+        }
 
         // Store the partial key
         let partial_key = PartialKey::new(self.payload.partial_key.clone());
-        partial_key.put(self.payload.key_id, &sender_address)?;
+        partial_key.put(self.payload.session_id, &sender_address)?;
 
-        // TODO: Generate and broadcast ACK message (to be implemented in ack_partial_key method)
+        // TODO: handle appropriate paratial key index
+        let _ = broadcast_partial_key_ack(
+            sender_address,
+            self.payload.session_id,
+            self.payload.partial_key.clone(),
+            self.payload.proof.clone(),
+            self.payload.submit_timestamp,
+            0,
+            &context,
+        );
 
-        Ok(PartialKeyResponse { success: true })
+        Ok(SubmitPartialKeyResponse { success: true })
     }
 }

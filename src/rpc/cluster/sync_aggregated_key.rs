@@ -12,7 +12,7 @@ use crate::rpc::prelude::*;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncAggregatedKey {
-    pub key_id: KeyId,
+    pub session_id: SessionId,
     pub aggregated_key: SkdeAggregatedKey,
     pub participant_addresses: Vec<Address>,
 }
@@ -28,17 +28,17 @@ impl RpcParameter<AppState> for SyncAggregatedKey {
         let skde_params = context.skde_params().clone();
 
         let partial_key_address_list =
-            PartialKeyAddressList::get_or(self.key_id, PartialKeyAddressList::default)?;
+            PartialKeyAddressList::get_or(self.session_id, PartialKeyAddressList::default)?;
 
-        let partial_key_list = partial_key_address_list.get_partial_key_list(self.key_id)?;
+        let partial_key_list = partial_key_address_list.get_partial_key_list(self.session_id)?;
 
         let skde_aggregated_key = aggregate_key(&skde_params, &partial_key_list);
         let aggregated_key = AggregatedKey::new(skde_aggregated_key.clone());
-        aggregated_key.put(self.key_id)?;
+        aggregated_key.put(self.session_id)?;
 
         tracing::info!(
             "Completed to generate encryption key - key id: {:?} / encryption key: {:?}",
-            self.key_id,
+            self.session_id,
             skde_aggregated_key.u
         );
 
@@ -47,10 +47,10 @@ impl RpcParameter<AppState> for SyncAggregatedKey {
                 solve_time_lock_puzzle(&skde_params, &skde_aggregated_key).unwrap();
             let decryption_key = DecryptionKey::new(decryption_key.sk.clone());
 
-            decryption_key.put(self.key_id).unwrap();
+            decryption_key.put(self.session_id).unwrap();
             tracing::info!(
                 "Complete to get decryption key - key_id: {:?} / decryption key: {:?}",
-                self.key_id,
+                self.session_id,
                 decryption_key
             );
         });

@@ -14,7 +14,7 @@ use crate::rpc::{cluster::SyncPartialKey, prelude::*};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RunGeneratePartialKey {
-    pub key_id: KeyId,
+    pub session_id: SessionId,
 }
 
 impl RpcParameter<AppState> for RunGeneratePartialKey {
@@ -33,7 +33,7 @@ impl RpcParameter<AppState> for RunGeneratePartialKey {
 
         sync_partial_key(
             context.config().signer().address().clone(),
-            self.key_id,
+            self.session_id,
             partial_key,
             partial_key_proof,
         );
@@ -44,7 +44,7 @@ impl RpcParameter<AppState> for RunGeneratePartialKey {
 
 pub fn sync_partial_key(
     address: Address,
-    key_id: KeyId,
+    session_id: SessionId,
     partial_key: PartialKey,
     partial_key_proof: PartialKeyProof,
 ) {
@@ -55,7 +55,7 @@ pub fn sync_partial_key(
     tokio::spawn(async move {
         let parameter = SyncPartialKey {
             address,
-            key_id,
+            session_id,
             skde_partial_key: partial_key,
             partial_key_proof,
         };

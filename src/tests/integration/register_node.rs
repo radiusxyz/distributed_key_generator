@@ -3,7 +3,6 @@ use tokio::time::Duration;
 
 use crate::{
     config::Role,
-    error::Error,
     rpc::cluster::GetKeyGeneratorList,
     tests::{test_helpers, utils},
 };
@@ -11,7 +10,7 @@ use crate::{
 /// Test to verify that two nodes can connect and a follower node can register with a leader
 
 #[tokio::test]
-async fn test_two_nodes_key_generator_registration() {
+async fn test_integration_two_nodes_registration() {
     // Setup test logging
     utils::setup_test_logging();
 
@@ -33,30 +32,31 @@ async fn test_two_nodes_key_generator_registration() {
     // Create follower node configuration
     let (follower_config, _follower_temp_dir) = test_helpers::create_temp_config(
         Role::Committee,
-        ports.follower.cluster,
-        ports.follower.external,
-        ports.follower.internal,
+        ports.committee.cluster,
+        ports.committee.external,
+        ports.committee.internal,
     );
 
     // Run nodes as async tasks
     let _leader_handles = test_helpers::run_node(leader_config, skde_params_leader).await;
-    let _follower_handles = test_helpers::run_node(follower_config, skde_params_follower).await;
+    let _follower_handles =
+        test_helpers::run_node(follower_config.clone(), skde_params_follower).await;
 
     // Wait for the servers to start
     tokio::time::sleep(Duration::from_secs(2)).await;
 
     // Create test address for the follower
-    let follower_address = utils::create_test_address("0x1234567890123456789012345678901234567890");
+    let follower_address = follower_config.address();
 
     // Create RPC URLs for the follower
-    let cluster_rpc_url = format!("http://127.0.0.1:{}", ports.follower.cluster);
-    let external_rpc_url = format!("http://127.0.0.1:{}", ports.follower.external);
+    let cluster_rpc_url = format!("http://127.0.0.1:{}", ports.committee.cluster);
+    let external_rpc_url = format!("http://127.0.0.1:{}", ports.committee.external);
 
     // Create JSON-RPC client
     let rpc_client = RpcClient::new().unwrap();
 
-    // Create parameters for add_key_generator request
-    let add_keygen_params = serde_json::json!({
+    // Create parameters for add_key_generator using serde_json
+    let add_key_generator = serde_json::json!({
         "message": {
             "address": follower_address.as_hex_string(),
             "cluster_rpc_url": cluster_rpc_url,
@@ -69,7 +69,7 @@ async fn test_two_nodes_key_generator_registration() {
         .request::<_, ()>(
             format!("http://127.0.0.1:{}", ports.leader.internal),
             "add_key_generator",
-            &add_keygen_params,
+            &add_key_generator,
             Id::Number(1),
         )
         .await

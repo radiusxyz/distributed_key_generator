@@ -102,7 +102,7 @@ async fn main() -> Result<(), Error> {
                 .init();
 
             KeyGeneratorList::initialize().map_err(error::Error::Database)?;
-            KeyId::initialize().map_err(error::Error::Database)?;
+            SessionId::initialize().map_err(error::Error::Database)?;
 
             tracing::info!(
                 "Successfully initialized the database at {:?}.",

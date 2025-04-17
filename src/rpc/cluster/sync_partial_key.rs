@@ -12,7 +12,7 @@ use crate::rpc::prelude::*;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncPartialKey {
     pub address: Address,
-    pub key_id: KeyId,
+    pub session_id: SessionId,
     pub skde_partial_key: SkdePartialKey,
     pub partial_key_proof: PartialKeyProof,
 }
@@ -28,11 +28,11 @@ impl RpcParameter<AppState> for SyncPartialKey {
         if KeyGeneratorList::get()?.is_key_generator_in_cluster(&self.address) {
             tracing::info!(
                 "Sync partial key - key_id: {:?}, address: {:?}",
-                self.key_id,
+                self.session_id,
                 self.address.as_hex_string(),
             );
 
-            PartialKeyAddressList::initialize(self.key_id)?;
+            PartialKeyAddressList::initialize(self.session_id)?;
 
             let is_valid = verify_partial_key_validity(
                 context.skde_params(),
@@ -45,12 +45,12 @@ impl RpcParameter<AppState> for SyncPartialKey {
                 return Ok(());
             }
 
-            PartialKeyAddressList::apply(self.key_id, |list| {
+            PartialKeyAddressList::apply(self.session_id, |list| {
                 list.insert(self.address.clone());
             })?;
 
             let partial_key = PartialKey::new(self.skde_partial_key.clone());
-            partial_key.put(self.key_id, &self.address)?;
+            partial_key.put(self.session_id, &self.address)?;
         }
 
         Ok(())

@@ -5,7 +5,7 @@ pub struct GetLatestEncryptionKey {}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetLatestEncryptionKeyResponse {
-    pub key_id: KeyId,
+    pub session_id: SessionId,
     pub encryption_key: String,
 }
 
@@ -17,19 +17,19 @@ impl RpcParameter<AppState> for GetLatestEncryptionKey {
     }
 
     async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
-        let mut key_id = KeyId::get()?;
+        let mut session_id = SessionId::get()?;
 
         loop {
-            if AggregatedKey::get(key_id).is_err() {
-                key_id.decrease_key_id();
+            if AggregatedKey::get(session_id).is_err() {
+                session_id.decrease_key_id();
                 continue;
             }
 
-            let aggregated_key = AggregatedKey::get(key_id)?;
+            let aggregated_key = AggregatedKey::get(session_id)?;
             let encryption_key = aggregated_key.encryption_key();
 
             return Ok(GetLatestEncryptionKeyResponse {
-                key_id,
+                session_id,
                 encryption_key,
             });
         }
