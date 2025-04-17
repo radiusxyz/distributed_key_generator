@@ -12,3 +12,5 @@ pub mod prelude {
 
     pub use crate::{error::Error, state::AppState, types::*};
 }
+
+pub mod authority;

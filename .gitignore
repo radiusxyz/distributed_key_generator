@@ -1,6 +1,13 @@
 /target
 
-/data
+# Ignore all under /data
+/data/**
+
+# Unignore directories that lead to the file
+!data/
+!data/authority/
+!data/authority/skde_params.json
+
 /scripts/key-generator
 
 /scripts/execute/env.sh

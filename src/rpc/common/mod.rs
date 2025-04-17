@@ -6,8 +6,7 @@ use radius_sdk::{
 use serde::Serialize;
 
 pub fn create_signature<T: Serialize>(_message: &T) -> Signature {
-    let signature = Signature::from(vec![0; 64]);
-    signature
+    Signature::from(vec![0; 64])
 }
 
 pub fn verify_signature<T: Serialize>(

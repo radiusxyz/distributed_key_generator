@@ -15,6 +15,9 @@ pub enum Error {
     CreatePrivateKeyFile,
     HexDecodeError,
 
+    InvalidParams(String),   // malformed, missing fields
+    UnauthorizedParamAccess, // follower or leader tried to call authority logic
+
     NotFound,
 }
 

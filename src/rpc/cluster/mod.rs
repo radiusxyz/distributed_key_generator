@@ -1,4 +1,5 @@
 mod get_key_generator_list;
+mod get_skde_params;
 mod run_generate_partial_key;
 mod sync_aggregated_key;
 mod sync_key_generator;
@@ -13,6 +14,7 @@ mod submit_partial_key;
 pub use ack_decryption_key::*;
 pub use ack_partial_key::*;
 pub use get_key_generator_list::*;
+pub use get_skde_params::*;
 pub use run_generate_partial_key::*;
 pub use submit_decryption_key::*;
 pub use submit_final_reveal::*;
