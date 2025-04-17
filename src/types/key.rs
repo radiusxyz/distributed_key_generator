@@ -24,16 +24,17 @@ impl PartialKey {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, Model)]
+#[derive(Clone, Debug, Deserialize, Serialize, Model)]
 #[kvstore(key(key_id: KeyId))]
-
 pub struct PartialKeyAddressList(HashSet<Address>);
 
-impl PartialKeyAddressList {
-    pub fn default() -> Self {
+impl Default for PartialKeyAddressList {
+    fn default() -> Self {
         Self(HashSet::new())
     }
+}
 
+impl PartialKeyAddressList {
     pub fn insert(&mut self, address: Address) {
         self.0.insert(address);
     }
@@ -48,6 +49,10 @@ impl PartialKeyAddressList {
 
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     pub fn initialize(key_id: KeyId) -> Result<(), KvStoreError> {
