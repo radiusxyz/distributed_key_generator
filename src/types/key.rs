@@ -83,6 +83,12 @@ impl PartialKeyAddressList {
 #[kvstore(key())]
 pub struct KeyId(u64);
 
+impl From<u64> for KeyId {
+    fn from(value: u64) -> Self {
+        KeyId(value)
+    }
+}
+
 impl KeyId {
     pub fn default() -> Self {
         Self(0)

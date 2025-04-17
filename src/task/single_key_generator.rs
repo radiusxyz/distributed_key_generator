@@ -23,7 +23,7 @@ use crate::{
     state::AppState,
     types::*,
 };
-
+// TODO: Decoupling logic according to the roles.
 // Spawns a loop that periodically generates partial keys and aggregates
 pub fn run_single_key_generator(context: AppState) {
     tokio::spawn(async move {
@@ -54,9 +54,27 @@ pub fn run_single_key_generator(context: AppState) {
                     .get_partial_key_list(current_key_id)
                     .unwrap();
 
-                let selected_keys = select_random_partial_keys(&partial_key_list, b"tmp-key-gen");
-                let derived_key = derive_partial_key(&selected_keys, &skde_params);
+                let prev_key_id = KeyId::from(current_key_id.as_u64() - 1);
+                let randomness = DecryptionKey::get(prev_key_id)
+                    .map(|key| {
+                        tracing::info!(
+                                "Using decryption key from previous session (key_id = {}) as randomness",
+                                prev_key_id.as_u64()
+                            );
+                        key.as_string().into_bytes()
+                    })
+                    .unwrap_or_else(|err| {
+                        tracing::warn!(
+                                "Failed to get decryption key for key_id = {}: {}; falling back to default randomness",
+                                prev_key_id.as_u64(),
+                                err
+                            );
+                        b"default-randomness".to_vec()
+                    });
 
+                let selected_keys = select_random_partial_keys(&partial_key_list, &randomness);
+
+                let derived_key = derive_partial_key(&selected_keys, &skde_params);
                 partial_key_list.push(derived_key);
 
                 let skde_aggregated_key = aggregate_key(&skde_params, &partial_key_list);
@@ -156,6 +174,7 @@ fn select_ordered_indices(n: usize, randomness: &[u8]) -> Vec<usize> {
     }
 
     let first_byte = randomness[0] as usize;
+    // TODO: k must be less than maximum number of partial key generators
     let k = (first_byte % (n - 1)) + 1;
 
     let mut indices: Vec<usize> = (0..n).collect();
