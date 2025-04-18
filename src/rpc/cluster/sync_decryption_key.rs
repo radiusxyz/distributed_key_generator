@@ -14,29 +14,24 @@ use tracing::info;
 use crate::rpc::prelude::*;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SignedDecryptionKeyAck {
+pub struct SyncDecryptionKey {
     pub signature: Signature,
-    pub payload: DecryptionKeyAckPayload,
+    pub payload: SyncDecryptionKeyPayload,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct DecryptionKeyAckPayload {
+pub struct SyncDecryptionKeyPayload {
     pub decryption_key: String,
     pub session_id: SessionId,
     pub solve_timestamp: u64,
     pub ack_solve_timestamp: u64,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct DecryptionKeyAckResponse {
-    pub success: bool,
-}
-
-impl RpcParameter<AppState> for SignedDecryptionKeyAck {
-    type Response = DecryptionKeyAckResponse;
+impl RpcParameter<AppState> for SyncDecryptionKey {
+    type Response = ();
 
     fn method() -> &'static str {
-        "ack_decryption_key"
+        "sync_decryption_key"
     }
 
     async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
@@ -53,7 +48,7 @@ impl RpcParameter<AppState> for SignedDecryptionKeyAck {
         // TODO: Add logic to store validator logs
         // (Required in actual implementation for validators to verify leader behavior)
 
-        Ok(DecryptionKeyAckResponse { success: true })
+        Ok(())
     }
 }
 
@@ -72,7 +67,7 @@ pub fn broadcast_decryption_key_ack(
         .unwrap_or_default()
         .as_secs();
 
-    let payload = DecryptionKeyAckPayload {
+    let payload = SyncDecryptionKeyPayload {
         session_id,
         decryption_key,
         solve_timestamp,
@@ -85,14 +80,14 @@ pub fn broadcast_decryption_key_ack(
         .sign_message(&serialize_to_bincode(&payload).unwrap())
         .unwrap();
 
-    let parameter = SignedDecryptionKeyAck { signature, payload };
+    let parameter = SyncDecryptionKey { signature, payload };
 
     tokio::spawn(async move {
         if let Ok(rpc_client) = RpcClient::new() {
             let _ = rpc_client
                 .multicast(
                     all_key_generator_rpc_url_list,
-                    SignedDecryptionKeyAck::method(),
+                    SyncDecryptionKey::method(),
                     &parameter,
                     Id::Null,
                 )

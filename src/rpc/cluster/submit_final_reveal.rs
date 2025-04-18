@@ -9,12 +9,12 @@ use radius_sdk::{
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use super::{SignedDecryptionKeyAck, SubmitPartialKeyAck};
+use super::{SubmitPartialKeyAck, SyncDecryptionKey};
 use crate::rpc::{common::create_signature, prelude::*};
 
 // Message from leader to verifiers
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SignedFinalReveal {
+pub struct SubmitFinalReveal {
     pub signature: Signature,
     pub payload: FinalRevealPayload,
 }
@@ -24,7 +24,7 @@ pub struct SignedFinalReveal {
 pub struct FinalRevealPayload {
     pub session_id: SessionId,
     pub partial_keys: Vec<SubmitPartialKeyAck>,
-    pub decryption_ack: SignedDecryptionKeyAck,
+    pub sync_decryption_key: SyncDecryptionKey,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -32,11 +32,11 @@ pub struct RevealResponse {
     pub success: bool,
 }
 
-impl RpcParameter<AppState> for SignedFinalReveal {
+impl RpcParameter<AppState> for SubmitFinalReveal {
     type Response = RevealResponse;
 
     fn method() -> &'static str {
-        "final_reveal"
+        "submit_final_reveal"
     }
 
     async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
@@ -60,7 +60,7 @@ impl RpcParameter<AppState> for SignedFinalReveal {
 pub fn broadcast_final_reveal(
     session_id: SessionId,
     partial_keys: Vec<SubmitPartialKeyAck>,
-    decryption_ack: SignedDecryptionKeyAck,
+    sync_decryption_key: SyncDecryptionKey,
     _context: &AppState,
 ) -> Result<(), Error> {
     let all_key_generator_rpc_url_list =
@@ -69,20 +69,20 @@ pub fn broadcast_final_reveal(
     let payload = FinalRevealPayload {
         session_id,
         partial_keys,
-        decryption_ack,
+        sync_decryption_key,
     };
 
     // TODO: Add to make actual signature
     let signature = create_signature(&serialize_to_bincode(&payload).unwrap());
 
-    let parameter = SignedFinalReveal { signature, payload };
+    let parameter = SubmitFinalReveal { signature, payload };
 
     tokio::spawn(async move {
         if let Ok(rpc_client) = RpcClient::new() {
             let _ = rpc_client
                 .multicast(
                     all_key_generator_rpc_url_list,
-                    SignedFinalReveal::method(),
+                    SubmitFinalReveal::method(),
                     &parameter,
                     Id::Null,
                 )

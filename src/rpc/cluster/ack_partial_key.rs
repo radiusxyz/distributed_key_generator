@@ -19,6 +19,7 @@ use crate::{
     rpc::{common::create_signature, prelude::*},
 };
 
+// TODO: Change structure name to SyncPartialKey, SyncPartialKeyPayload
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SubmitPartialKeyAck {
     pub signature: Signature,
@@ -40,7 +41,7 @@ impl RpcParameter<AppState> for SubmitPartialKeyAck {
     type Response = ();
 
     fn method() -> &'static str {
-        "ack_partial_key"
+        "sync_partial_key"
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
