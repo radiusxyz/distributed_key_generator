@@ -12,7 +12,7 @@ Distributed Key Generator is an implementation of aggregated encryption/decrypti
 Execute the tests in single‑threaded mode:
 
 ```bash
-cargo test --test-threads=1
+cargo test -- --test-threads=1
 ```
 
 ## Contributing
