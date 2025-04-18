@@ -15,7 +15,7 @@ async fn test_integration_regsiter_nodes() {
     let mut temp_dirs = Vec::new();
 
     // 1. Start authority, leader and committee nodes
-    let (mut authority_process, authority_ports, authority_config) =
+    let (mut _authority_process, _authority_ports, _authority_config) =
         start_node(Role::Authority, 9, &mut temp_dirs).await;
 
     let (mut leader_process, leader_ports, leader_config) =

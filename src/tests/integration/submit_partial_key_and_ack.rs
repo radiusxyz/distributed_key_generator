@@ -18,7 +18,7 @@ async fn test_integration_submit_partial_key_and_ack() {
     let mut temp_dirs = Vec::new();
 
     // 1. Start authority, leader and committee nodes
-    let (mut authority_process, authority_ports, authority_config) =
+    let (mut _authority_process, _authority_ports, _authority_config) =
         start_node(Role::Authority, 9, &mut temp_dirs).await;
 
     let (mut leader_process, leader_ports, leader_config) =
@@ -50,7 +50,8 @@ async fn test_integration_submit_partial_key_and_ack() {
     );
 
     // 4. Generate partial key from committee
-    let (_, partial_key, partial_key_proof) = generate_partial_key_with_proof();
+    let (_, partial_key, partial_key_proof) =
+        generate_partial_key_with_proof(&committee_config).await;
 
     // Session ID for this test
     let session_id = SessionId::default();

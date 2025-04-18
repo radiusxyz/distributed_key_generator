@@ -48,9 +48,13 @@ impl RpcParameter<AppState> for SubmitPartialKeyAck {
         // let sender_address = verify_signature(&self.signature, &self.payload)?;
 
         info!(
-            "Received partial key ACK - session_id: {:?
+            "Received partial key ACK - sender:{:?}, receipent:{:?}, session_id: {:?
             }, index: {}, timestamp: {}",
-            self.payload.session_id, self.payload.index, self.payload.ack_timestamp
+            self.payload.partial_key_sender,
+            context.config().address(),
+            self.payload.session_id,
+            self.payload.index,
+            self.payload.ack_timestamp
         );
 
         // TODO: Leader verification (only leader can send ACK)

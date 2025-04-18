@@ -23,7 +23,7 @@ use tracing_subscriber::fmt;
 use crate::{
     config::Role,
     rpc::{
-        cluster::{GetKeyGeneratorList, PartialKeyPayload},
+        cluster::{GetKeyGeneratorList, GetSkdeParams, GetSkdeParamsResponse, PartialKeyPayload},
         common::create_signature,
     },
     types::{Config, ConfigOption},
@@ -372,13 +372,27 @@ pub async fn verify_node_registration(target_port: u16, base_port: u16) -> bool 
 }
 
 /// Generates a partial key and its proof using SKDE parameters
-pub fn generate_partial_key_with_proof() -> (
+pub async fn generate_partial_key_with_proof(
+    committee_config: &Config,
+) -> (
     skde::key_generation::SecretValue,
     skde::key_generation::PartialKey,
     skde::key_generation::PartialKeyProof,
 ) {
-    // Create SKDE parameters
-    let skde_params = create_skde_params();
+    let rpc_client = RpcClient::new().unwrap();
+
+    let skde_params: SkdeParams = {
+        let response: GetSkdeParamsResponse = rpc_client
+            .request(
+                &committee_config.leader_cluster_rpc_url().clone().unwrap(),
+                "get_skde_params",
+                &GetSkdeParams,
+                Id::Null,
+            )
+            .await
+            .unwrap();
+        response.into_skde_params()
+    };
 
     // Generate partial key
     let (secret_value, partial_key) = generate_partial_key(&skde_params).unwrap();
@@ -438,7 +452,7 @@ pub async fn submit_partial_key_to_leader(
     });
 
     // Submit partial key to leader node
-    let _: () = rpc_client
+    let _response: () = rpc_client
         .request(
             format!("http://127.0.0.1:{}", leader_port),
             "submit_partial_key",
