@@ -15,6 +15,9 @@ Execute the tests in single‑threaded mode:
 cargo test -- --test-threads=1
 ```
 
+If the tests don't exit, run the following command to kill all related processes:
+`pkill -f key-generator`
+
 ## Contributing
 We appreciate your contributions to our project. Visit [issues](https://github.com/radiusxyz/distributed_key_generation/issues) page to start with or refer to the [Contributing guide](https://github.com/radiusxyz/radius-docs-bbs/blob/main/docs/contributing_guide.md).
 
