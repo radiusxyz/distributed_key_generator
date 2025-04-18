@@ -4,9 +4,9 @@ use tracing::info;
 use crate::{
     tests::utils::{
         cleanup_processes, generate_partial_key_with_proof, init_test_environment, register_nodes,
-        start_leader_and_committee, submit_partial_key_to_leader, verify_mutual_registration,
+        start_node, submit_partial_key_to_leader, verify_mutual_registration,
     },
-    SessionId,
+    Role, SessionId,
 };
 
 #[tokio::test]
@@ -17,15 +17,15 @@ async fn test_integration_submit_partial_key_and_ack() {
     // Vector to manage temporary directories
     let mut temp_dirs = Vec::new();
 
-    // 1. Start leader and committee nodes
-    let (
-        mut leader_process,
-        leader_ports,
-        leader_config,
-        mut committee_process,
-        committee_ports,
-        committee_config,
-    ) = start_leader_and_committee(&mut temp_dirs).await;
+    // 1. Start authority, leader and committee nodes
+    let (mut authority_process, authority_ports, authority_config) =
+        start_node(Role::Authority, 9, &mut temp_dirs).await;
+
+    let (mut leader_process, leader_ports, leader_config) =
+        start_node(Role::Leader, 0, &mut temp_dirs).await;
+
+    let (mut committee_process, committee_ports, committee_config) =
+        start_node(Role::Committee, 1, &mut temp_dirs).await;
 
     // 2. Register nodes with each other
     register_nodes(

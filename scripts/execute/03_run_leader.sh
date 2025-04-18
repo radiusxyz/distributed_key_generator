@@ -31,6 +31,7 @@ internal_rpc_url = "http://127.0.0.1:7200"
 cluster_rpc_url = "http://127.0.0.1:7300"
 role = "leader"
 radius_foundation_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+authority_rpc_url = "http://127.0.0.1:6000"
 chain_type = "ethereum"
 partial_key_generation_cycle = 5
 partial_key_aggregation_cycle = 4

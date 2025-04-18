@@ -1,0 +1,30 @@
+# Set external rpc url
+external_rpc_url = "http://127.0.0.1:3000"
+
+# Set internal rpc url
+internal_rpc_url = "http://127.0.0.1:4000"
+
+# Set cluster rpc url
+cluster_rpc_url = "http://127.0.0.1:5000"
+
+# Set leader cluster rpc url
+# leader_cluster_rpc_url = None
+
+# Set authority rpc url (used by leader node at startup)
+# authority_rpc_url = None
+
+# Set node role (leader, committee, solver, verifier)
+# role = None
+
+# Set the radius foundation address
+radius_foundation_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+
+# Set the chain type (for verifying signature for foundation address)
+chain_type = "ethereum"
+
+# Set partial key generation cycle
+partial_key_generation_cycle = 5
+
+# Set partial key aggregation cycle
+partial_key_aggregation_cycle = 4
+

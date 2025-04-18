@@ -20,6 +20,8 @@ pub enum Role {
     Solver,
     /// Verifier node that monitors the network for Byzantine behavior
     Verifier,
+    /// Authority node that conducts the secure skde parameter setup
+    Authority,
 }
 
 impl std::fmt::Display for Role {
@@ -29,6 +31,7 @@ impl std::fmt::Display for Role {
             Role::Committee => write!(f, "committee"),
             Role::Solver => write!(f, "solver"),
             Role::Verifier => write!(f, "verifier"),
+            Role::Authority => write!(f, "authority"),
         }
     }
 }
@@ -42,6 +45,7 @@ impl std::str::FromStr for Role {
             "committee" => Ok(Role::Committee),
             "solver" => Ok(Role::Solver),
             "verifier" => Ok(Role::Verifier),
+            "authority" => Ok(Role::Authority),
             _ => Err(format!("Unknown role: {}", s)),
         }
     }
@@ -68,6 +72,10 @@ pub struct ConfigOption {
     #[doc = "Set the leader cluster rpc url (previously seed-cluster-rpc-url)"]
     #[clap(long = "leader-cluster-rpc-url")]
     pub leader_cluster_rpc_url: Option<String>,
+
+    #[doc = "Set the authority rpc url (used by leader node at startup)"]
+    #[clap(long = "authority-rpc-url")]
+    pub authority_rpc_url: Option<String>,
 
     #[doc = "Set the node role (leader, committee, solver, verifier)"]
     #[clap(long = "role")]
@@ -99,6 +107,7 @@ impl Default for ConfigOption {
             internal_rpc_url: Some(DEFAULT_INTERNAL_RPC_URL.into()),
             cluster_rpc_url: Some(DEFAULT_CLUSTER_RPC_URL.into()),
             leader_cluster_rpc_url: None,
+            authority_rpc_url: None,
             role: None,
             radius_foundation_address: Some(DEFAULT_RADIUS_FOUNDATION_ADDRESS.into()),
             chain_type: Some(DEFAULT_CHAIN_TYPE.into()),
@@ -126,6 +135,16 @@ impl ConfigOption {
             &mut toml_string,
             "leader_cluster_rpc_url",
             &self.leader_cluster_rpc_url,
+        );
+
+        set_toml_comment(
+            &mut toml_string,
+            "Set authority rpc url (used by leader node at startup)",
+        );
+        set_toml_name_value(
+            &mut toml_string,
+            "authority_rpc_url",
+            &self.authority_rpc_url,
         );
 
         set_toml_comment(
@@ -184,6 +203,10 @@ impl ConfigOption {
         if other.leader_cluster_rpc_url.is_some() {
             self.leader_cluster_rpc_url
                 .clone_from(&other.leader_cluster_rpc_url);
+        }
+
+        if other.authority_rpc_url.is_some() {
+            self.authority_rpc_url.clone_from(&other.authority_rpc_url);
         }
 
         if other.role.is_some() {

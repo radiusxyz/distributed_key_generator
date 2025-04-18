@@ -123,6 +123,7 @@ pub fn create_config_from_dir(temp_path: &PathBuf) -> Config {
     // Create ConfigOption with path
     let mut config_option = ConfigOption {
         path: Some(temp_path.clone()),
+        authority_rpc_url: None,
         external_rpc_url: None,
         internal_rpc_url: None,
         cluster_rpc_url: None,
@@ -139,7 +140,7 @@ pub fn create_config_from_dir(temp_path: &PathBuf) -> Config {
 }
 
 /// Start a test node with specified role
-pub fn start_node(
+pub fn spawn_node_process(
     role: Role,
     index: usize,
     temp_dirs: &mut Vec<TempDir>,
@@ -151,11 +152,31 @@ pub fn start_node(
     let external_port: u16 = (7200 + index).try_into().unwrap();
     let cluster_port: u16 = (7300 + index).try_into().unwrap();
 
-    // Create independent temporary directory
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let temp_path = temp_dir.path().to_path_buf();
+    // Authority 노드는 프로젝트 루트의 /data 디렉토리 사용, 다른 노드는 임시 디렉토리 사용
+    let (temp_path, temp_dir) = if role == Role::Authority {
+        // 프로젝트 루트 디렉토리 찾기
+        let current_dir = std::env::current_dir().expect("Failed to get current directory");
+        let project_root = current_dir.clone(); // 프로젝트 루트로 가정
 
-    info!("Created {} node directory: {:?}", role, temp_path);
+        // data 디렉토리 생성
+        let data_path = project_root.join("data/authority");
+        std::fs::create_dir_all(&data_path).expect("Failed to create data directory");
+
+        info!(
+            "Created {} node directory at project root: {:?}",
+            role, data_path
+        );
+        (data_path, None) // 임시 디렉토리가 아니므로 None 반환
+    } else {
+        // 기존과 같이 임시 디렉토리 생성
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let temp_path = temp_dir.path().to_path_buf();
+
+        info!("Created {} node directory: {:?}", role, temp_path);
+        (temp_path, Some(temp_dir))
+    };
+
+    let authority_rpc_url = format!("authority_rpc_url = \"http://127.0.0.1:6000\"");
 
     // Create Config.toml file
     let config_path = temp_path.join("Config.toml");
@@ -177,6 +198,7 @@ chain_type = "ethereum"
 partial_key_generation_cycle = 5
 partial_key_aggregation_cycle = 4
 {}
+{}
 "#,
         role,
         index,
@@ -184,7 +206,8 @@ partial_key_aggregation_cycle = 4
         internal_port,
         cluster_port,
         role.to_string().to_lowercase(),
-        leader_url
+        leader_url,
+        authority_rpc_url
     );
 
     std::fs::write(&config_path, config_content).expect("Failed to write Config.toml");
@@ -223,7 +246,9 @@ partial_key_aggregation_cycle = 4
         .expect("Failed to start node process");
 
     // Save temp directory (will be cleaned up after test)
-    temp_dirs.push(temp_dir);
+    if let Some(dir) = temp_dir {
+        temp_dirs.push(dir);
+    }
 
     // Wait for node to start
     info!(
@@ -231,7 +256,7 @@ partial_key_aggregation_cycle = 4
         role,
         child.id()
     );
-    sleep(Duration::from_secs(1));
+    sleep(Duration::from_secs(2));
 
     (
         child,
@@ -450,34 +475,24 @@ pub fn init_test_environment(test_name: &str) {
     log_test_start(test_name);
 }
 
-/// Start leader and committee nodes
-pub async fn start_leader_and_committee(
+/// Start a single node with specified role and index
+pub async fn start_node(
+    role: Role,
+    index: usize,
     temp_dirs: &mut Vec<TempDir>,
 ) -> (
-    std::process::Child,  // leader_process
-    TestPorts,            // leader_ports
-    crate::types::Config, // leader_config
-    std::process::Child,  // committee_process
-    TestPorts,            // committee_ports
-    crate::types::Config, // committee_config
+    std::process::Child,  // node_process
+    TestPorts,            // node_ports
+    crate::types::Config, // node_config
 ) {
-    // Start nodes
-    let (leader_process, leader_ports, leader_config) = start_node(Role::Leader, 0, temp_dirs);
-    let (committee_process, committee_ports, committee_config) =
-        start_node(Role::Committee, 1, temp_dirs);
+    // Start node
+    let (node_process, node_ports, node_config) = spawn_node_process(role, index, temp_dirs);
 
     info!("Waiting for node initialization");
     // Wait for node initialization
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
-    (
-        leader_process,
-        leader_ports,
-        leader_config,
-        committee_process,
-        committee_ports,
-        committee_config,
-    )
+    (node_process, node_ports, node_config)
 }
 
 /// Register nodes with each other

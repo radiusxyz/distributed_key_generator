@@ -6,9 +6,12 @@ use std::{
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 
-use crate::types::{
-    config::{config_option::ConfigOption, ConfigError},
-    CONFIG_FILE_NAME, SIGNING_KEY,
+use crate::{
+    skde_params::default_skde_params,
+    types::{
+        config::{config_option::ConfigOption, ConfigError},
+        CONFIG_FILE_NAME, SIGNING_KEY,
+    },
 };
 
 #[derive(Debug, Deserialize, Parser, Serialize)]
@@ -102,5 +105,28 @@ impl ConfigPath {
 
         tracing::info!("Config directory at {:?}", self.as_ref());
         Ok(())
+    }
+    /// Initialize SKDE parameter file with default values if it doesn't exist.
+    /// This is only used in authority nodes.
+    ///
+    /// TODO: Add proper error handling instead of unwrap().
+    pub fn init_skde_params_if_missing(&self) {
+        let skde_path = self.as_ref().join("skde_params.json");
+
+        // Skip if the file already exists
+        if skde_path.exists() {
+            return;
+        }
+
+        // Generate SKDE parameters
+        let default_params = default_skde_params();
+
+        // Serialize to JSON (POC: unwrap used)
+        let serialized = serde_json::to_string_pretty(&default_params).unwrap(); // TODO: Add proper error handling
+
+        // Write to file (POC: unwrap used)
+        fs::write(&skde_path, serialized).unwrap(); // TODO
+
+        tracing::info!("Default SKDE params written to {:?}", skde_path);
     }
 }

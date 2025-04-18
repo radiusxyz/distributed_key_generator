@@ -50,11 +50,15 @@ impl PartialKeyAddressList {
         self.0.len()
     }
 
-    pub fn initialize(key_id: SessionId) -> Result<(), KvStoreError> {
-        if Self::get(key_id).is_err() {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn initialize(session_id: SessionId) -> Result<(), KvStoreError> {
+        if Self::get(session_id).is_err() {
             let partial_key_list = PartialKeyAddressList::default();
 
-            partial_key_list.put(key_id)?;
+            partial_key_list.put(session_id)?;
         }
 
         Ok(())
@@ -80,6 +84,12 @@ impl PartialKeyAddressList {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Model, Default)]
 #[kvstore(key())]
 pub struct SessionId(u64);
+
+impl From<u64> for SessionId {
+    fn from(value: u64) -> Self {
+        SessionId(value)
+    }
+}
 
 impl SessionId {
     pub fn default() -> Self {

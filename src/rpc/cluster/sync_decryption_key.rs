@@ -77,7 +77,7 @@ pub fn broadcast_decryption_key_ack(
     let signature = context
         .config()
         .signer()
-        .sign_message(&serialize_to_bincode(&payload).unwrap())
+        .sign_message(serialize_to_bincode(&payload).unwrap())
         .unwrap();
 
     let parameter = SyncDecryptionKey { signature, payload };

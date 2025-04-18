@@ -23,7 +23,9 @@ pub enum Error {
     // Data processing errors
     HexDecodeError,
 
-    // Other errors
+    InvalidParams(String),   // malformed, missing fields
+    UnauthorizedParamAccess, // follower or leader tried to call authority logic
+
     NotFound,
 }
 

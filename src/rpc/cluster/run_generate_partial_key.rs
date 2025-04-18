@@ -17,6 +17,8 @@ pub struct RunGeneratePartialKey {
     pub session_id: SessionId,
 }
 
+// TODO: Getting partial key from partial key storage
+// i.e. precomputed partial key list is required for each committee member
 impl RpcParameter<AppState> for RunGeneratePartialKey {
     type Response = ();
 

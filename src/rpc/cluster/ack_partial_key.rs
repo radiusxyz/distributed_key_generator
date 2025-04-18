@@ -41,7 +41,7 @@ impl RpcParameter<AppState> for SubmitPartialKeyAck {
     type Response = ();
 
     fn method() -> &'static str {
-        "sync_partial_key"
+        "ack_partial_key"
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {

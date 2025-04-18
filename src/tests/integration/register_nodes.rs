@@ -1,25 +1,28 @@
-use crate::tests::utils::{
-    cleanup_processes, init_test_environment, register_nodes, start_leader_and_committee,
-    verify_mutual_registration,
+use crate::{
+    tests::utils::{
+        cleanup_processes, init_test_environment, register_nodes, start_node,
+        verify_mutual_registration,
+    },
+    Role,
 };
 
 #[tokio::test]
-async fn test_integration_two_nodes_registration() {
+async fn test_integration_regsiter_nodes() {
     // Initialize test environment
     init_test_environment("node registration test");
 
     // Vector to manage temporary directories
     let mut temp_dirs = Vec::new();
 
-    // 1. Start leader and committee nodes
-    let (
-        mut leader_process,
-        leader_ports,
-        leader_config,
-        mut committee_process,
-        committee_ports,
-        committee_config,
-    ) = start_leader_and_committee(&mut temp_dirs).await;
+    // 1. Start authority, leader and committee nodes
+    let (mut authority_process, authority_ports, authority_config) =
+        start_node(Role::Authority, 9, &mut temp_dirs).await;
+
+    let (mut leader_process, leader_ports, leader_config) =
+        start_node(Role::Leader, 0, &mut temp_dirs).await;
+
+    let (mut committee_process, committee_ports, committee_config) =
+        start_node(Role::Committee, 1, &mut temp_dirs).await;
 
     // 2. Verify nodes are not registered to each other yet
     let (leader_found, committee_found) =

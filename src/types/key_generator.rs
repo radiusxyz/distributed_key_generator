@@ -57,7 +57,7 @@ impl KeyGeneratorList {
     }
 
     pub fn remove(&mut self, key_generator: &KeyGenerator) {
-        self.0.remove(&key_generator);
+        self.0.remove(key_generator);
     }
 
     pub fn iter(&self) -> Iter<'_, KeyGenerator> {
@@ -65,7 +65,7 @@ impl KeyGeneratorList {
     }
 
     pub fn contains(&self, key_generator: &KeyGenerator) -> bool {
-        self.0.contains(&key_generator)
+        self.0.contains(key_generator)
     }
 
     pub fn is_key_generator_in_cluster(&self, address: &Address) -> bool {
