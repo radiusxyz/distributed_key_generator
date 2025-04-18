@@ -12,7 +12,6 @@ use skde::{
     key_aggregation::{aggregate_key, AggregatedKey as SkdeAggregatedKey},
 };
 use tokio::time::sleep;
-use tracing::info;
 
 use crate::{
     rpc::cluster::{RunGeneratePartialKey, SyncAggregatedKey},

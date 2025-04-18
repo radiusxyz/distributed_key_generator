@@ -187,6 +187,8 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
         .register_rpc_method::<cluster::SyncKeyGenerator>()?
         .register_rpc_method::<cluster::SyncAggregatedKey>()?
         .register_rpc_method::<cluster::SyncPartialKey>()?
+        .register_rpc_method::<cluster::SubmitPartialKey>()?
+        .register_rpc_method::<cluster::SubmitPartialKeyAck>()?
         .register_rpc_method::<cluster::RunGeneratePartialKey>()?
         .init(cluster_rpc_url.clone())
         .await

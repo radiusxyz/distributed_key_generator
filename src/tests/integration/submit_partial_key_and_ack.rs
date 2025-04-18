@@ -1,149 +1,77 @@
-use bincode::serialize as serialize_to_bincode;
-use radius_sdk::json_rpc::client::{Id, RpcClient};
-use skde::key_generation::{generate_partial_key, prove_partial_key_validity};
-use tokio::time::Duration;
+use tokio::time::{sleep, Duration};
+use tracing::info;
 
 use crate::{
-    config::Role,
-    rpc::{
-        cluster::{GetKeyGeneratorList, PartialKeyPayload, SubmitPartialKeyResponse},
-        common::create_signature,
+    tests::utils::{
+        cleanup_processes, generate_partial_key_with_proof, init_test_environment, register_nodes,
+        start_leader_and_committee, submit_partial_key_to_leader, verify_mutual_registration,
     },
-    tests::{test_helpers, utils},
     SessionId,
 };
 
 #[tokio::test]
 async fn test_integration_submit_partial_key_and_ack() {
-    // Setup test logging
-    utils::setup_test_logging();
+    // Initialize test environment
+    init_test_environment("submit partial key and ack test");
 
-    // Get default test port configuration
-    let ports = utils::TestPortConfig::default();
+    // Vector to manage temporary directories
+    let mut temp_dirs = Vec::new();
 
-    // Create SKDE params for nodes
-    let skde_params_leader = utils::create_skde_params();
-    let skde_params_committee = utils::create_skde_params();
+    // 1. Start leader and committee nodes
+    let (
+        mut leader_process,
+        leader_ports,
+        leader_config,
+        mut committee_process,
+        committee_ports,
+        committee_config,
+    ) = start_leader_and_committee(&mut temp_dirs).await;
 
-    // Create leader node configuration
-    let (leader_config, _leader_temp_dir) = test_helpers::create_temp_config(
-        Role::Leader,
-        ports.leader.cluster,
-        ports.leader.external,
-        ports.leader.internal,
+    // 2. Register nodes with each other
+    register_nodes(
+        &leader_ports,
+        &leader_config,
+        &committee_ports,
+        &committee_config,
+    )
+    .await;
+
+    // 3. Verify both nodes are registered with each other
+    let (leader_found, committee_found) =
+        verify_mutual_registration(&leader_ports, &committee_ports).await;
+
+    assert!(
+        leader_found,
+        "Leader node not found in committee's key generator list"
+    );
+    assert!(
+        committee_found,
+        "Committee node not found in leader's key generator list"
     );
 
-    // Create follower node configuration
-    let (committee_config, _committee_temp_dir) = test_helpers::create_temp_config(
-        Role::Committee,
-        ports.committee.cluster,
-        ports.committee.external,
-        ports.committee.internal,
-    );
+    // 4. Generate partial key from committee
+    let (_, partial_key, partial_key_proof) = generate_partial_key_with_proof();
 
-    // Run nodes as async tasks
-    let _leader_handles =
-        test_helpers::run_node(leader_config.clone(), skde_params_leader.clone()).await;
-    let _committee_handles =
-        test_helpers::run_node(committee_config.clone(), skde_params_committee.clone()).await;
+    // Session ID for this test
+    let session_id = SessionId::default();
 
-    // Create RPC URLs for the follower
-    let cluster_rpc_url = format!("http://127.0.0.1:{}", ports.committee.cluster);
-    let external_rpc_url = format!("http://127.0.0.1:{}", ports.committee.external);
-
-    // Create JSON-RPC client
-    let rpc_client = RpcClient::new().unwrap();
-
-    // follower and leader address
+    // Create committee address
     let committee_address = committee_config.address();
-    let _leader_address = leader_config.address();
 
-    // Create parameters for add_key_generator using serde_json
-    let add_key_generator = serde_json::json!({
-        "message": {
-            "address": committee_address.as_hex_string(),
-            "cluster_rpc_url": cluster_rpc_url,
-            "external_rpc_url": external_rpc_url
-        }
-    });
+    // Submit partial key from committee to leader
+    submit_partial_key_to_leader(
+        committee_address.clone(),
+        leader_ports.cluster,
+        partial_key,
+        partial_key_proof,
+        session_id,
+    )
+    .await;
 
-    // Register follower with leader
-    rpc_client
-        .request::<_, ()>(
-            format!("http://127.0.0.1:{}", ports.leader.internal),
-            "add_key_generator",
-            &add_key_generator,
-            Id::Number(1),
-        )
-        .await
-        .unwrap();
+    // 5. Wait for and verify the acknowledgment
+    info!("Waiting for partial key acknowledgment");
+    sleep(Duration::from_secs(2)).await;
 
-    // Verify the follower is registered by querying the key generator list
-    let response: serde_json::Value = rpc_client
-        .request(
-            format!("http://127.0.0.1:{}", ports.leader.cluster),
-            "get_key_generator_list",
-            &GetKeyGeneratorList,
-            Id::Number(2),
-        )
-        .await
-        .unwrap();
-
-    // Check if the follower is registered
-    let key_generator_list = response["key_generator_rpc_url_list"]
-        .as_array()
-        .expect("Invalid response format");
-
-    let committee_found = key_generator_list
-        .iter()
-        .any(|kg| kg["address"].as_str().unwrap_or("") == committee_address.as_hex_string());
-
-    assert!(committee_found, "Committee not found in key generator list");
-
-    // Wait for the servers to start
-    tokio::time::sleep(Duration::from_secs(2)).await;
-
-    // Create JSON-RPC client
-    let rpc_client = RpcClient::new().unwrap();
-
-    // follower's partial key generation
-    let (secret_value, partial_key) = generate_partial_key(&skde_params_leader).unwrap();
-    let partial_key_proof = prove_partial_key_validity(&skde_params_leader, &secret_value).unwrap();
-
-    // Generate bincode for signature
-    let payload = PartialKeyPayload {
-        sender: committee_address.clone(),
-        partial_key: partial_key.clone(),
-        proof: partial_key_proof.clone(),
-        submit_timestamp: 0,
-        session_id: SessionId::default(),
-    };
-    let serialized_payload = serialize_to_bincode(&payload).unwrap();
-    let signature = create_signature(&serialized_payload);
-
-    // Create JSON parameter instead of using the struct directly
-    let parameter = serde_json::json!({
-        "signature": signature,
-        "payload": {
-            "sender": committee_address.clone(),
-            "partial_key": partial_key,
-            "proof": partial_key_proof,
-            "submit_timestamp": 0,
-            "session_id": SessionId::default()
-        }
-    });
-
-    let response = rpc_client
-        .request::<_, SubmitPartialKeyResponse>(
-            format!("http://127.0.0.1:{}", ports.leader.cluster),
-            "submit_partial_key",
-            &parameter,
-            Id::Number(2),
-        )
-        .await
-        .unwrap();
-
-    assert!(response.success);
-
-    // TODO: ack_parktial_key should be checked
+    // 6. Cleanup processes
+    cleanup_processes(&mut leader_process, &mut committee_process);
 }

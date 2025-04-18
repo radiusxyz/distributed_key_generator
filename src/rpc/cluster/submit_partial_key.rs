@@ -1,4 +1,3 @@
-use bincode::serialize as serialize_to_bincode;
 use radius_sdk::{
     json_rpc::server::{RpcError, RpcParameter},
     signature::{Address, Signature},
@@ -9,11 +8,7 @@ use tracing::info;
 
 use crate::{
     error::KeyGenerationError,
-    rpc::{
-        cluster::{broadcast_partial_key_ack, PartialKeyAckPayload, SubmitPartialKeyAck},
-        common::{create_signature, verify_signature},
-        prelude::*,
-    },
+    rpc::{cluster::broadcast_partial_key_ack, common::verify_signature, prelude::*},
     types::SessionId,
 };
 
@@ -32,13 +27,8 @@ pub struct PartialKeyPayload {
     pub session_id: SessionId,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SubmitPartialKeyResponse {
-    pub success: bool,
-}
-
 impl RpcParameter<AppState> for SubmitPartialKey {
-    type Response = SubmitPartialKeyResponse;
+    type Response = ();
 
     fn method() -> &'static str {
         "submit_partial_key"
@@ -58,7 +48,6 @@ impl RpcParameter<AppState> for SubmitPartialKey {
 
         // Check if key generator is registered in the cluster
         let key_generator_list = KeyGeneratorList::get()?;
-        info!("Key generator list: {:?}", key_generator_list);
         if !key_generator_list.is_key_generator_in_cluster(&sender_address) {
             return Err(RpcError::from(KeyGenerationError::NotRegisteredGenerator(
                 sender_address.as_hex_string(),
@@ -94,6 +83,6 @@ impl RpcParameter<AppState> for SubmitPartialKey {
             &context,
         );
 
-        Ok(SubmitPartialKeyResponse { success: true })
+        Ok(())
     }
 }

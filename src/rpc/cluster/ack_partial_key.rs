@@ -14,7 +14,10 @@ use skde::key_generation::{
 };
 use tracing::info;
 
-use crate::rpc::{common::create_signature, prelude::*};
+use crate::{
+    error::KeyGenerationError,
+    rpc::{common::create_signature, prelude::*},
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SubmitPartialKeyAck {
@@ -32,12 +35,6 @@ pub struct PartialKeyAckPayload {
     pub submit_timestamp: u64,
     pub ack_timestamp: u64,
 }
-
-// Response is not used in this implementation
-// #[derive(Clone, Debug, Deserialize, Serialize)]
-// pub struct PartialKeyAckResponse {
-//     pub success: bool,
-// }
 
 impl RpcParameter<AppState> for SubmitPartialKeyAck {
     type Response = ();
@@ -64,12 +61,6 @@ impl RpcParameter<AppState> for SubmitPartialKeyAck {
             return Ok(());
         }
 
-        tracing::info!(
-            "Ack Partial Key - session_id: {:?}, address: {:?}",
-            self.payload.session_id,
-            self.payload.partial_key_sender.as_hex_string(),
-        );
-
         PartialKeyAddressList::initialize(self.payload.session_id)?;
 
         let is_valid = verify_partial_key_validity(
@@ -80,8 +71,12 @@ impl RpcParameter<AppState> for SubmitPartialKeyAck {
         .unwrap();
 
         if !is_valid {
-            // Should return an error?
-            return Ok(());
+            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+                format!(
+                    "sender: {:?}, partial_key: {:?}",
+                    self.payload.partial_key_sender, self.payload.partial_key
+                ),
+            )));
         }
 
         // if the sender is incluided in
@@ -89,8 +84,8 @@ impl RpcParameter<AppState> for SubmitPartialKeyAck {
             list.insert(self.payload.partial_key_sender.clone());
         })?;
 
-        // let partial_key = PartialKey::new(self.skde_partial_key.clone());
-        // partial_key.put(self.key_id, &self.address)?;
+        let partial_key = PartialKey::new(self.payload.partial_key);
+        partial_key.put(self.payload.session_id, &self.payload.partial_key_sender)?;
 
         Ok(())
     }
