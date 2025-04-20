@@ -66,8 +66,6 @@ impl RpcParameter<AppState> for SubmitPartialKeyAck {
             return Ok(());
         }
 
-        PartialKeyAddressList::initialize(self.payload.session_id)?;
-
         let is_valid = verify_partial_key_validity(
             context.skde_params(),
             self.payload.partial_key.clone(),
@@ -83,6 +81,8 @@ impl RpcParameter<AppState> for SubmitPartialKeyAck {
                 ),
             )));
         }
+
+        PartialKeyAddressList::initialize(self.payload.session_id)?;
 
         // if the sender is incluided in
         PartialKeyAddressList::apply(self.payload.session_id, |list| {

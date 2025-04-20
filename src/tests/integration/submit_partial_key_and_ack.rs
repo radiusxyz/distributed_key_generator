@@ -3,8 +3,8 @@ use tracing::info;
 
 use crate::{
     tests::utils::{
-        cleanup_processes, generate_partial_key_with_proof, init_test_environment, register_nodes,
-        start_node, submit_partial_key_to_leader, verify_mutual_registration,
+        cleanup_all_processes, generate_partial_key_with_proof, init_test_environment,
+        register_nodes, start_node, submit_partial_key_to_leader, verify_mutual_registration,
     },
     Role, SessionId,
 };
@@ -18,7 +18,7 @@ async fn test_integration_submit_partial_key_and_ack() {
     let mut temp_dirs = Vec::new();
 
     // 1. Start authority, leader and committee nodes
-    let (mut _authority_process, _authority_ports, _authority_config) =
+    let (mut authority_process, _authority_ports, _authority_config) =
         start_node(Role::Authority, 9, &mut temp_dirs).await;
 
     let (mut leader_process, leader_ports, leader_config) =
@@ -74,5 +74,10 @@ async fn test_integration_submit_partial_key_and_ack() {
     sleep(Duration::from_secs(2)).await;
 
     // 6. Cleanup processes
-    cleanup_processes(&mut leader_process, &mut committee_process);
+    let mut processes = vec![
+        &mut authority_process,
+        &mut leader_process,
+        &mut committee_process,
+    ];
+    cleanup_all_processes(&mut processes);
 }

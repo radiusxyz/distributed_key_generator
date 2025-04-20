@@ -1,6 +1,6 @@
 use crate::{
     tests::utils::{
-        cleanup_processes, init_test_environment, register_nodes, start_node,
+        cleanup_all_processes, init_test_environment, register_nodes, start_node,
         verify_mutual_registration,
     },
     Role,
@@ -15,7 +15,7 @@ async fn test_integration_regsiter_nodes() {
     let mut temp_dirs = Vec::new();
 
     // 1. Start authority, leader and committee nodes
-    let (mut _authority_process, _authority_ports, _authority_config) =
+    let (mut authority_process, _authority_ports, _authority_config) =
         start_node(Role::Authority, 9, &mut temp_dirs).await;
 
     let (mut leader_process, leader_ports, leader_config) =
@@ -54,5 +54,10 @@ async fn test_integration_regsiter_nodes() {
     );
 
     // 5. Cleanup processes
-    cleanup_processes(&mut leader_process, &mut committee_process);
+    let mut processes = vec![
+        &mut authority_process,
+        &mut leader_process,
+        &mut committee_process,
+    ];
+    cleanup_all_processes(&mut processes);
 }

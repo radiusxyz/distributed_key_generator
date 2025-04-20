@@ -32,8 +32,6 @@ impl RpcParameter<AppState> for SyncPartialKey {
                 self.address.as_hex_string(),
             );
 
-            PartialKeyAddressList::initialize(self.session_id)?;
-
             let is_valid = verify_partial_key_validity(
                 context.skde_params(),
                 self.skde_partial_key.clone(),
@@ -44,6 +42,8 @@ impl RpcParameter<AppState> for SyncPartialKey {
             if !is_valid {
                 return Ok(());
             }
+
+            PartialKeyAddressList::initialize(self.session_id)?;
 
             PartialKeyAddressList::apply(self.session_id, |list| {
                 list.insert(self.address.clone());

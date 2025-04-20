@@ -539,17 +539,12 @@ pub async fn verify_mutual_registration(
     (leader_found, committee_found)
 }
 
-/// Clean up processes
-pub fn cleanup_processes(
-    leader_process: &mut std::process::Child,
-    committee_process: &mut std::process::Child,
-) {
-    info!("Test complete, cleaning up processes");
-    if let Err(e) = leader_process.kill() {
-        info!("Failed to kill leader process: {:?}", e);
-    }
-
-    if let Err(e) = committee_process.kill() {
-        info!("Failed to kill committee process: {:?}", e);
+/// Clean up multiple processes
+pub fn cleanup_all_processes(processes: &mut Vec<&mut std::process::Child>) {
+    info!("Test complete, cleaning up all processes");
+    for process in processes {
+        if let Err(e) = process.kill() {
+            info!("Failed to kill process (PID: {}): {:?}", process.id(), e);
+        }
     }
 }
