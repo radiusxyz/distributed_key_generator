@@ -11,6 +11,7 @@ use super::{Config, Role};
 use crate::rpc::{
     authority::{GetAuthorizedSkdeParams, GetAuthorizedSkdeParamsResponse},
     cluster::{GetSkdeParams, GetSkdeParamsResponse},
+    solver,
 };
 
 async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {

@@ -30,7 +30,9 @@ pub struct Config {
     external_rpc_url: String,
     internal_rpc_url: String,
     cluster_rpc_url: String,
+    solver_rpc_url: String,
     leader_cluster_rpc_url: Option<String>,
+    leader_solver_rpc_url: Option<String>,
     authority_rpc_url: String,
     role: Role,
 
@@ -151,7 +153,9 @@ impl Config {
             external_rpc_url: merged_config_option.external_rpc_url.unwrap(),
             internal_rpc_url: merged_config_option.internal_rpc_url.unwrap(),
             cluster_rpc_url: merged_config_option.cluster_rpc_url.unwrap(),
+            solver_rpc_url: merged_config_option.solver_rpc_url.unwrap(),
             leader_cluster_rpc_url: merged_config_option.leader_cluster_rpc_url.clone(),
+            leader_solver_rpc_url: merged_config_option.leader_solver_rpc_url.clone(),
             authority_rpc_url: merged_config_option.authority_rpc_url.unwrap(),
             role,
             signer,
@@ -215,8 +219,16 @@ impl Config {
         &self.cluster_rpc_url
     }
 
+    pub fn solver_rpc_url(&self) -> &str {
+        &self.solver_rpc_url
+    }
+
     pub fn leader_cluster_rpc_url(&self) -> &Option<String> {
         &self.leader_cluster_rpc_url
+    }
+
+    pub fn leader_solver_rpc_url(&self) -> &Option<String> {
+        &self.leader_solver_rpc_url
     }
 
     pub fn authority_rpc_url(&self) -> &String {

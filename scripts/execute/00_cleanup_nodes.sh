@@ -18,37 +18,32 @@ lsof -i :7100 -i :7200 -i :7300 -i :7101 -i :7201 -i :7301 || echo "No processes
 NODE1_DATA_PATH="$PROJECT_ROOT_PATH/data/node1"
 NODE2_DATA_PATH="$PROJECT_ROOT_PATH/data/node2"
 AUTHORITY_DATA_PATH="$PROJECT_ROOT_PATH/data/authority"
+SOLVER_DATA_PATH="$PROJECT_ROOT_PATH/data/solver"
 
-if [ ! -d "$NODE1_DATA_PATH" ] && [ ! -d "$NODE2_DATA_PATH" ] && [ ! -d "$AUTHORITY_DATA_PATH" ]; then
+if [ ! -d "$NODE1_DATA_PATH" ] && [ ! -d "$NODE2_DATA_PATH" ] && [ ! -d "$SOLVER_DATA_PATH" ] && [ ! -d "$AUTHORITY_DATA_PATH" ]; then
   echo "No nodes found to clean up."
   exit 0
 fi
 
 # Check if nodes are running and stop them
-echo "Stopping any remaining node processes..."
-if pgrep -f "$NODE1_DATA_PATH/key-generator" > /dev/null; then
-  echo "Node 1 (Leader) is running. Stopping it..."
-  pkill -f "$NODE1_DATA_PATH/key-generator"
-  echo "Node 1 stopped."
-else
-  echo "Node 1 is not running."
-fi
+stop_node_process() {
+  local NODE_PATH=$1
+  local NODE_NAME=$2
+  local BINARY_NAME=$3
 
-if pgrep -f "$NODE2_DATA_PATH/key-generator" > /dev/null; then
-  echo "Node 2 (Committee) is running. Stopping it..."
-  pkill -f "$NODE2_DATA_PATH/key-generator"
-  echo "Node 2 stopped."
-else
-  echo "Node 2 is not running."
-fi
+  if pgrep -f "$NODE_PATH/$BINARY_NAME" > /dev/null; then
+    echo "$NODE_NAME is running. Stopping it..."
+    pkill -f "$NODE_PATH/$BINARY_NAME"
+    echo "$NODE_NAME stopped."
+  else
+    echo "$NODE_NAME is not running."
+  fi
+}
 
-if pgrep -f "$AUTHORITY_DATA_PATH/authority_node" > /dev/null; then
-  echo "authority_node is running. Stopping it..."
-  pkill -f "$AUTHORITY_DATA_PATH/authority_node"
-  echo "authority_node stopped."
-else
-  echo "authority_node is not running."
-fi
+stop_node_process "$NODE1_DATA_PATH" "Node 1 (Leader)" "key-generator"
+stop_node_process "$NODE2_DATA_PATH" "Node 2 (Committee)" "key-generator"
+stop_node_process "$SOLVER_DATA_PATH" "Solver Node" "key-generator"
+stop_node_process "$AUTHORITY_DATA_PATH" "Authority Node" "authority_node"
 
 # Remove the data directories
 echo "Removing node data directories..."
@@ -60,6 +55,11 @@ fi
 if [ -d "$NODE2_DATA_PATH" ]; then
   rm -rf "$NODE2_DATA_PATH"
   echo "Removed $NODE2_DATA_PATH"
+fi
+
+if [ -d "$SOLVER_DATA_PATH" ]; then
+  rm -rf "$SOLVER_DATA_PATH"
+  echo "Removed $SOLVER_DATA_PATH"
 fi
 
 if [ -d "$AUTHORITY_DATA_PATH" ]; then
