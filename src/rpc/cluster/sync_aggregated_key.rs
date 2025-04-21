@@ -27,12 +27,8 @@ impl RpcParameter<AppState> for SyncAggregatedKey {
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let skde_params = context.skde_params().clone();
 
-        let partial_key_address_list =
-            PartialKeyAddressList::get_or(self.session_id, PartialKeyAddressList::default)?;
+        let skde_aggregated_key = self.aggregated_key;
 
-        let partial_key_list = partial_key_address_list.get_partial_key_list(self.session_id)?;
-
-        let skde_aggregated_key = aggregate_key(&skde_params, &partial_key_list);
         let aggregated_key = AggregatedKey::new(skde_aggregated_key.clone());
         aggregated_key.put(self.session_id)?;
 

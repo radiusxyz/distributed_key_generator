@@ -139,6 +139,8 @@ async fn main() -> Result<(), Error> {
             if config.is_leader() {
                 tracing::info!("Starting leader node operations...");
                 run_single_key_generator(app_state.clone());
+            } else {
+                // run partial key routine
             }
 
             // Initialize the internal RPC server
