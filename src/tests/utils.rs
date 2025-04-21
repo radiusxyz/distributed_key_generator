@@ -3,7 +3,7 @@ use std::{
     process::{Child, Command},
     str::FromStr,
     thread::sleep,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 use bincode::serialize as serialize_to_bincode;
@@ -24,7 +24,7 @@ use crate::{
     config::Role,
     rpc::{
         cluster::{GetKeyGeneratorList, GetSkdeParams, GetSkdeParamsResponse, PartialKeyPayload},
-        common::create_signature,
+        common::{create_signature, get_current_timestamp},
     },
     types::{Config, ConfigOption},
     SessionId,
@@ -401,14 +401,6 @@ pub async fn generate_partial_key_with_proof(
     let partial_key_proof = prove_partial_key_validity(&skde_params, &secret_value).unwrap();
 
     (secret_value, partial_key, partial_key_proof)
-}
-
-/// Generates the current timestamp
-pub fn get_current_timestamp() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
 }
 
 /// Submits a partial key from a committee node to a leader node

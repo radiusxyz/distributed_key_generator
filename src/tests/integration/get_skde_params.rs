@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::fs;
 
 use radius_sdk::json_rpc::client::{Id, RpcClient};
 

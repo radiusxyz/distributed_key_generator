@@ -1,5 +1,3 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use bincode::serialize as serialize_to_bincode;
 use radius_sdk::{
     json_rpc::{
@@ -16,7 +14,10 @@ use tracing::info;
 
 use crate::{
     error::KeyGenerationError,
-    rpc::{common::create_signature, prelude::*},
+    rpc::{
+        common::{create_signature, get_current_timestamp},
+        prelude::*,
+    },
 };
 
 // TODO: Change structure name to SyncPartialKey, SyncPartialKeyPayload
@@ -114,10 +115,7 @@ pub fn broadcast_partial_key_ack(
         session_id, index, submit_timestamp
     );
 
-    let ack_timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
+    let ack_timestamp = get_current_timestamp();
 
     let payload = PartialKeyAckPayload {
         partial_key_sender: sender_address,

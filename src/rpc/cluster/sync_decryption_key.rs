@@ -1,5 +1,3 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use bincode::serialize as serialize_to_bincode;
 use radius_sdk::{
     json_rpc::{
@@ -11,7 +9,7 @@ use radius_sdk::{
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::rpc::prelude::*;
+use crate::rpc::{common::get_current_timestamp, prelude::*};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncDecryptionKey {
@@ -62,10 +60,7 @@ pub fn broadcast_decryption_key_ack(
     let all_key_generator_rpc_url_list =
         KeyGeneratorList::get()?.get_all_key_generator_rpc_url_list();
 
-    let ack_solve_timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
+    let ack_solve_timestamp = get_current_timestamp();
 
     let payload = SyncDecryptionKeyPayload {
         session_id,
