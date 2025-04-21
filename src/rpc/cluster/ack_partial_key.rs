@@ -14,10 +14,8 @@ use tracing::info;
 
 use crate::{
     error::KeyGenerationError,
-    rpc::{
-        common::{create_signature, get_current_timestamp},
-        prelude::*,
-    },
+    rpc::{common::create_signature, prelude::*},
+    utils::get_current_timestamp,
 };
 
 // TODO: Change structure name to SyncPartialKey, SyncPartialKeyPayload

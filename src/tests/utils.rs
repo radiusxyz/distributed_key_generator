@@ -24,9 +24,10 @@ use crate::{
     config::Role,
     rpc::{
         cluster::{GetKeyGeneratorList, GetSkdeParams, GetSkdeParamsResponse, PartialKeyPayload},
-        common::{create_signature, get_current_timestamp},
+        common::create_signature,
     },
     types::{Config, ConfigOption},
+    utils::get_current_timestamp,
     SessionId,
 };
 

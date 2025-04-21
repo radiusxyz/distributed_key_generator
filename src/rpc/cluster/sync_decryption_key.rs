@@ -9,7 +9,7 @@ use radius_sdk::{
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::rpc::{common::get_current_timestamp, prelude::*};
+use crate::{rpc::prelude::*, utils::get_current_timestamp};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncDecryptionKey {
