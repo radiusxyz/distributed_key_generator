@@ -196,8 +196,8 @@ cluster_rpc_url = "http://127.0.0.1:{}"
 role = "{}"
 radius_foundation_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 chain_type = "ethereum"
-partial_key_generation_cycle = 5
-partial_key_aggregation_cycle = 4
+partial_key_generation_cycle = 3
+partial_key_aggregation_cycle = 2
 {}
 {}
 "#,

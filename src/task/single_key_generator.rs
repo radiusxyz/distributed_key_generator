@@ -1,30 +1,22 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
-use radius_sdk::{
-    json_rpc::{
-        client::{Id, RpcClient},
-        server::RpcParameter,
-    },
-    signature::Address,
+use radius_sdk::json_rpc::{
+    client::{Id, RpcClient},
+    server::RpcParameter,
 };
 use sha2::{Digest, Sha256}; // SHA-256
 use sha3::digest::{ExtendableOutput, Update, XofReader}; // Shake256
 use sha3::Shake256;
 use skde::{
     delay_encryption::{solve_time_lock_puzzle, SkdeParams},
-    key_aggregation::{aggregate_key, AggregatedKey as SkdeAggregatedKey},
+    key_aggregation::aggregate_key,
     key_generation::{generate_uv_pair, PartialKey as SkdePartialKey},
     BigUint,
 };
 use tokio::time::sleep;
 use tracing::info;
 
-use crate::{
-    rpc::cluster::{RequestSubmitPartialKey, SyncAggregatedKey},
-    state::AppState,
-    types::*,
-    utils::AddressExt,
-};
+use crate::{rpc::cluster::RequestSubmitPartialKey, state::AppState, types::*, utils::AddressExt};
 
 // TODO: Decoupling logic according to the roles.
 // Spawns a loop that periodically generates partial keys and aggregates
@@ -51,7 +43,6 @@ pub fn run_single_key_generator(context: AppState) {
                 )
                 .unwrap();
 
-                let participant_addresses = partial_key_address_list.to_vec();
                 let partial_key_list = partial_key_address_list
                     .get_partial_key_list(current_session_id)
                     .unwrap();
@@ -110,6 +101,7 @@ pub fn run_single_key_generator(context: AppState) {
                         b"default-randomness".to_vec()
                     });
 
+                // all nodes should execute this
                 let mut selected_keys = select_random_partial_keys(&partial_key_list, &randomness);
 
                 let derived_key = derive_partial_key(&selected_keys, &skde_params);
@@ -120,16 +112,10 @@ pub fn run_single_key_generator(context: AppState) {
                 aggregated_key.put(current_session_id).unwrap();
 
                 tracing::info!(
-                    "Completed to generate encryption key - session id: {:?} / encryption key: {:?}",
+                    "[{}] Completed to generate encryption key - session id: {:?} / encryption key: {:?}",
+                    context.config().address().to_short(),
                     current_session_id,
                     skde_aggregated_key.u
-                );
-
-                sync_aggregated_key(
-                    current_session_id,
-                    skde_aggregated_key.clone(),
-                    participant_addresses,
-                    context.config().signer().address(),
                 );
 
                 let secure_key =
@@ -164,38 +150,6 @@ pub fn request_submit_partial_key(
             .multicast(
                 other_key_generator_rpc_url_list,
                 RequestSubmitPartialKey::method(),
-                &parameter,
-                Id::Null,
-            )
-            .await
-            .unwrap();
-    });
-}
-
-// Multicasts the aggregated key to all other key generators
-// TODO: Each node performs the aggregation independently.
-pub fn sync_aggregated_key(
-    session_id: SessionId,
-    aggregated_key: SkdeAggregatedKey,
-    participant_addresses: Vec<Address>,
-    my_address: &Address,
-) {
-    let other_key_generator_rpc_url_list = KeyGeneratorList::get()
-        .unwrap()
-        .get_other_key_generator_rpc_url_list(my_address);
-
-    tokio::spawn(async move {
-        let parameter = SyncAggregatedKey {
-            session_id,
-            aggregated_key,
-            participant_addresses,
-        };
-
-        let rpc_client = RpcClient::new().unwrap();
-        rpc_client
-            .multicast(
-                other_key_generator_rpc_url_list,
-                SyncAggregatedKey::method(),
                 &parameter,
                 Id::Null,
             )
@@ -293,11 +247,4 @@ fn derive_partial_key(selected_keys: &Vec<SkdePartialKey>, params: &SkdeParams) 
         y: yw_pair.u,
         w: yw_pair.v,
     }
-}
-
-pub fn get_current_timestamp() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
 }

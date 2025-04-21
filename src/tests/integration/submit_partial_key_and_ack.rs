@@ -1,5 +1,4 @@
 use tokio::time::{sleep, Duration};
-use tracing::info;
 
 use crate::{
     tests::utils::{

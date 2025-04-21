@@ -190,7 +190,6 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
     let key_generator_rpc_server = RpcServer::new(app_state.clone())
         .register_rpc_method::<cluster::GetKeyGeneratorList>()?
         .register_rpc_method::<cluster::SyncKeyGenerator>()?
-        .register_rpc_method::<cluster::SyncAggregatedKey>()?
         .register_rpc_method::<cluster::SyncPartialKey>()?
         .register_rpc_method::<cluster::SubmitPartialKey>()?
         .register_rpc_method::<cluster::RequestSubmitPartialKey>()?
