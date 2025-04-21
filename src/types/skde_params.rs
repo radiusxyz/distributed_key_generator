@@ -9,7 +9,7 @@ use skde::{delay_encryption::SkdeParams, BigUint};
 use super::{Config, Role};
 use crate::rpc::{
     authority::{GetAuthorizedSkdeParams, GetAuthorizedSkdeParamsResponse},
-    external::{GetSkdeParams, GetSkdeParamsResponse},
+    cluster::{GetSkdeParams, GetSkdeParamsResponse},
 };
 
 async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
@@ -85,7 +85,7 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                     .request(
                         leader_url,
                         GetSkdeParams::method(),
-                        &GetSkdeParams {},
+                        &GetSkdeParams,
                         Id::Null,
                     )
                     .await

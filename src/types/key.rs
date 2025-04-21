@@ -11,7 +11,7 @@ use skde::{
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
-#[kvstore(key(key_id: KeyId, address: &Address))]
+#[kvstore(key(key_id: SessionId, address: &Address))]
 pub struct PartialKey(SkdePartialKey);
 
 impl PartialKey {
@@ -24,17 +24,16 @@ impl PartialKey {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Model)]
-#[kvstore(key(key_id: KeyId))]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Model)]
+#[kvstore(key(key_id: SessionId))]
+
 pub struct PartialKeyAddressList(HashSet<Address>);
 
-impl Default for PartialKeyAddressList {
-    fn default() -> Self {
+impl PartialKeyAddressList {
+    pub fn default() -> Self {
         Self(HashSet::new())
     }
-}
 
-impl PartialKeyAddressList {
     pub fn insert(&mut self, address: Address) {
         self.0.insert(address);
     }
@@ -55,17 +54,20 @@ impl PartialKeyAddressList {
         self.0.is_empty()
     }
 
-    pub fn initialize(key_id: KeyId) -> Result<(), KvStoreError> {
-        if Self::get(key_id).is_err() {
+    pub fn initialize(session_id: SessionId) -> Result<(), KvStoreError> {
+        if Self::get(session_id).is_err() {
             let partial_key_list = PartialKeyAddressList::default();
 
-            partial_key_list.put(key_id)?;
+            partial_key_list.put(session_id)?;
         }
 
         Ok(())
     }
 
-    pub fn get_partial_key_list(&self, key_id: KeyId) -> Result<Vec<SkdePartialKey>, KvStoreError> {
+    pub fn get_partial_key_list(
+        &self,
+        key_id: SessionId,
+    ) -> Result<Vec<SkdePartialKey>, KvStoreError> {
         let partial_key_list: Result<Vec<PartialKey>, _> = self
             .0
             .iter()
@@ -81,15 +83,15 @@ impl PartialKeyAddressList {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Model, Default)]
 #[kvstore(key())]
-pub struct KeyId(u64);
+pub struct SessionId(u64);
 
-impl From<u64> for KeyId {
+impl From<u64> for SessionId {
     fn from(value: u64) -> Self {
-        KeyId(value)
+        SessionId(value)
     }
 }
 
-impl KeyId {
+impl SessionId {
     pub fn default() -> Self {
         Self(0)
     }
@@ -118,7 +120,7 @@ impl KeyId {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Model)]
-#[kvstore(key(key_id: KeyId))]
+#[kvstore(key(key_id: SessionId))]
 pub struct DecryptionKey(String);
 
 impl DecryptionKey {
@@ -132,7 +134,7 @@ impl DecryptionKey {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
-#[kvstore(key(key_id: KeyId))]
+#[kvstore(key(key_id: SessionId))]
 pub struct AggregatedKey(SkdeAggregatedKey);
 
 impl AggregatedKey {

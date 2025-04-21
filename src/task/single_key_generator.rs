@@ -34,27 +34,29 @@ pub fn run_single_key_generator(context: AppState) {
             sleep(Duration::from_secs(partial_key_generation_cycle)).await;
             let context = context.clone();
 
-            let mut key_id = KeyId::get_mut().unwrap();
-            let current_key_id = key_id.clone();
-            key_id.increase_key_id();
-            key_id.update().unwrap();
+            let mut session_id = SessionId::get_mut().unwrap();
+            let current_session_id = session_id.clone();
+            session_id.increase_key_id();
+            session_id.update().unwrap();
 
-            run_generate_partial_key(current_key_id);
+            run_generate_partial_key(current_session_id);
 
             tokio::spawn(async move {
                 sleep(Duration::from_secs(partial_key_aggregation_cycle)).await;
                 let skde_params = context.skde_params().clone();
 
-                let partial_key_address_list =
-                    PartialKeyAddressList::get_or(current_key_id, PartialKeyAddressList::default)
-                        .unwrap();
+                let partial_key_address_list = PartialKeyAddressList::get_or(
+                    current_session_id,
+                    PartialKeyAddressList::default,
+                )
+                .unwrap();
 
                 let participant_addresses = partial_key_address_list.to_vec();
-                let mut partial_key_list = partial_key_address_list
-                    .get_partial_key_list(current_key_id)
+                let partial_key_list = partial_key_address_list
+                    .get_partial_key_list(current_session_id)
                     .unwrap();
 
-                let prev_key_id = KeyId::from(current_key_id.as_u64() - 1);
+                let prev_key_id = SessionId::from(current_session_id.as_u64() - 1);
                 let randomness = DecryptionKey::get(prev_key_id)
                     .map(|key| {
                         tracing::info!(
@@ -72,23 +74,23 @@ pub fn run_single_key_generator(context: AppState) {
                         b"default-randomness".to_vec()
                     });
 
-                let selected_keys = select_random_partial_keys(&partial_key_list, &randomness);
+                let mut selected_keys = select_random_partial_keys(&partial_key_list, &randomness);
 
                 let derived_key = derive_partial_key(&selected_keys, &skde_params);
-                partial_key_list.push(derived_key);
+                selected_keys.push(derived_key);
 
-                let skde_aggregated_key = aggregate_key(&skde_params, &partial_key_list);
+                let skde_aggregated_key = aggregate_key(&skde_params, &selected_keys);
                 let aggregated_key = AggregatedKey::new(skde_aggregated_key.clone());
-                aggregated_key.put(current_key_id).unwrap();
+                aggregated_key.put(current_session_id).unwrap();
 
                 tracing::info!(
-                    "Completed to generate encryption key - key id: {:?} / encryption key: {:?}",
-                    current_key_id,
+                    "Completed to generate encryption key - session id: {:?} / encryption key: {:?}",
+                    current_session_id,
                     skde_aggregated_key.u
                 );
 
                 sync_aggregated_key(
-                    current_key_id,
+                    current_session_id,
                     skde_aggregated_key.clone(),
                     participant_addresses,
                     context.config().signer().address(),
@@ -97,11 +99,11 @@ pub fn run_single_key_generator(context: AppState) {
                 let secure_key =
                     solve_time_lock_puzzle(&skde_params, &skde_aggregated_key).unwrap();
                 let decryption_key = DecryptionKey::new(secure_key.sk.clone());
-                decryption_key.put(current_key_id).unwrap();
+                decryption_key.put(current_session_id).unwrap();
 
                 tracing::info!(
-                    "Complete to get decryption key - key_id: {:?} / decryption key: {:?}",
-                    current_key_id,
+                    "Complete to get decryption key - session id: {:?} / decryption key: {:?}",
+                    current_session_id,
                     decryption_key
                 );
             });
@@ -109,14 +111,13 @@ pub fn run_single_key_generator(context: AppState) {
     });
 }
 
-// Multicasts a request to all key generators
-pub fn run_generate_partial_key(key_id: KeyId) {
+pub fn run_generate_partial_key(session_id: SessionId) {
     let all_key_generator_rpc_url_list = KeyGeneratorList::get()
         .unwrap()
         .get_all_key_generator_rpc_url_list();
 
     tokio::spawn(async move {
-        let parameter = RunGeneratePartialKey { key_id };
+        let parameter = RunGeneratePartialKey { session_id };
 
         let rpc_client = RpcClient::new().unwrap();
         rpc_client
@@ -134,7 +135,7 @@ pub fn run_generate_partial_key(key_id: KeyId) {
 // Multicasts the aggregated key to all other key generators
 // TODO: Each node performs the aggregation independently.
 pub fn sync_aggregated_key(
-    key_id: KeyId,
+    session_id: SessionId,
     aggregated_key: SkdeAggregatedKey,
     participant_addresses: Vec<Address>,
     my_address: &Address,
@@ -145,7 +146,7 @@ pub fn sync_aggregated_key(
 
     tokio::spawn(async move {
         let parameter = SyncAggregatedKey {
-            key_id,
+            session_id,
             aggregated_key,
             participant_addresses,
         };

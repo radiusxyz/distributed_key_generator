@@ -102,7 +102,7 @@ async fn main() -> Result<(), Error> {
                 .init();
 
             KeyGeneratorList::initialize().map_err(error::Error::Database)?;
-            KeyId::initialize().map_err(error::Error::Database)?;
+            SessionId::initialize().map_err(error::Error::Database)?;
 
             tracing::info!(
                 "Successfully initialized the database at {:?}.",
@@ -187,6 +187,8 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
         .register_rpc_method::<cluster::SyncKeyGenerator>()?
         .register_rpc_method::<cluster::SyncAggregatedKey>()?
         .register_rpc_method::<cluster::SyncPartialKey>()?
+        .register_rpc_method::<cluster::SubmitPartialKey>()?
+        .register_rpc_method::<cluster::SubmitPartialKeyAck>()?
         .register_rpc_method::<cluster::RunGeneratePartialKey>()?
         .register_rpc_method::<cluster::GetSkdeParams>()?
         .init(cluster_rpc_url.clone())

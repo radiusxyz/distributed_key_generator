@@ -10,7 +10,7 @@ use super::{
 };
 
 /// Node roles in the DKG network
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub enum Role {
     /// Leader node responsible for collecting partial keys and coordinating
     Leader,

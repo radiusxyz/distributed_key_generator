@@ -8,13 +8,13 @@ use tracing::info;
 use crate::rpc::{common::verify_signature, prelude::*};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SignedDecryptionKey {
+pub struct SubmitDecryptionKey {
     pub signature: Signature,
-    pub payload: DecryptionKeyPayload,
+    pub payload: SubmitDecryptionKeyPayload,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct DecryptionKeyPayload {
+pub struct SubmitDecryptionKeyPayload {
     pub sender: Address,
     pub decryption_key: String,
     pub session_id: SessionId,
@@ -26,7 +26,7 @@ pub struct DecryptionKeyResponse {
     pub success: bool,
 }
 
-impl RpcParameter<AppState> for SignedDecryptionKey {
+impl RpcParameter<AppState> for SubmitDecryptionKey {
     type Response = DecryptionKeyResponse;
 
     fn method() -> &'static str {
@@ -38,7 +38,7 @@ impl RpcParameter<AppState> for SignedDecryptionKey {
         let sender_address = verify_signature(&self.signature, &self.payload)?;
 
         info!(
-            "Received decryption key - session_id: {}, sender: {}, timestamp: {}",
+            "Received decryption key - session_id: {:?}, sender: {}, timestamp: {}",
             self.payload.session_id,
             sender_address.as_hex_string(),
             self.payload.timestamp

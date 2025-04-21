@@ -9,7 +9,7 @@ pub struct AddKeyGenerator {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct AddKeyGeneratorMessage {
+pub struct AddKeyGeneratorMessage {
     address: Address,
     cluster_rpc_url: String,
     external_rpc_url: String,

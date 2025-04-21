@@ -5,7 +5,7 @@ pub struct GetLatestKeyId {}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetLatestKeyIdResponse {
-    pub latest_key_id: KeyId,
+    pub latest_session_id: SessionId,
 }
 
 impl RpcParameter<AppState> for GetLatestKeyId {
@@ -16,11 +16,11 @@ impl RpcParameter<AppState> for GetLatestKeyId {
     }
 
     async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
-        let key_id = KeyId::get()?;
+        let session_id = SessionId::get()?;
 
         // loop {
         return Ok(GetLatestKeyIdResponse {
-            latest_key_id: key_id,
+            latest_session_id: session_id,
         });
         // }
     }

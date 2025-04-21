@@ -1,7 +1,7 @@
 use crate::rpc::prelude::*;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct GetSkdeParams {}
+pub struct GetSkdeParams;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetSkdeParamsResponse {

@@ -25,7 +25,7 @@ chmod -R 755 "$DATA_DIR" "$AUTHORITY_DATA_DIR" 2>/dev/null
 # Create Authority Node config file
 cat > "$AUTHORITY_DATA_DIR/Config.toml" << EOL
 # NODE CONFIG: Authority Node
-authority_rpc_url = "http://127.0.0.1:7400"
+authority_rpc_url = "http://127.0.0.1:6000"
 role = "authority"
 
 # The following are unused by authority, but required for Config::load
