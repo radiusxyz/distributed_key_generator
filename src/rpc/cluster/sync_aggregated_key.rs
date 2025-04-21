@@ -4,8 +4,7 @@ use radius_sdk::{
 };
 use serde::{Deserialize, Serialize};
 use skde::{
-    delay_encryption::solve_time_lock_puzzle,
-    key_aggregation::{aggregate_key, AggregatedKey as SkdeAggregatedKey},
+    delay_encryption::solve_time_lock_puzzle, key_aggregation::AggregatedKey as SkdeAggregatedKey,
 };
 
 use crate::rpc::prelude::*;

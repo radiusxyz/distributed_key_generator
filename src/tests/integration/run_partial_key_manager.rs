@@ -1,16 +1,15 @@
 use tokio::time::{sleep, Duration};
-use tracing::info;
 
 use crate::{
     tests::utils::{
-        cleanup_all_processes, generate_partial_key_with_proof, init_test_environment,
-        register_nodes, start_node, submit_partial_key_to_leader, verify_mutual_registration,
+        cleanup_all_processes, init_test_environment, register_nodes, start_node,
+        verify_mutual_registration,
     },
-    Role, SessionId,
+    Role,
 };
 
 #[tokio::test]
-async fn test_integration_submit_partial_key_and_ack() {
+async fn test_integration_run_partial_key_manager() {
     // Initialize test environment
     init_test_environment("submit partial key and ack test");
 
@@ -49,28 +48,7 @@ async fn test_integration_submit_partial_key_and_ack() {
         "Committee node not found in leader's key generator list"
     );
 
-    // 4. Generate partial key from committee
-    let (_, partial_key, partial_key_proof) =
-        generate_partial_key_with_proof(&committee_config).await;
-
-    // Session ID for this test
-    let session_id = SessionId::default();
-
-    // Create committee address
-    let committee_address = committee_config.address();
-
-    // Submit partial key from committee to leader
-    submit_partial_key_to_leader(
-        committee_address.clone(),
-        leader_ports.cluster,
-        partial_key,
-        partial_key_proof,
-        session_id,
-    )
-    .await;
-
-    // 5. Wait for and verify the acknowledgment
-    sleep(Duration::from_secs(2)).await;
+    sleep(Duration::from_secs(20)).await;
 
     // 6. Cleanup processes
     let mut processes = vec![

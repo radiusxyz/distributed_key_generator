@@ -10,6 +10,7 @@ use crate::{
     error::KeyGenerationError,
     rpc::{cluster::broadcast_partial_key_ack, common::verify_signature, prelude::*},
     types::SessionId,
+    utils::AddressExt,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -40,7 +41,8 @@ impl RpcParameter<AppState> for SubmitPartialKey {
         let sender_address = self.payload.sender.clone();
 
         info!(
-            "Received partial key - session_id: {:?}, sender: {}, timestamp: {}",
+            "[{}] Received partial key - session_id: {:?}, sender: {}, timestamp: {}",
+            context.config().address().to_short(),
             self.payload.session_id,
             sender_address.as_hex_string(),
             self.payload.submit_timestamp
@@ -68,15 +70,21 @@ impl RpcParameter<AppState> for SubmitPartialKey {
             )));
         }
 
-        // Store the partial key
-        let partial_key = PartialKey::new(self.payload.partial_key.clone());
-        partial_key.put(self.payload.session_id, &sender_address)?;
+        PartialKeyAddressList::initialize(self.payload.session_id)?;
 
-        // TODO: handle appropriate paratial key index
+        // if the sender is incluided in
+        PartialKeyAddressList::apply(self.payload.session_id, |list| {
+            list.insert(self.payload.sender.clone());
+        })?;
+
+        let partial_key = PartialKey::new(self.payload.partial_key.clone());
+        partial_key.put(self.payload.session_id, &self.payload.sender)?;
+
+        // TODO: handle appropriate paratial key index, (session_id, key_index in the session)
         let _ = broadcast_partial_key_ack(
             sender_address,
             self.payload.session_id,
-            self.payload.partial_key.clone(),
+            self.payload.partial_key,
             self.payload.proof.clone(),
             self.payload.submit_timestamp,
             0,

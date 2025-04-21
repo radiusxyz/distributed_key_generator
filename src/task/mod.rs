@@ -1,4 +1,5 @@
 pub mod authority_setup;
+pub mod partial_key_manager;
 pub mod single_key_generator;
 /// Using unwrap() inside the task block is caught by tracing::error!().
 /// However, if the task involves a loop that must not break when panics,

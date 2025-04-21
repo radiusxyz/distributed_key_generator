@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use radius_sdk::{
     json_rpc::{
@@ -17,12 +17,15 @@ use skde::{
     BigUint,
 };
 use tokio::time::sleep;
+use tracing::info;
 
 use crate::{
-    rpc::cluster::{RunGeneratePartialKey, SyncAggregatedKey},
+    rpc::cluster::{RequestSubmitPartialKey, SyncAggregatedKey},
     state::AppState,
     types::*,
+    utils::AddressExt,
 };
+
 // TODO: Decoupling logic according to the roles.
 // Spawns a loop that periodically generates partial keys and aggregates
 pub fn run_single_key_generator(context: AppState) {
@@ -36,10 +39,7 @@ pub fn run_single_key_generator(context: AppState) {
 
             let mut session_id = SessionId::get_mut().unwrap();
             let current_session_id = session_id.clone();
-            session_id.increase_key_id();
-            session_id.update().unwrap();
-
-            run_generate_partial_key(current_session_id);
+            info!("Current session id: {}", current_session_id.as_u64());
 
             tokio::spawn(async move {
                 sleep(Duration::from_secs(partial_key_aggregation_cycle)).await;
@@ -56,20 +56,56 @@ pub fn run_single_key_generator(context: AppState) {
                     .get_partial_key_list(current_session_id)
                     .unwrap();
 
-                let prev_key_id = SessionId::from(current_session_id.as_u64() - 1);
-                let randomness = DecryptionKey::get(prev_key_id)
+                let other_key_generator_rpc_url_list = KeyGeneratorList::get()
+                    .unwrap()
+                    .get_other_key_generator_rpc_url_list(&context.config().address());
+
+                if partial_key_list.is_empty() {
+                    tracing::info!(
+                        "No partial key list found for session id: {}",
+                        current_session_id.as_u64()
+                    );
+                    if !other_key_generator_rpc_url_list.is_empty() {
+                        info!(
+                            "other_key_generator_rpc_url_list: {:?}",
+                            other_key_generator_rpc_url_list
+                        );
+
+                        tracing::info!(
+                            "[{}] Requested to submit partial key for session id: {}",
+                            context.config().address().to_short(),
+                            current_session_id.as_u64()
+                        );
+
+                        request_submit_partial_key(
+                            other_key_generator_rpc_url_list,
+                            current_session_id,
+                        );
+                    } else {
+                        tracing::warn!(
+                            "No key generator and partial key list found for session id: {}",
+                            current_session_id.as_u64()
+                        );
+                    }
+                    return;
+                }
+
+                let previous_session_id = SessionId::from(current_session_id.as_u64() - 1);
+                let randomness = DecryptionKey::get(previous_session_id)
                     .map(|key| {
                         tracing::info!(
-                                "Using decryption key from previous session (key_id = {}) as randomness",
-                                prev_key_id.as_u64()
-                            );
+                            "[{}] Using decryption key from previous session (previous_session_id = {}) as randomness",
+                            context.config().address().to_short(),
+                            previous_session_id.as_u64()
+                        );
                         key.as_string().into_bytes()
                     })
                     .unwrap_or_else(|err| {
                         tracing::warn!(
-                                "Failed to get decryption key for key_id = {}: {}; falling back to default randomness",
-                                prev_key_id.as_u64(),
-                                err
+                            "[{}] Failed to get decryption key for previous_session_id = {}: {}; falling back to default randomness",
+                            context.config().address().to_short(),
+                            previous_session_id.as_u64(),
+                            err
                             );
                         b"default-randomness".to_vec()
                     });
@@ -102,28 +138,32 @@ pub fn run_single_key_generator(context: AppState) {
                 decryption_key.put(current_session_id).unwrap();
 
                 tracing::info!(
-                    "Complete to get decryption key - session id: {:?} / decryption key: {:?}",
+                    "[{}] Complete to get decryption key - session id: {:?} / decryption key: {:?}",
+                    context.config().address().to_short(),
                     current_session_id,
                     decryption_key
                 );
+
+                // when successfully generated partial key, increase session_id
+                session_id.increase_session_id();
+                session_id.update().unwrap();
             });
         }
     });
 }
 
-pub fn run_generate_partial_key(session_id: SessionId) {
-    let all_key_generator_rpc_url_list = KeyGeneratorList::get()
-        .unwrap()
-        .get_all_key_generator_rpc_url_list();
-
+pub fn request_submit_partial_key(
+    other_key_generator_rpc_url_list: Vec<String>,
+    session_id: SessionId,
+) {
     tokio::spawn(async move {
-        let parameter = RunGeneratePartialKey { session_id };
+        let parameter = RequestSubmitPartialKey { session_id };
 
         let rpc_client = RpcClient::new().unwrap();
         rpc_client
             .multicast(
-                all_key_generator_rpc_url_list,
-                RunGeneratePartialKey::method(),
+                other_key_generator_rpc_url_list,
+                RequestSubmitPartialKey::method(),
                 &parameter,
                 Id::Null,
             )
@@ -253,4 +293,11 @@ fn derive_partial_key(selected_keys: &Vec<SkdePartialKey>, params: &SkdeParams) 
         y: yw_pair.u,
         w: yw_pair.v,
     }
+}
+
+pub fn get_current_timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }

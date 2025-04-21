@@ -5,7 +5,10 @@ use radius_sdk::{
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::rpc::{common::verify_signature, prelude::*};
+use crate::{
+    rpc::{common::verify_signature, prelude::*},
+    utils::AddressExt,
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SubmitDecryptionKey {
@@ -35,12 +38,12 @@ impl RpcParameter<AppState> for SubmitDecryptionKey {
 
     async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
         // TODO: Add to verify actual signature
-        let sender_address = verify_signature(&self.signature, &self.payload)?;
+        let _sender_address = verify_signature(&self.signature, &self.payload)?;
 
         info!(
-            "Received decryption key - session_id: {:?}, sender: {}, timestamp: {}",
+            "[{}] Received decryption key - session_id: {:?}, timestamp: {}",
+            _context.config().address().to_short(),
             self.payload.session_id,
-            sender_address.as_hex_string(),
             self.payload.timestamp
         );
 
@@ -58,6 +61,13 @@ impl RpcParameter<AppState> for SubmitDecryptionKey {
 
         // TODO: Add broadcast logic via ack_decryption_key at this point
         // This will be implemented in a separate function
+
+        tracing::info!(
+            "[{}] Complete to get decryption key - key_id: {:?} / decryption key: {:?}",
+            _context.config().address().to_short(),
+            self.payload.session_id,
+            _decryption_key
+        );
 
         Ok(DecryptionKeyResponse { success: true })
     }

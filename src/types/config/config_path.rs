@@ -75,7 +75,6 @@ impl Default for ConfigPath {
             },
         };
 
-        tracing::info!("Using config path: {}", path);
         Self { path }
     }
 }

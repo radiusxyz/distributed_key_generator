@@ -11,7 +11,7 @@ use skde::{
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
-#[kvstore(key(key_id: SessionId, address: &Address))]
+#[kvstore(key(session_id: SessionId, address: &Address))]
 pub struct PartialKey(SkdePartialKey);
 
 impl PartialKey {
@@ -25,7 +25,7 @@ impl PartialKey {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Model)]
-#[kvstore(key(key_id: SessionId))]
+#[kvstore(key(session_id: SessionId))]
 
 pub struct PartialKeyAddressList(HashSet<Address>);
 
@@ -66,12 +66,12 @@ impl PartialKeyAddressList {
 
     pub fn get_partial_key_list(
         &self,
-        key_id: SessionId,
+        session_id: SessionId,
     ) -> Result<Vec<SkdePartialKey>, KvStoreError> {
         let partial_key_list: Result<Vec<PartialKey>, _> = self
             .0
             .iter()
-            .map(|address| PartialKey::get(key_id, address))
+            .map(|address| PartialKey::get(session_id, address))
             .collect();
 
         partial_key_list?
@@ -98,19 +98,19 @@ impl SessionId {
 
     pub fn initialize() -> Result<(), KvStoreError> {
         if Self::get().is_err() {
-            let key_id = Self::default();
+            let session_id = Self::default();
 
-            key_id.put()?
+            session_id.put()?
         }
 
         Ok(())
     }
 
-    pub fn increase_key_id(&mut self) {
+    pub fn increase_session_id(&mut self) {
         self.0 += 1;
     }
 
-    pub fn decrease_key_id(&mut self) {
+    pub fn decrease_session_id(&mut self) {
         self.0 -= 1;
     }
 
@@ -120,7 +120,7 @@ impl SessionId {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Model)]
-#[kvstore(key(key_id: SessionId))]
+#[kvstore(key(session_id: SessionId))]
 pub struct DecryptionKey(String);
 
 impl DecryptionKey {
@@ -134,7 +134,7 @@ impl DecryptionKey {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
-#[kvstore(key(key_id: SessionId))]
+#[kvstore(key(session_id: SessionId))]
 pub struct AggregatedKey(SkdeAggregatedKey);
 
 impl AggregatedKey {

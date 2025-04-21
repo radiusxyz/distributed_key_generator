@@ -9,7 +9,8 @@ use distributed_key_generation::{
     skde_params::fetch_skde_params_with_retry,
     state::AppState,
     task::{
-        authority_setup::run_setup_skde_params, single_key_generator::run_single_key_generator,
+        authority_setup::run_setup_skde_params, partial_key_manager::run_partial_key_manager,
+        single_key_generator::run_single_key_generator,
     },
     types::*,
 };
@@ -139,8 +140,10 @@ async fn main() -> Result<(), Error> {
             if config.is_leader() {
                 tracing::info!("Starting leader node operations...");
                 run_single_key_generator(app_state.clone());
-            } else {
-                // run partial key routine
+            } else if config.is_committee() {
+                tracing::info!("Starting committee node operations...");
+                // 백그라운드에서 PartialKeyManager 실행
+                tokio::spawn(run_partial_key_manager(app_state.clone()));
             }
 
             // Initialize the internal RPC server
@@ -190,8 +193,7 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
         .register_rpc_method::<cluster::SyncAggregatedKey>()?
         .register_rpc_method::<cluster::SyncPartialKey>()?
         .register_rpc_method::<cluster::SubmitPartialKey>()?
-        .register_rpc_method::<cluster::SubmitPartialKeyAck>()?
-        .register_rpc_method::<cluster::RunGeneratePartialKey>()?
+        .register_rpc_method::<cluster::RequestSubmitPartialKey>()?
         .register_rpc_method::<cluster::GetSkdeParams>()?
         .init(cluster_rpc_url.clone())
         .await

@@ -81,7 +81,7 @@ impl Config {
 
         // Merge configs from CLI input
         let merged_config_option = config_file.merge(config_option);
-        println!("chain_type: {:?}", merged_config_option);
+        tracing::info!("chain_type: {:?}", merged_config_option);
 
         let chain_type = merged_config_option.chain_type.unwrap().try_into().unwrap();
 

@@ -226,11 +226,9 @@ partial_key_aggregation_cycle = 4
 
     // Create Config object
     let config = create_config_from_dir(&temp_path);
-    info!("Loaded configuration for {} node", role);
 
     // Find binary path
     let binary_path = find_binary_path();
-    info!("Binary path: {:?}", binary_path);
 
     // Run process
     info!(
@@ -257,7 +255,7 @@ partial_key_aggregation_cycle = 4
         role,
         child.id()
     );
-    sleep(Duration::from_secs(2));
+    sleep(Duration::from_secs(1));
 
     (
         child,
@@ -494,10 +492,6 @@ pub async fn start_node(
 ) {
     // Start node
     let (node_process, node_ports, node_config) = spawn_node_process(role, index, temp_dirs);
-
-    info!("Waiting for node initialization");
-    // Wait for node initialization
-    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
     (node_process, node_ports, node_config)
 }
