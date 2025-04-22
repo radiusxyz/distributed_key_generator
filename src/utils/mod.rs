@@ -90,23 +90,20 @@ pub fn perform_randomized_aggregation(
 
 pub fn calculate_decryption_key(
     context: &AppState,
-    skde_aggregated_key: &SkdeAggregatedKey,
     session_id: SessionId,
+    skde_aggregated_key: &SkdeAggregatedKey,
 ) -> Result<DecryptionKey, KeyGenerationError> {
     let skde_params = context.skde_params().clone();
 
-    let secure_key = solve_time_lock_puzzle(&skde_params, skde_aggregated_key)
-        .map_err(|err| KeyGenerationError::InternalError(format!(
-            "Failed to solve time lock puzzle: {:?}", err
-        )))?;
+    let secure_key = solve_time_lock_puzzle(&skde_params, skde_aggregated_key).map_err(|err| {
+        KeyGenerationError::InternalError(format!("Failed to solve time lock puzzle: {:?}", err))
+    })?;
 
     let decryption_key = DecryptionKey::new(secure_key.sk.clone());
 
-    decryption_key
-        .put(session_id)
-        .map_err(|err| KeyGenerationError::InvalidPartialKey(format!(
-            "Failed to store decryption key: {:?}", err
-        )))?;
+    decryption_key.put(session_id).map_err(|err| {
+        KeyGenerationError::InvalidPartialKey(format!("Failed to store decryption key: {:?}", err))
+    })?;
 
     Ok(decryption_key)
 }

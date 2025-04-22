@@ -80,7 +80,7 @@ pub fn run_single_key_generator(context: AppState) {
 
                 // TODO: This puzzle should be solved by the Solver node
                 let decryption_key =
-                    calculate_decryption_key(&context, &skde_aggregated_key, current_session_id)
+                    calculate_decryption_key(&context, current_session_id, &skde_aggregated_key)
                         .unwrap();
 
                 info!(
