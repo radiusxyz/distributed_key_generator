@@ -1,7 +1,6 @@
 mod get_key_generator_list;
 mod get_skde_params;
 mod request_submit_partial_key;
-mod sync_aggregated_key;
 mod sync_key_generator;
 mod sync_partial_key;
 

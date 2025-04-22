@@ -105,7 +105,7 @@ pub fn broadcast_partial_key_ack(
     index: usize,
     _context: &AppState,
 ) -> Result<(), Error> {
-    let other_key_generator_rpc_url_list =
+    let key_generator_rpc_url_list =
         KeyGeneratorList::get()?.get_other_key_generator_rpc_url_list(&_context.config().address());
 
     info!(
@@ -137,7 +137,7 @@ pub fn broadcast_partial_key_ack(
         if let Ok(rpc_client) = RpcClient::new() {
             let _ = rpc_client
                 .multicast(
-                    other_key_generator_rpc_url_list,
+                    key_generator_rpc_url_list,
                     SyncPartialKey::method(),
                     &parameter,
                     Id::Null,

@@ -1,6 +1,13 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use radius_sdk::signature::Address;
+use skde::{
+    delay_encryption::SkdeParams,
+    key_generation::{
+        generate_partial_key, prove_partial_key_validity, PartialKey as SkdePartialKey,
+        PartialKeyProof,
+    },
+};
 
 pub fn get_current_timestamp() -> u64 {
     SystemTime::now()
@@ -9,7 +16,7 @@ pub fn get_current_timestamp() -> u64 {
         .as_secs()
 }
 
-// 주소를 짧은 형식으로 변환하는 편리한 확장 메소드
+// A extension method to convert an address to a short format
 pub trait AddressExt {
     fn to_short(&self) -> String;
 }
@@ -23,4 +30,19 @@ impl AddressExt for Address {
             format!("{}", &hex[..6])
         }
     }
+}
+
+/// Create a new partial key with its validity proof
+pub fn create_partial_key_with_proof(
+    skde_params: &SkdeParams,
+) -> (SkdePartialKey, PartialKeyProof) {
+    // Generate the partial key using the SKDE library
+    let (secret_value, skde_partial_key) =
+        generate_partial_key(skde_params).expect("Failed to generate partial key");
+
+    // Generate proof of validity for the key
+    let proof = prove_partial_key_validity(skde_params, &secret_value)
+        .expect("Failed to generate proof for partial key");
+
+    (skde_partial_key, proof)
 }

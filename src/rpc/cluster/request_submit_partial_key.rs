@@ -22,7 +22,7 @@ pub struct RequestSubmitPartialKey {
     pub session_id: SessionId,
 }
 
-// 각 committee 멤버가 자신의 미리 생성된 partial key를 리더에게 제출하는 RPC
+// RPC Method for committee members to submit their partial keys to the leader
 impl RpcParameter<AppState> for RequestSubmitPartialKey {
     type Response = Option<()>;
 
@@ -111,7 +111,7 @@ async fn submit_partial_key_to_leader(
         )));
     };
 
-    // PartialKeyPayload 생성
+    // Create payload with partial key and metadata
     let payload = PartialKeyPayload {
         sender: sender.clone(),
         partial_key,
@@ -120,15 +120,15 @@ async fn submit_partial_key_to_leader(
         session_id,
     };
 
-    // 서명 생성
+    // Create signature for the payload
     let signature = crate::rpc::common::create_signature(&payload);
 
     let parameter = SubmitPartialKey { signature, payload };
 
-    // 리더에게 제출
+    // Submit to leader
     let rpc_client = RpcClient::new()?;
 
-    // 명시적으로 타입을 지정하여 never type fallback 방지
+    // Explicitly specify the type to prevent never type fallback issues
     let _: () = rpc_client
         .request::<SubmitPartialKey, ()>(
             &leader_rpc_url,

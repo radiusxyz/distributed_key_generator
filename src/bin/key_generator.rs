@@ -143,7 +143,6 @@ async fn main() -> Result<(), Error> {
                 run_single_key_generator(app_state.clone());
             } else if config.is_committee() {
                 info!("Starting committee node operations...");
-                // 백그라운드에서 PartialKeyManager 실행
                 tokio::spawn(run_partial_key_manager(app_state.clone()));
             }
 
@@ -219,7 +218,7 @@ async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHand
         .register_rpc_method::<external::GetEncryptionKey>()?
         .register_rpc_method::<external::GetDecryptionKey>()?
         .register_rpc_method::<external::GetLatestEncryptionKey>()?
-        .register_rpc_method::<external::GetLatestKeyId>()?
+        .register_rpc_method::<external::GetLatestSessionId>()?
         .register_rpc_method::<external::GetSkdeParams>()?
         .init(external_rpc_url.clone())
         .await
