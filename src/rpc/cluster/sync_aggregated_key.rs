@@ -31,7 +31,7 @@
 //         let aggregated_key = AggregatedKey::new(skde_aggregated_key.clone());
 //         aggregated_key.put(self.session_id)?;
 
-//         tracing::info!(
+//         info!(
 //             "Completed to generate encryption key - key id: {:?} / encryption key: {:?}",
 //             self.session_id,
 //             skde_aggregated_key.u
@@ -43,7 +43,7 @@
 //             let decryption_key = DecryptionKey::new(decryption_key.sk.clone());
 
 //             decryption_key.put(self.session_id).unwrap();
-//             tracing::info!(
+//             info!(
 //                 "Complete to get decryption key - key_id: {:?} / decryption key: {:?}",
 //                 self.session_id,
 //                 decryption_key

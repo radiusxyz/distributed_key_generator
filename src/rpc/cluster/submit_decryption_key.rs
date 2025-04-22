@@ -62,7 +62,7 @@ impl RpcParameter<AppState> for SubmitDecryptionKey {
         // TODO: Add broadcast logic via ack_decryption_key at this point
         // This will be implemented in a separate function
 
-        tracing::info!(
+        info!(
             "[{}] Complete to get decryption key - key_id: {:?} / decryption key: {:?}",
             _context.config().address().to_short(),
             self.payload.session_id,

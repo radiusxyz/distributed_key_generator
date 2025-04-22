@@ -48,7 +48,7 @@ async fn test_integration_run_partial_key_manager() {
         "Committee node not found in leader's key generator list"
     );
 
-    sleep(Duration::from_secs(20)).await;
+    sleep(Duration::from_secs(5)).await;
 
     // 6. Cleanup processes
     let mut processes = vec![

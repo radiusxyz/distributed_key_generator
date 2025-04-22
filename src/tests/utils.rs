@@ -132,8 +132,8 @@ pub fn create_config_from_dir(temp_path: &PathBuf) -> Config {
         role: None,
         radius_foundation_address: None,
         chain_type: None,
-        partial_key_generation_cycle: None,
-        partial_key_aggregation_cycle: None,
+        partial_key_generation_cycle_ms: None,
+        partial_key_aggregation_cycle_ms: None,
     };
 
     // Load Config (automatically reads from Config.toml)
@@ -196,8 +196,8 @@ cluster_rpc_url = "http://127.0.0.1:{}"
 role = "{}"
 radius_foundation_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 chain_type = "ethereum"
-partial_key_generation_cycle = 3
-partial_key_aggregation_cycle = 2
+partial_key_generation_cycle_ms = 500
+partial_key_aggregation_cycle_ms = 500
 {}
 {}
 "#,

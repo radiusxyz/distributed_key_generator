@@ -1,4 +1,3 @@
-// Draft code.
 use std::sync::Arc;
 
 use once_cell::sync::OnceCell;
@@ -13,13 +12,16 @@ use skde::{
         PartialKeyProof,
     },
 };
-use tracing;
+use tracing::info;
 
 use crate::{
     state::AppState,
     types::{PartialKey, SessionId},
     utils::get_current_timestamp,
 };
+
+const MAX_KEYS: usize = 5;
+const MIN_THRESHOLD: usize = 2;
 
 // 싱글톤 인스턴스를 위한 전역 변수
 static PARTIAL_KEY_MANAGER: OnceCell<Arc<PartialKeyManager>> = OnceCell::new();
@@ -200,7 +202,7 @@ impl PartialKeyManager {
     // 싱글톤 인스턴스 getter
     pub fn global() -> Arc<PartialKeyManager> {
         PARTIAL_KEY_MANAGER
-            .get_or_init(|| Arc::new(PartialKeyManager::new(5, 2)))
+            .get_or_init(|| Arc::new(PartialKeyManager::new(MAX_KEYS, MIN_THRESHOLD)))
             .clone()
     }
 
@@ -223,7 +225,7 @@ impl PartialKeyManager {
         for _ in available_keys..self.max_keys {
             // 새 키 ID 할당
             let key_id = KeyIdCounter::get_next_id_and_increment()?;
-            tracing::info!("Generating key: {}", key_id);
+            info!("Generating key: {}", key_id);
 
             let (partial_key, proof) = generate_partial_key_somehow(skde_params);
             let precomputed_key = PrecomputedPartialKey::new(key_id, partial_key, proof);
@@ -346,12 +348,14 @@ pub async fn run_partial_key_manager(context: AppState) {
     print!("PartialKeyManager initialized");
 
     loop {
+        // let available_key_count = manager.available_key_count().await.unwrap();
+        // info!("Available key count: {}", available_key_count);
         match manager.available_key_count().await {
             Ok(available) => {
                 if available < manager.min_threshold {
                     match manager.generate_keys_if_needed(context.skde_params()).await {
                         Ok(_) => {
-                            tracing::info!(
+                            info!(
                                 "Partial Key Manager: Generated partial keys. Available: {}",
                                 available
                             );

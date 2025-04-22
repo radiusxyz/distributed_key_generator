@@ -5,6 +5,7 @@ use std::{
 
 use clap::Parser;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::{
     skde_params::default_skde_params,
@@ -102,7 +103,7 @@ impl ConfigPath {
             fs::write(signing_key_path, signing_key).map_err(ConfigError::CreatePrivateKeyFile)?;
         }
 
-        tracing::info!("Config directory at {:?}", self.as_ref());
+        info!("Config directory at {:?}", self.as_ref());
         Ok(())
     }
     /// Initialize SKDE parameter file with default values if it doesn't exist.
@@ -126,6 +127,6 @@ impl ConfigPath {
         // Write to file (POC: unwrap used)
         fs::write(&skde_path, serialized).unwrap(); // TODO
 
-        tracing::info!("Default SKDE params written to {:?}", skde_path);
+        info!("Default SKDE params written to {:?}", skde_path);
     }
 }

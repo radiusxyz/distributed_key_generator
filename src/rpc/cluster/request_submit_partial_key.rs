@@ -105,9 +105,6 @@ async fn submit_partial_key_to_leader(
 ) -> Result<(), RpcError> {
     let leader_rpc_url = if let Some(url) = context.config().leader_cluster_rpc_url() {
         url.clone()
-    } else if context.is_leader() {
-        // 자신이 리더인 경우 자신의 클러스터 URL 사용
-        context.config().cluster_rpc_url().clone()
     } else {
         return Err(RpcError::from(KeyGenerationError::InternalError(
             "Leader RPC URL not found".to_string(),
@@ -126,7 +123,6 @@ async fn submit_partial_key_to_leader(
     // 서명 생성
     let signature = crate::rpc::common::create_signature(&payload);
 
-    // SubmitPartialKey 요청 생성
     let parameter = SubmitPartialKey { signature, payload };
 
     // 리더에게 제출

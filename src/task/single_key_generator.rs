@@ -22,11 +22,19 @@ use crate::{rpc::cluster::RequestSubmitPartialKey, state::AppState, types::*, ut
 // Spawns a loop that periodically generates partial keys and aggregates
 pub fn run_single_key_generator(context: AppState) {
     tokio::spawn(async move {
-        let partial_key_generation_cycle = context.config().partial_key_generation_cycle();
-        let partial_key_aggregation_cycle = context.config().partial_key_aggregation_cycle();
+        let partial_key_generation_cycle_ms = context.config().partial_key_generation_cycle_ms();
+        let partial_key_aggregation_cycle_ms = context.config().partial_key_aggregation_cycle_ms();
+
+        info!(
+            "[{}] Partial key generation cycle: {} seconds, Partial key aggregation cycle: {} seconds",
+            context.config().address().to_short(),
+            partial_key_generation_cycle_ms,
+            partial_key_aggregation_cycle_ms
+        );
 
         loop {
-            sleep(Duration::from_secs(partial_key_generation_cycle)).await;
+            // if remove below sleep, error occurs: GetMut(Error { message: "Operation timed out: Timeout waiting to lock key" })
+            sleep(Duration::from_millis(partial_key_generation_cycle_ms)).await;
             let context = context.clone();
 
             let mut session_id = SessionId::get_mut().unwrap();
@@ -34,8 +42,10 @@ pub fn run_single_key_generator(context: AppState) {
             info!("Current session id: {}", current_session_id.as_u64());
 
             tokio::spawn(async move {
-                sleep(Duration::from_secs(partial_key_aggregation_cycle)).await;
-                let skde_params = context.skde_params().clone();
+                // key generator list except leader
+                let other_key_generator_rpc_url_list = KeyGeneratorList::get()
+                    .unwrap()
+                    .get_other_key_generator_rpc_url_list(&context.config().address());
 
                 let partial_key_address_list = PartialKeyAddressList::get_or(
                     current_session_id,
@@ -47,61 +57,67 @@ pub fn run_single_key_generator(context: AppState) {
                     .get_partial_key_list(current_session_id)
                     .unwrap();
 
-                let other_key_generator_rpc_url_list = KeyGeneratorList::get()
-                    .unwrap()
-                    .get_other_key_generator_rpc_url_list(&context.config().address());
-
-                if partial_key_list.is_empty() {
-                    tracing::info!(
-                        "No partial key list found for session id: {}",
-                        current_session_id.as_u64()
-                    );
-                    if !other_key_generator_rpc_url_list.is_empty() {
+                if other_key_generator_rpc_url_list.is_empty() {
+                    return;
+                } else {
+                    if partial_key_address_list.is_empty() {
                         info!(
-                            "other_key_generator_rpc_url_list: {:?}",
-                            other_key_generator_rpc_url_list
-                        );
-
-                        tracing::info!(
                             "[{}] Requested to submit partial key for session id: {}",
                             context.config().address().to_short(),
                             current_session_id.as_u64()
                         );
 
-                        request_submit_partial_key(
-                            other_key_generator_rpc_url_list,
-                            current_session_id,
-                        );
-                    } else {
-                        tracing::warn!(
-                            "No key generator and partial key list found for session id: {}",
-                            current_session_id.as_u64()
-                        );
+                        // This might be useful, partial key list is empty when there are multiple key generators
+                        // as well as session id is 0
+                        if session_id.as_u64() == 0 {
+                            request_submit_partial_key(
+                                other_key_generator_rpc_url_list,
+                                current_session_id,
+                            );
+                        } else {
+                            request_submit_partial_key(
+                                other_key_generator_rpc_url_list,
+                                current_session_id,
+                            );
+                        }
                     }
-                    return;
                 }
 
+                info!(
+                    "[{}] Partial key address list: {:?}",
+                    context.config().address().to_short(),
+                    partial_key_address_list
+                );
+
+                info!(
+                    "[{}] Partial key list: {:?}",
+                    context.config().address().to_short(),
+                    partial_key_list
+                );
+
                 let previous_session_id = SessionId::from(current_session_id.as_u64() - 1);
-                let randomness = DecryptionKey::get(previous_session_id)
-                    .map(|key| {
-                        tracing::info!(
+                let randomness = match DecryptionKey::get(previous_session_id) {
+                    Ok(key) => {
+                        info!(
                             "[{}] Using decryption key from previous session (previous_session_id = {}) as randomness",
                             context.config().address().to_short(),
                             previous_session_id.as_u64()
                         );
                         key.as_string().into_bytes()
-                    })
-                    .unwrap_or_else(|err| {
+                    }
+                    Err(err) => {
                         tracing::warn!(
                             "[{}] Failed to get decryption key for previous_session_id = {}: {}; falling back to default randomness",
                             context.config().address().to_short(),
                             previous_session_id.as_u64(),
                             err
-                            );
+                        );
                         b"default-randomness".to_vec()
-                    });
+                    }
+                };
 
                 // all nodes should execute this
+                let skde_params = context.skde_params().clone();
                 let mut selected_keys = select_random_partial_keys(&partial_key_list, &randomness);
 
                 let derived_key = derive_partial_key(&selected_keys, &skde_params);
@@ -111,25 +127,28 @@ pub fn run_single_key_generator(context: AppState) {
                 let aggregated_key = AggregatedKey::new(skde_aggregated_key.clone());
                 aggregated_key.put(current_session_id).unwrap();
 
-                tracing::info!(
+                info!(
                     "[{}] Completed to generate encryption key - session id: {:?} / encryption key: {:?}",
                     context.config().address().to_short(),
                     current_session_id,
                     skde_aggregated_key.u
                 );
 
+                // TODO: Should be solved by Solver node
                 let secure_key =
                     solve_time_lock_puzzle(&skde_params, &skde_aggregated_key).unwrap();
                 let decryption_key = DecryptionKey::new(secure_key.sk.clone());
                 decryption_key.put(current_session_id).unwrap();
 
-                tracing::info!(
+                info!(
                     "[{}] Complete to get decryption key - session id: {:?} / decryption key: {:?}",
                     context.config().address().to_short(),
                     current_session_id,
-                    decryption_key
+                    decryption_key.as_string()
                 );
 
+                // Sync Decryption Key
+                let decryption_key = DecryptionKey::get(current_session_id).unwrap();
                 // when successfully generated partial key, increase session_id
                 session_id.increase_session_id();
                 session_id.update().unwrap();
@@ -145,16 +164,41 @@ pub fn request_submit_partial_key(
     tokio::spawn(async move {
         let parameter = RequestSubmitPartialKey { session_id };
 
-        let rpc_client = RpcClient::new().unwrap();
-        rpc_client
-            .multicast(
-                other_key_generator_rpc_url_list,
-                RequestSubmitPartialKey::method(),
-                &parameter,
-                Id::Null,
-            )
-            .await
-            .unwrap();
+        match RpcClient::new() {
+            Ok(rpc_client) => {
+                match rpc_client
+                    .multicast(
+                        other_key_generator_rpc_url_list.clone(),
+                        RequestSubmitPartialKey::method(),
+                        &parameter,
+                        Id::Null,
+                    )
+                    .await
+                {
+                    Ok(_) => {
+                        info!(
+                            "Successfully requested submit partial key for session id: {}",
+                            session_id.as_u64()
+                        );
+                    }
+                    Err(err) => {
+                        tracing::error!(
+                            "Failed to multicast RequestSubmitPartialKey: {} for session id: {}, urls: {:?}",
+                            err,
+                            session_id.as_u64(),
+                            other_key_generator_rpc_url_list
+                        );
+                    }
+                }
+            }
+            Err(err) => {
+                tracing::error!(
+                    "Failed to create RpcClient: {} for session id: {}",
+                    err,
+                    session_id.as_u64()
+                );
+            }
+        }
     });
 }
 
