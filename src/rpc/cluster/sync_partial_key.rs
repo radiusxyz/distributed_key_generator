@@ -15,15 +15,14 @@ use crate::{
     utils::{get_current_timestamp, AddressExt},
 };
 
-// TODO: Change structure name to SyncPartialKey, SyncPartialKeyPayload
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncPartialKey {
     pub signature: Signature,
-    pub payload: PartialKeyAckPayload,
+    pub payload: SyncPartialKeyPayload,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct PartialKeyAckPayload {
+pub struct SyncPartialKeyPayload {
     pub partial_key_sender: Address,
     pub partial_key: SkdePartialKey,
     pub index: usize,
@@ -97,7 +96,7 @@ pub fn broadcast_partial_key_ack(
 
     let ack_timestamp = get_current_timestamp();
 
-    let payload = PartialKeyAckPayload {
+    let payload = SyncPartialKeyPayload {
         partial_key_sender: sender_address,
         session_id,
         partial_key,
