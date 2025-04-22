@@ -8,7 +8,7 @@ use tracing::info;
 use crate::{
     state::AppState,
     types::{KeyIdCounter, PartialKey, PartialKeyPool, SessionId, UsedPartialKeysList},
-    utils::create_partial_key_with_proof,
+    utils::generate_partial_key_with_proof,
 };
 
 const MAX_KEYS: usize = 5;
@@ -44,11 +44,8 @@ impl PartialKeyManager {
         Ok(())
     }
 
-    /// Replenish the pool of partial keys up to the maximum limit
-    pub async fn replenish_partial_key_pool(
-        &self,
-        skde_params: &SkdeParams,
-    ) -> Result<(), KvStoreError> {
+    /// Fill the pool of partial keys up to the maximum limit
+    pub async fn add_keys_to_pool(&self, skde_params: &SkdeParams) -> Result<(), KvStoreError> {
         let available_keys = self.available_key_count().await?;
 
         if available_keys >= self.max_keys {
@@ -60,7 +57,7 @@ impl PartialKeyManager {
             let key_id = KeyIdCounter::get_next_id_and_increment()?;
             info!("Generating key: {}", key_id);
 
-            let (partial_key, proof) = create_partial_key_with_proof(skde_params);
+            let (partial_key, proof) = generate_partial_key_with_proof(skde_params);
             let precomputed_key = PartialKeyPool::new(key_id, partial_key, proof);
 
             precomputed_key.put(key_id)?;
@@ -159,10 +156,7 @@ pub async fn run_partial_key_manager(context: AppState) {
         match manager.available_key_count().await {
             Ok(available) => {
                 if available < manager.min_threshold {
-                    match manager
-                        .replenish_partial_key_pool(context.skde_params())
-                        .await
-                    {
+                    match manager.add_keys_to_pool(context.skde_params()).await {
                         Ok(_) => {
                             info!(
                                 "Partial Key Manager: Generated partial keys. Available: {}",

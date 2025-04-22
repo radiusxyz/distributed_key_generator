@@ -33,7 +33,7 @@ impl AddressExt for Address {
 }
 
 /// Create a new partial key with its validity proof
-pub fn create_partial_key_with_proof(
+pub fn generate_partial_key_with_proof(
     skde_params: &SkdeParams,
 ) -> (SkdePartialKey, PartialKeyProof) {
     // Generate the partial key using the SKDE library
