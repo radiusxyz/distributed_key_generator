@@ -13,7 +13,7 @@ use super::{PartialKeyPayload, SubmitPartialKey};
 use crate::{
     error::KeyGenerationError,
     rpc::prelude::*,
-    utils::{get_current_timestamp, AddressExt},
+    utils::{create_signature, get_current_timestamp, AddressExt},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -77,7 +77,7 @@ async fn submit_partial_key_to_leader(
     };
 
     // Create signature for the payload
-    let signature = crate::rpc::common::create_signature(&payload);
+    let signature = create_signature(&payload);
 
     let parameter = SubmitPartialKey { signature, payload };
 

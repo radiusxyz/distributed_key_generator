@@ -8,9 +8,9 @@ use tracing::info;
 
 use crate::{
     error::KeyGenerationError,
-    rpc::{cluster::broadcast_partial_key_ack, common::verify_signature, prelude::*},
+    rpc::{cluster::broadcast_partial_key_ack, prelude::*},
     types::SessionId,
-    utils::AddressExt,
+    utils::{verify_signature, AddressExt},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

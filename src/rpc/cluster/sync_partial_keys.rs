@@ -6,9 +6,7 @@ use serde::{Deserialize, Serialize};
 use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::info;
 
-use crate::{
-    error::KeyGenerationError, rpc::prelude::*, utils::AddressExt
-};
+use crate::{error::KeyGenerationError, rpc::prelude::*, utils::AddressExt};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncPartialKeys {
@@ -42,7 +40,7 @@ impl RpcParameter<AppState> for SyncPartialKeys {
             session_id,
             submit_timestamps,
             ack_timestamp,
-            signatures: _
+            signatures: _,
         } = &self.payload;
 
         info!(
@@ -55,24 +53,24 @@ impl RpcParameter<AppState> for SyncPartialKeys {
         );
 
         if partial_key_senders.len() != partial_keys.len()
-        || partial_keys.len() != submit_timestamps.len()
-    {
-        return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-            "Mismatched vector lengths in partial key ACK payload".into(),
-        )));
-    }
-    // TODO: Signature verification
-    // for (sig, sender) in signatures.iter().zip(partial_key_senders) {
-    //     let signer = verify_signature(sig, &self.payload)?;
-    
-    //     if &signer != sender {
-    //         return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-    //             "Signature does not match sender".into(),
-    //         )));
-    //     }
-    // }
+            || partial_keys.len() != submit_timestamps.len()
+        {
+            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+                "Mismatched vector lengths in partial key ACK payload".into(),
+            )));
+        }
+        // TODO: Signature verification
+        // for (sig, sender) in signatures.iter().zip(partial_key_senders) {
+        //     let signer = verify_signature(sig, &self.payload)?;
 
-    // TODO: Calculate and store encryption key if signatures are valid
+        //     if &signer != sender {
+        //         return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+        //             "Signature does not match sender".into(),
+        //         )));
+        //     }
+        // }
+
+        // TODO: Calculate and store encryption key if signatures are valid
 
         Ok(())
     }

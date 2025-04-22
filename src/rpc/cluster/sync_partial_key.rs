@@ -11,8 +11,8 @@ use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::info;
 
 use crate::{
-    rpc::{common::create_signature, prelude::*},
-    utils::{get_current_timestamp, AddressExt},
+    rpc::prelude::*,
+    utils::{create_signature, get_current_timestamp, AddressExt},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

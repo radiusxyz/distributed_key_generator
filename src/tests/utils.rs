@@ -22,12 +22,9 @@ use tracing_subscriber::fmt;
 
 use crate::{
     config::Role,
-    rpc::{
-        cluster::{GetKeyGeneratorList, GetSkdeParams, GetSkdeParamsResponse, PartialKeyPayload},
-        common::create_signature,
-    },
+    rpc::cluster::{GetKeyGeneratorList, GetSkdeParams, GetSkdeParamsResponse, PartialKeyPayload},
     types::{Config, ConfigOption},
-    utils::get_current_timestamp,
+    utils::{create_signature, get_current_timestamp},
     SessionId,
 };
 
