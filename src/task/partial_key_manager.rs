@@ -7,7 +7,7 @@ use tracing::info;
 
 use crate::{
     state::AppState,
-    types::{KeyIdCounter, PartialKey, PrecomputedPartialKey, SessionId, UsedPartialKeysList},
+    types::{KeyIdCounter, PartialKey, PartialKeyPool, SessionId, UsedPartialKeysList},
     utils::create_partial_key_with_proof,
 };
 
@@ -61,7 +61,7 @@ impl PartialKeyManager {
             info!("Generating key: {}", key_id);
 
             let (partial_key, proof) = create_partial_key_with_proof(skde_params);
-            let precomputed_key = PrecomputedPartialKey::new(key_id, partial_key, proof);
+            let precomputed_key = PartialKeyPool::new(key_id, partial_key, proof);
 
             precomputed_key.put(key_id)?;
         }
@@ -76,7 +76,7 @@ impl PartialKeyManager {
         address: &Address,
     ) -> Result<Option<(PartialKey, PartialKeyProof)>, KvStoreError> {
         // Find an available key
-        match PrecomputedPartialKey::find_first_available()? {
+        match PartialKeyPool::find_first_available()? {
             Some(mut precomputed_key) => {
                 let key_id = precomputed_key.id;
 

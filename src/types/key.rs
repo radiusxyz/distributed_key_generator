@@ -211,7 +211,7 @@ impl KeyIdCounter {
 /// A precomputed partial key stored in the system
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
 #[kvstore(key(id: u64))]
-pub struct PrecomputedPartialKey {
+pub struct PartialKeyPool {
     pub id: u64,
     pub used_in_session: Option<SessionId>, // None if available, Some(session_id) if used
     pub partial_key: SkdePartialKey,
@@ -219,7 +219,7 @@ pub struct PrecomputedPartialKey {
     pub timestamp: u64,
 }
 
-impl PrecomputedPartialKey {
+impl PartialKeyPool {
     pub fn new(id: u64, partial_key: SkdePartialKey, proof: PartialKeyProof) -> Self {
         Self {
             id,

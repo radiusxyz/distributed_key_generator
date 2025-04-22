@@ -73,15 +73,9 @@ pub fn run_single_key_generator(context: AppState) {
                 }
 
                 info!(
-                    "[{}] Partial key address list: {:?}",
+                    "[{}] Partial key list len: {:?}",
                     context.config().address().to_short(),
-                    partial_key_address_list
-                );
-
-                info!(
-                    "[{}] Partial key list: {:?}",
-                    context.config().address().to_short(),
-                    partial_key_list
+                    partial_key_list.len()
                 );
 
                 let previous_session_id = SessionId::from(current_session_id.as_u64() - 1);
