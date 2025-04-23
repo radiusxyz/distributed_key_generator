@@ -47,6 +47,10 @@ pub fn run_single_key_generator(context: AppState) {
                     .unwrap()
                     .get_other_key_generator_rpc_url_list(&context.config().address());
 
+                if key_generator_rpc_url_list.is_empty() {
+                    return;
+                }
+
                 let partial_key_address_list = PartialKeyAddressList::get_or(
                     current_session_id,
                     PartialKeyAddressList::default,
@@ -57,19 +61,15 @@ pub fn run_single_key_generator(context: AppState) {
                     .get_partial_key_list(current_session_id)
                     .unwrap();
 
-                if key_generator_rpc_url_list.is_empty() {
-                    return;
-                } else {
-                    if partial_key_address_list.is_empty() {
-                        info!(
-                            "[{}] Requested to submit partial key for session id: {}",
-                            context.config().address().to_short(),
-                            current_session_id.as_u64()
-                        );
+                if partial_key_address_list.is_empty() {
+                    info!(
+                        "[{}] Requested to submit partial key for session id: {}",
+                        context.config().address().to_short(),
+                        current_session_id.as_u64()
+                    );
 
-                        // Request partial keys from other generators when partial_key_address_list is empty
-                        request_submit_partial_key(key_generator_rpc_url_list, current_session_id);
-                    }
+                    // Request partial keys from other generators when partial_key_address_list is empty
+                    request_submit_partial_key(key_generator_rpc_url_list, current_session_id);
                 }
 
                 info!(
@@ -78,26 +78,7 @@ pub fn run_single_key_generator(context: AppState) {
                     partial_key_list.len()
                 );
 
-                let previous_session_id = SessionId::from(current_session_id.as_u64() - 1);
-                let randomness = match DecryptionKey::get(previous_session_id) {
-                    Ok(key) => {
-                        info!(
-                            "[{}] Using decryption key from previous session (previous_session_id = {}) as randomness",
-                            context.config().address().to_short(),
-                            previous_session_id.as_u64()
-                        );
-                        key.as_string().into_bytes()
-                    }
-                    Err(err) => {
-                        tracing::warn!(
-                            "[{}] Failed to get decryption key for previous_session_id = {}: {}; falling back to default randomness",
-                            context.config().address().to_short(),
-                            previous_session_id.as_u64(),
-                            err
-                        );
-                        b"default-randomness".to_vec()
-                    }
-                };
+                let randomness = get_randomness(current_session_id);
 
                 // All nodes execute the key selection and derivation
                 let skde_params = context.skde_params().clone();
@@ -213,7 +194,7 @@ fn select_ordered_indices(n: usize, randomness: &[u8]) -> Vec<usize> {
 }
 
 fn select_random_partial_keys(
-    partial_keys: &Vec<SkdePartialKey>,
+    partial_keys: &[SkdePartialKey],
     randomness: &[u8],
 ) -> Vec<SkdePartialKey> {
     let indices = select_ordered_indices(partial_keys.len(), randomness);
@@ -233,7 +214,7 @@ fn shake256_to_biguint(input: &[u8], size: usize) -> BigUint {
 }
 
 // Derives a partial key from selected partial keys
-fn derive_partial_key(selected_keys: &Vec<SkdePartialKey>, params: &SkdeParams) -> SkdePartialKey {
+fn derive_partial_key(selected_keys: &[SkdePartialKey], params: &SkdeParams) -> SkdePartialKey {
     let n = BigUint::parse_bytes(params.n.as_bytes(), 10).unwrap();
     let max_sequencer_number =
         BigUint::parse_bytes(params.max_sequencer_number.as_bytes(), 10).unwrap();
@@ -269,5 +250,17 @@ fn derive_partial_key(selected_keys: &Vec<SkdePartialKey>, params: &SkdeParams) 
         v: uv_pair.v,
         y: yw_pair.u,
         w: yw_pair.v,
+    }
+}
+
+fn get_randomness(current_session_id: SessionId) -> Vec<u8> {
+    if current_session_id.as_u64() == 0 {
+        return b"initial-randomness".to_vec();
+    }
+
+    let previous_session_id = SessionId::from(current_session_id.as_u64() - 1);
+    match DecryptionKey::get(previous_session_id) {
+        Ok(key) => key.as_string().into_bytes(),
+        Err(_) => b"default-randomness".to_vec(),
     }
 }
