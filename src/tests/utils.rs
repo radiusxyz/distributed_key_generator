@@ -128,6 +128,7 @@ pub fn create_config_from_dir(temp_path: &PathBuf) -> Config {
         solver_rpc_url: None,
         leader_cluster_rpc_url: None,
         leader_solver_rpc_url: None,
+        solver_solver_rpc_url: None,
         role: None,
         radius_foundation_address: None,
         chain_type: None,

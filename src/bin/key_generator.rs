@@ -4,7 +4,7 @@ use distributed_key_generation::{
     rpc::{
         authority::GetAuthorizedSkdeParams,
         cluster::{self, GetKeyGeneratorList, GetKeyGeneratorRpcUrlListResponse},
-        external, internal,
+        external, internal, solver,
     },
     skde_params::fetch_skde_params_with_retry,
     state::AppState,
@@ -140,6 +140,12 @@ async fn main() -> Result<(), Error> {
             if config.is_leader() {
                 info!("Starting leader node operations...");
                 run_single_key_generator(app_state.clone());
+
+                info!("Initializing solve RPC server on leader...");
+                initialize_solve_rpc_server(&app_state).await?;
+            } else if config.is_solver() {
+                info!("Initializing solve RPC server on solver...");
+                initialize_solve_rpc_server(&app_state).await?;
             }
             // Initialize the internal RPC server
             initialize_internal_rpc_server(&app_state).await?;
@@ -249,6 +255,26 @@ async fn initialize_authority_rpc_server(app_state: &AppState) -> Result<JoinHan
         "Successfully started the authority RPC server: {}",
         authority_rpc_url
     );
+
+    let handle = tokio::spawn(async move {
+        rpc_server.stopped().await;
+    });
+
+    Ok(handle)
+}
+
+async fn initialize_solve_rpc_server(app_state: &AppState) -> Result<JoinHandle<()>, Error> {
+    let solver_rpc_url = app_state.config().solver_rpc_url().to_string();
+
+    let rpc_server = RpcServer::new(app_state.clone())
+        .register_rpc_method::<solver::GetSkdeParams>()?
+        .register_rpc_method::<solver::SubmitDecryptionKey>()?
+        .register_rpc_method::<solver::SyncPartialKeys>()?
+        .init(solver_rpc_url.clone())
+        .await
+        .map_err(Error::RpcServerError)?;
+
+    tracing::info!("Started solver RPC server at {}", solver_rpc_url);
 
     let handle = tokio::spawn(async move {
         rpc_server.stopped().await;

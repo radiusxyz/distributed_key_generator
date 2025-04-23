@@ -3,12 +3,8 @@ use radius_sdk::{
     signature::{Address, Signature},
 };
 use serde::{Deserialize, Serialize};
-use skde::{
-    delay_encryption::solve_time_lock_puzzle, key_aggregation::aggregate_key,
-    key_generation::PartialKey as SkdePartialKey,
-};
+use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::{info, warn};
-
 use super::submit_decryption_key::{
     DecryptionKeyResponse, SubmitDecryptionKey, SubmitDecryptionKeyPayload,
 };
@@ -16,10 +12,7 @@ use crate::{
     error::KeyGenerationError,
     get_current_timestamp,
     rpc::prelude::*,
-    utils::{
-        calculate_decryption_key, create_signature, perform_randomized_aggregation,
-        verify_signature, AddressExt,
-    },
+    utils::{calculate_decryption_key, create_signature, perform_randomized_aggregation, verify_signature, AddressExt},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -139,13 +132,15 @@ impl RpcParameter<AppState> for SyncPartialKeys {
 }
 
 async fn process_key_derivation(context: &AppState, session_id: SessionId) -> Result<(), Error> {
-    let partial_keys = PartialKeyAddressList::get(session_id)?.get_partial_key_list(session_id)?;
+    
+    let partial_keys = PartialKeyAddressList::get(session_id)?
+    .get_partial_key_list(session_id)?;
 
     let aggregated_key = perform_randomized_aggregation(context, session_id, &partial_keys);
-
+    
     let decryption_key = calculate_decryption_key(context, session_id, &aggregated_key)
-        .unwrap()
-        .as_string();
+    .unwrap()
+    .as_string();
 
     // let decryption_key = decrypted.sk.clone();
     DecryptionKey::new(decryption_key.clone()).put(session_id)?;

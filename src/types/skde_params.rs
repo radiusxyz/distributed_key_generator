@@ -10,8 +10,7 @@ use tracing::info;
 use super::{Config, Role};
 use crate::rpc::{
     authority::{GetAuthorizedSkdeParams, GetAuthorizedSkdeParamsResponse},
-    cluster::{GetSkdeParams, GetSkdeParamsResponse},
-    solver,
+    cluster, solver,
 };
 
 async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
@@ -69,7 +68,7 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
             }
         }
 
-        _ => {
+        Role::Committee => {
             if let Some(leader_url) = config.leader_cluster_rpc_url() {
                 let client = match RpcClient::new() {
                     Ok(c) => c,
@@ -79,11 +78,11 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                     }
                 };
 
-                let response: GetSkdeParamsResponse = match client
+                let response: cluster::GetSkdeParamsResponse = match client
                     .request(
                         leader_url,
-                        GetSkdeParams::method(),
-                        &GetSkdeParams,
+                        cluster::GetSkdeParams::method(),
+                        &cluster::GetSkdeParams,
                         Id::Null,
                     )
                     .await
@@ -100,6 +99,44 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                 tracing::warn!("Missing leader_cluster_rpc_url in config");
                 None
             }
+        }
+        Role::Solver => {
+            if let Some(leader_url) = config.leader_solver_rpc_url() {
+                let client = match RpcClient::new() {
+                    Ok(c) => c,
+                    Err(err) => {
+                        tracing::warn!("Failed to create RPC client: {}", err);
+                        return None;
+                    }
+                };
+
+                let response: solver::GetSkdeParamsResponse = match client
+                    .request(
+                        leader_url,
+                        solver::GetSkdeParams::method(),
+                        &solver::GetSkdeParams,
+                        Id::Null,
+                    )
+                    .await
+                {
+                    Ok(res) => res,
+                    Err(err) => {
+                        tracing::warn!("Failed to fetch SkdeParams from leader: {}", err);
+                        return None;
+                    }
+                };
+                Some(response.into_skde_params())
+            } else {
+                tracing::warn!("Missing leader_cluster_rpc_url in config");
+                None
+            }
+        }
+        _ => {
+            tracing::warn!(
+                "Unsupported role for SKDE param retrieval: {:?}",
+                config.role()
+            );
+            None
         }
     }
 }

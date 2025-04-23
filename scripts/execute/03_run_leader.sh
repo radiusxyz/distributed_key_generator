@@ -30,6 +30,7 @@ external_rpc_url = "http://127.0.0.1:7100"
 internal_rpc_url = "http://127.0.0.1:7200"
 cluster_rpc_url = "http://127.0.0.1:7300"
 solver_rpc_url = "http://127.0.0.1:8400"
+solver_solver_rpc_url = "http://127.0.0.1:8500"
 
 role = "leader"
 radius_foundation_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"

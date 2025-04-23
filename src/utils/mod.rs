@@ -18,7 +18,7 @@ use skde::{
 use tracing::info;
 
 use crate::{
-    error::KeyGenerationError, AggregatedKey, AppState, DecryptionKey, PartialKeyAddressList,
+    error::KeyGenerationError, AggregatedKey, AppState, DecryptionKey,
     SessionId,
 };
 
