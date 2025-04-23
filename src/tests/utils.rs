@@ -215,9 +215,8 @@ partial_key_aggregation_cycle_ms = 500
     info!("Completed writing config file for {} node", role);
 
     // Write signing key file (different keys for different nodes)
-    let key_index = if role == Role::Leader { 0 } else { 1 };
     let signing_key_path = temp_path.join("signing_key");
-    std::fs::write(&signing_key_path, TEST_PRIVATE_KEYS[key_index])
+    std::fs::write(&signing_key_path, TEST_PRIVATE_KEYS[index])
         .expect("Failed to write signing key");
 
     // Create independent database directory
@@ -402,7 +401,8 @@ pub async fn generate_partial_key_with_proof(
     (secret_value, partial_key, partial_key_proof)
 }
 
-/// Submits a partial key from a committee node to a leader node
+/// Submits a partial key from a committee node to a leader node    
+/// Should be removed after test_integration_submit_partial_key_and_ack.rs is removed
 pub async fn submit_partial_key_to_leader(
     committee_address: Address,
     leader_port: u16,
@@ -524,14 +524,4 @@ pub async fn verify_mutual_registration(
         verify_node_registration(committee_ports.cluster, leader_ports.cluster).await;
 
     (leader_found, committee_found)
-}
-
-/// Clean up multiple processes
-pub fn cleanup_all_processes(processes: &mut Vec<&mut std::process::Child>) {
-    info!("Test complete, cleaning up all processes");
-    for process in processes {
-        if let Err(e) = process.kill() {
-            info!("Failed to kill process (PID: {}): {:?}", process.id(), e);
-        }
-    }
 }

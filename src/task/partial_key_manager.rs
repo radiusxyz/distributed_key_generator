@@ -11,8 +11,8 @@ use crate::{
     utils::generate_partial_key_with_proof,
 };
 
-const MAX_KEYS: usize = 5;
-const MIN_THRESHOLD: usize = 2;
+const MAX_KEYS: usize = 10;
+const MIN_THRESHOLD: usize = 5;
 
 // Global singleton instance
 static PARTIAL_KEY_MANAGER: OnceCell<Arc<PartialKeyManager>> = OnceCell::new();
@@ -55,13 +55,15 @@ impl PartialKeyManager {
         for _ in available_keys..self.max_keys {
             // Allocate new key ID
             let key_id = KeyIdCounter::get_next_id_and_increment()?;
-            info!("Generating key: {}", key_id);
 
             let (partial_key, proof) = generate_partial_key_with_proof(skde_params);
             let precomputed_key = PartialKeyPool::new(key_id, partial_key, proof);
 
             precomputed_key.put(key_id)?;
         }
+
+        let available_keys = self.available_key_count().await?;
+        info!("PartialKeyManager: Added {} keys to pool", available_keys);
 
         Ok(())
     }

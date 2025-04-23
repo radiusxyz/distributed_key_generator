@@ -2,12 +2,13 @@ use tokio::time::{sleep, Duration};
 
 use crate::{
     tests::utils::{
-        cleanup_all_processes, generate_partial_key_with_proof, init_test_environment,
+        cleanup_existing_processes, generate_partial_key_with_proof, init_test_environment,
         register_nodes, start_node, submit_partial_key_to_leader, verify_mutual_registration,
     },
     Role, SessionId,
 };
 
+// TODO: This test should be removed because test_integration_run_single_node_for_each_role.rs will cover this
 #[tokio::test]
 async fn test_integration_submit_partial_key_and_ack() {
     // Initialize test environment
@@ -17,13 +18,13 @@ async fn test_integration_submit_partial_key_and_ack() {
     let mut temp_dirs = Vec::new();
 
     // 1. Start authority, leader and committee nodes
-    let (mut authority_process, _authority_ports, _authority_config) =
+    let (_authority_process, _authority_ports, _authority_config) =
         start_node(Role::Authority, 9, &mut temp_dirs).await;
 
-    let (mut leader_process, leader_ports, leader_config) =
+    let (_leader_process, leader_ports, leader_config) =
         start_node(Role::Leader, 0, &mut temp_dirs).await;
 
-    let (mut committee_process, committee_ports, committee_config) =
+    let (_committee_process, committee_ports, committee_config) =
         start_node(Role::Committee, 1, &mut temp_dirs).await;
 
     // 2. Register nodes with each other
@@ -72,10 +73,5 @@ async fn test_integration_submit_partial_key_and_ack() {
     sleep(Duration::from_secs(2)).await;
 
     // 6. Cleanup processes
-    let mut processes = vec![
-        &mut authority_process,
-        &mut leader_process,
-        &mut committee_process,
-    ];
-    cleanup_all_processes(&mut processes);
+    cleanup_existing_processes();
 }

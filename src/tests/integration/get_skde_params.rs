@@ -7,7 +7,7 @@ use crate::{
         authority::GetAuthorizedSkdeParams,
         cluster::{GetSkdeParams, GetSkdeParamsResponse},
     },
-    tests::utils::{cleanup_all_processes, init_test_environment, start_node},
+    tests::utils::{cleanup_existing_processes, init_test_environment, start_node},
     Role,
 };
 
@@ -20,13 +20,13 @@ async fn test_integration_get_skde_params() {
     let mut temp_dirs = Vec::new();
 
     // 1. Start authority, leader and committee nodes
-    let (mut authority_process, _authority_ports, authority_config) =
+    let (_authority_process, _authority_ports, authority_config) =
         start_node(Role::Authority, 9, &mut temp_dirs).await;
 
     // Get authorized skde params from authority
     let rpc_client = RpcClient::new().unwrap();
 
-    let response: serde_json::Value = match rpc_client
+    let _: serde_json::Value = match rpc_client
         .request(
             &authority_config.authority_rpc_url(),
             "get_authorized_skde_params",
@@ -41,10 +41,8 @@ async fn test_integration_get_skde_params() {
         }
     };
 
-    println!("response:{:?}", response);
-
     // Get skde params from leader
-    let (mut leader_process, _leader_ports, _leader_config) =
+    let (_leader_process, _leader_ports, _leader_config) =
         start_node(Role::Leader, 0, &mut temp_dirs).await;
 
     let response: GetSkdeParamsResponse = rpc_client
@@ -56,8 +54,6 @@ async fn test_integration_get_skde_params() {
         )
         .await
         .unwrap();
-
-    println!("response:{:?}", response);
 
     // Read skde_params.json file from the filesystem
     let project_root = std::env::current_dir().expect("Failed to get current directory");
@@ -99,9 +95,6 @@ async fn test_integration_get_skde_params() {
         serde_json::to_string_pretty(&response_json).unwrap()
     );
 
-    println!("File content and API response match perfectly!");
-
-    // Clean up all processes
-    let mut processes = vec![&mut authority_process, &mut leader_process];
-    cleanup_all_processes(&mut processes);
+    // 5. Cleanup processes
+    cleanup_existing_processes();
 }
