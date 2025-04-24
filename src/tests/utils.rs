@@ -407,7 +407,6 @@ pub async fn submit_partial_key_to_leader(
     committee_address: Address,
     leader_port: u16,
     partial_key: skde::key_generation::PartialKey,
-    partial_key_proof: skde::key_generation::PartialKeyProof,
     session_id: SessionId,
 ) {
     info!("Submitting partial key from committee to leader");
@@ -422,7 +421,6 @@ pub async fn submit_partial_key_to_leader(
     let payload = PartialKeyPayload {
         sender: committee_address.clone(),
         partial_key: partial_key.clone(),
-        proof: partial_key_proof.clone(),
         submit_timestamp: timestamp,
         session_id,
     };
@@ -436,7 +434,6 @@ pub async fn submit_partial_key_to_leader(
         "payload": {
             "sender": committee_address,
             "partial_key": partial_key,
-            "proof": partial_key_proof,
             "submit_timestamp": timestamp,
             "session_id": session_id
         }

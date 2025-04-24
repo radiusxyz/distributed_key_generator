@@ -29,7 +29,6 @@ pub struct SyncPartialKey {
 pub struct PartialKeyAckPayload {
     pub partial_key_sender: Address,
     pub partial_key: SkdePartialKey,
-    pub proof: PartialKeyProof,
     pub index: usize,
     pub session_id: SessionId,
     pub submit_timestamp: u64,
@@ -65,22 +64,6 @@ impl RpcParameter<AppState> for SyncPartialKey {
             return Ok(());
         }
 
-        let is_valid = verify_partial_key_validity(
-            context.skde_params(),
-            self.payload.partial_key.clone(),
-            self.payload.proof.clone(),
-        )
-        .unwrap();
-
-        if !is_valid {
-            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-                format!(
-                    "sender: {:?}, partial_key: {:?}",
-                    self.payload.partial_key_sender, self.payload.partial_key
-                ),
-            )));
-        }
-
         PartialKeyAddressList::initialize(self.payload.session_id)?;
 
         // if the sender is incluided in
@@ -100,7 +83,6 @@ pub fn broadcast_partial_key_ack(
     sender_address: Address,
     session_id: SessionId,
     partial_key: SkdePartialKey,
-    proof: PartialKeyProof,
     submit_timestamp: u64,
     index: usize,
     _context: &AppState,
@@ -122,7 +104,6 @@ pub fn broadcast_partial_key_ack(
         partial_key_sender: sender_address,
         session_id,
         partial_key,
-        proof,
         index,
         submit_timestamp,
         ack_timestamp,

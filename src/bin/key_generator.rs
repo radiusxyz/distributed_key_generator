@@ -9,8 +9,7 @@ use distributed_key_generation::{
     skde_params::fetch_skde_params_with_retry,
     state::AppState,
     task::{
-        authority_setup::run_setup_skde_params, partial_key_manager::run_partial_key_manager,
-        single_key_generator::run_single_key_generator,
+        authority_setup::run_setup_skde_params, single_key_generator::run_single_key_generator,
     },
     types::*,
 };
@@ -141,11 +140,7 @@ async fn main() -> Result<(), Error> {
             if config.is_leader() {
                 info!("Starting leader node operations...");
                 run_single_key_generator(app_state.clone());
-            } else if config.is_committee() {
-                info!("Starting committee node operations...");
-                tokio::spawn(run_partial_key_manager(app_state.clone()));
             }
-
             // Initialize the internal RPC server
             initialize_internal_rpc_server(&app_state).await?;
 

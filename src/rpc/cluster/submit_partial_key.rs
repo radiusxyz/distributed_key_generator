@@ -23,7 +23,6 @@ pub struct SubmitPartialKey {
 pub struct PartialKeyPayload {
     pub sender: Address,
     pub partial_key: SkdePartialKey,
-    pub proof: PartialKeyProof,
     pub submit_timestamp: u64,
     pub session_id: SessionId,
 }
@@ -56,20 +55,6 @@ impl RpcParameter<AppState> for SubmitPartialKey {
             )));
         }
 
-        // Verify partial key validity
-        let is_valid = skde::key_generation::verify_partial_key_validity(
-            context.skde_params(),
-            self.payload.partial_key.clone(),
-            self.payload.proof.clone(),
-        )
-        .unwrap();
-
-        if !is_valid {
-            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-                format!("{:?}", self.payload.partial_key),
-            )));
-        }
-
         PartialKeyAddressList::initialize(self.payload.session_id)?;
 
         // if the sender is incluided in
@@ -85,7 +70,6 @@ impl RpcParameter<AppState> for SubmitPartialKey {
             sender_address,
             self.payload.session_id,
             self.payload.partial_key,
-            self.payload.proof.clone(),
             self.payload.submit_timestamp,
             0,
             &context,

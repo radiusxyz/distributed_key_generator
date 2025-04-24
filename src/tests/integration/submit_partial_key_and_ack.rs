@@ -1,3 +1,4 @@
+use skde::key_generation::generate_partial_key;
 use tokio::time::{sleep, Duration};
 
 use crate::{
@@ -49,9 +50,8 @@ async fn test_integration_submit_partial_key_and_ack() {
         "Committee node not found in leader's key generator list"
     );
 
-    // 4. Generate partial key from committee
-    let (_, partial_key, partial_key_proof) =
-        generate_partial_key_with_proof(&committee_config).await;
+    // // 4. Generate partial key from committee
+    let (_, partial_key, _) = generate_partial_key_with_proof(&committee_config).await;
 
     // Session ID for this test
     let session_id = SessionId::default();
@@ -64,7 +64,6 @@ async fn test_integration_submit_partial_key_and_ack() {
         committee_address.clone(),
         leader_ports.cluster,
         partial_key,
-        partial_key_proof,
         session_id,
     )
     .await;

@@ -1,13 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use radius_sdk::signature::Address;
-use skde::{
-    delay_encryption::SkdeParams,
-    key_generation::{
-        generate_partial_key, prove_partial_key_validity, PartialKey as SkdePartialKey,
-        PartialKeyProof,
-    },
-};
 
 pub fn get_current_timestamp() -> u64 {
     SystemTime::now()
@@ -30,19 +23,4 @@ impl AddressExt for Address {
             format!("{}", &hex[..6])
         }
     }
-}
-
-/// Create a new partial key with its validity proof
-pub fn generate_partial_key_with_proof(
-    skde_params: &SkdeParams,
-) -> (SkdePartialKey, PartialKeyProof) {
-    // Generate the partial key using the SKDE library
-    let (secret_value, skde_partial_key) =
-        generate_partial_key(skde_params).expect("Failed to generate partial key");
-
-    // Generate proof of validity for the key
-    let proof = prove_partial_key_validity(skde_params, &secret_value)
-        .expect("Failed to generate proof for partial key");
-
-    (skde_partial_key, proof)
 }

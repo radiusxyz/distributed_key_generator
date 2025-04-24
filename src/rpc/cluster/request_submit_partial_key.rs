@@ -6,14 +6,13 @@ use radius_sdk::{
     signature::Address,
 };
 use serde::{Deserialize, Serialize};
-use skde::key_generation::{PartialKey as SkdePartialKey, PartialKeyProof};
+use skde::key_generation::{generate_partial_key, PartialKey as SkdePartialKey};
 use tracing::info;
 
 use super::{PartialKeyPayload, SubmitPartialKey};
 use crate::{
     error::KeyGenerationError,
     rpc::prelude::*,
-    task::partial_key_manager::PartialKeyManager,
     utils::{get_current_timestamp, AddressExt},
 };
 
@@ -40,57 +39,18 @@ impl RpcParameter<AppState> for RequestSubmitPartialKey {
             self.session_id.as_u64()
         );
 
-        let manager = PartialKeyManager::global();
+        let (secret_value, partial_key) = generate_partial_key(skde_params).unwrap();
 
-        match manager
-            .get_fresh_partial_key_for_session(self.session_id, &my_address)
-            .await
-        {
-            Ok(Some((partial_key, proof))) => {
-                submit_partial_key_to_leader(
-                    my_address,
-                    self.session_id,
-                    partial_key.into_inner(),
-                    proof,
-                    context.clone(),
-                )
-                .await?;
+        // let manager = PartialKeyManager::global();
 
-                info!(
-                    "[{}] Submitted precomputed partial key to leader for session {}",
-                    context.config().address().to_short(),
-                    self.session_id.as_u64()
-                );
-            }
-            Ok(None) => {
-                info!(
-                    "[{}] No precomputed key available, generating new one for session {}",
-                    context.config().address().to_short(),
-                    self.session_id.as_u64()
-                );
+        submit_partial_key_to_leader(my_address, self.session_id, partial_key, context.clone())
+            .await?;
 
-                let (secret_value, partial_key) =
-                    skde::key_generation::generate_partial_key(skde_params).unwrap();
-                let proof =
-                    skde::key_generation::prove_partial_key_validity(skde_params, &secret_value)
-                        .unwrap();
-
-                submit_partial_key_to_leader(
-                    my_address,
-                    self.session_id,
-                    partial_key,
-                    proof,
-                    context.clone(),
-                )
-                .await?;
-            }
-            Err(e) => {
-                return Err(RpcError::from(KeyGenerationError::InternalError(format!(
-                    "PartialKeyManager error: {}",
-                    e
-                ))));
-            }
-        }
+        info!(
+            "[{}] Submitted precomputed partial key to leader for session {}",
+            context.config().address().to_short(),
+            self.session_id.as_u64()
+        );
 
         Ok(Some(()))
     }
@@ -100,7 +60,6 @@ async fn submit_partial_key_to_leader(
     sender: Address,
     session_id: SessionId,
     partial_key: SkdePartialKey,
-    proof: PartialKeyProof,
     context: AppState,
 ) -> Result<(), RpcError> {
     let leader_rpc_url = if let Some(url) = context.config().leader_cluster_rpc_url() {
@@ -115,7 +74,6 @@ async fn submit_partial_key_to_leader(
     let payload = PartialKeyPayload {
         sender: sender.clone(),
         partial_key,
-        proof,
         submit_timestamp: get_current_timestamp(),
         session_id,
     };
