@@ -5,6 +5,7 @@ use radius_sdk::json_rpc::{
     server::RpcParameter,
 };
 use skde::{delay_encryption::SkdeParams, BigUint};
+use tracing::info;
 
 use super::{Config, Role};
 use crate::rpc::{
@@ -16,16 +17,12 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
     match config.role() {
         Role::Authority => {
             let skde_path = config.path().join("skde_params.json");
-            tracing::info!("Attempting to load SKDE params from: {:?}", skde_path);
 
             match fs::read_to_string(&skde_path) {
                 Ok(data) => {
-                    tracing::info!("Successfully read SKDE param file, length: {}", data.len());
+                    info!("Successfully read SKDE param file, length: {}", data.len());
                     match serde_json::from_str::<SkdeParams>(&data) {
-                        Ok(parsed) => {
-                            tracing::info!("SKDE params successfully parsed: {:?}", parsed);
-                            Some(parsed)
-                        }
+                        Ok(parsed) => Some(parsed),
                         Err(e) => {
                             tracing::error!("Failed to parse SKDE param file: {}", e);
                             None
@@ -112,7 +109,7 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
 pub async fn fetch_skde_params_with_retry(config: &Config) -> SkdeParams {
     loop {
         if let Some(params) = fetch_skde_params(config).await {
-            tracing::info!("Successfully fetched SKDE params");
+            info!("Successfully fetched SKDE params");
             return params;
         }
 

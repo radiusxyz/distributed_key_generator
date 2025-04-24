@@ -1,6 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use skde::delay_encryption::setup;
+use tracing::info;
 
 use crate::ConfigPath;
 
@@ -29,5 +30,5 @@ pub fn run_setup_skde_params(path: &ConfigPath) {
     let serialized = serde_json::to_string_pretty(&params).unwrap();
     fs::write(&skde_path, serialized).unwrap();
 
-    tracing::info!("Successfully generated SKDE params at {:?}", skde_path);
+    info!("Successfully generated SKDE params at {:?}", skde_path);
 }

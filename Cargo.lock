@@ -2221,6 +2221,7 @@ dependencies = [
  "bincode",
  "clap",
  "const-hex",
+ "once_cell",
  "radius-sdk",
  "serde",
  "serde_json",

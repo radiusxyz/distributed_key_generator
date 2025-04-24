@@ -132,8 +132,8 @@ pub fn create_config_from_dir(temp_path: &PathBuf) -> Config {
         role: None,
         radius_foundation_address: None,
         chain_type: None,
-        partial_key_generation_cycle: None,
-        partial_key_aggregation_cycle: None,
+        partial_key_generation_cycle_ms: None,
+        partial_key_aggregation_cycle_ms: None,
     };
 
     // Load Config (automatically reads from Config.toml)
@@ -196,8 +196,8 @@ cluster_rpc_url = "http://127.0.0.1:{}"
 role = "{}"
 radius_foundation_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 chain_type = "ethereum"
-partial_key_generation_cycle = 5
-partial_key_aggregation_cycle = 4
+partial_key_generation_cycle_ms = 500
+partial_key_aggregation_cycle_ms = 500
 {}
 {}
 "#,
@@ -215,9 +215,8 @@ partial_key_aggregation_cycle = 4
     info!("Completed writing config file for {} node", role);
 
     // Write signing key file (different keys for different nodes)
-    let key_index = if role == Role::Leader { 0 } else { 1 };
     let signing_key_path = temp_path.join("signing_key");
-    std::fs::write(&signing_key_path, TEST_PRIVATE_KEYS[key_index])
+    std::fs::write(&signing_key_path, TEST_PRIVATE_KEYS[index])
         .expect("Failed to write signing key");
 
     // Create independent database directory
@@ -226,11 +225,9 @@ partial_key_aggregation_cycle = 4
 
     // Create Config object
     let config = create_config_from_dir(&temp_path);
-    info!("Loaded configuration for {} node", role);
 
     // Find binary path
     let binary_path = find_binary_path();
-    info!("Binary path: {:?}", binary_path);
 
     // Run process
     info!(
@@ -257,7 +254,7 @@ partial_key_aggregation_cycle = 4
         role,
         child.id()
     );
-    sleep(Duration::from_secs(2));
+    sleep(Duration::from_secs(1));
 
     (
         child,
@@ -404,12 +401,12 @@ pub async fn generate_partial_key_with_proof(
     (secret_value, partial_key, partial_key_proof)
 }
 
-/// Submits a partial key from a committee node to a leader node
+/// Submits a partial key from a committee node to a leader node    
+/// Should be removed after test_integration_submit_partial_key_and_ack.rs is removed
 pub async fn submit_partial_key_to_leader(
     committee_address: Address,
     leader_port: u16,
     partial_key: skde::key_generation::PartialKey,
-    partial_key_proof: skde::key_generation::PartialKeyProof,
     session_id: SessionId,
 ) {
     info!("Submitting partial key from committee to leader");
@@ -424,7 +421,6 @@ pub async fn submit_partial_key_to_leader(
     let payload = PartialKeyPayload {
         sender: committee_address.clone(),
         partial_key: partial_key.clone(),
-        proof: partial_key_proof.clone(),
         submit_timestamp: timestamp,
         session_id,
     };
@@ -438,7 +434,6 @@ pub async fn submit_partial_key_to_leader(
         "payload": {
             "sender": committee_address,
             "partial_key": partial_key,
-            "proof": partial_key_proof,
             "submit_timestamp": timestamp,
             "session_id": session_id
         }
@@ -495,10 +490,6 @@ pub async fn start_node(
     // Start node
     let (node_process, node_ports, node_config) = spawn_node_process(role, index, temp_dirs);
 
-    info!("Waiting for node initialization");
-    // Wait for node initialization
-    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-
     (node_process, node_ports, node_config)
 }
 
@@ -530,14 +521,4 @@ pub async fn verify_mutual_registration(
         verify_node_registration(committee_ports.cluster, leader_ports.cluster).await;
 
     (leader_found, committee_found)
-}
-
-/// Clean up multiple processes
-pub fn cleanup_all_processes(processes: &mut Vec<&mut std::process::Child>) {
-    info!("Test complete, cleaning up all processes");
-    for process in processes {
-        if let Err(e) = process.kill() {
-            info!("Failed to kill process (PID: {}): {:?}", process.id(), e);
-        }
-    }
 }

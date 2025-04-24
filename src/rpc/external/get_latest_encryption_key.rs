@@ -21,7 +21,7 @@ impl RpcParameter<AppState> for GetLatestEncryptionKey {
 
         loop {
             if AggregatedKey::get(session_id).is_err() {
-                session_id.decrease_key_id();
+                session_id.decrease_session_id();
                 continue;
             }
 

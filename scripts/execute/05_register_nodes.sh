@@ -13,7 +13,7 @@ curl --request POST \
     "method": "add_key_generator",
     "params": {
         "message": {
-            "address": "0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc",
+            "address": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
             "cluster_rpc_url": "http://127.0.0.1:7301",
             "external_rpc_url": "http://127.0.0.1:7101"
         }

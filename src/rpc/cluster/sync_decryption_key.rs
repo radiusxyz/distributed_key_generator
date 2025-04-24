@@ -40,11 +40,7 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
             self.payload.session_id, self.payload.solve_timestamp, self.payload.ack_solve_timestamp
         );
 
-        // Validation logic for decryption key is omitted (required in actual implementation)
-        // Just recording the acknowledgment here
-
-        // TODO: Add logic to store validator logs
-        // (Required in actual implementation for validators to verify leader behavior)
+        // TODO: Verify the decryption key and store it in the `DecryptionKey`
 
         Ok(())
     }

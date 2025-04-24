@@ -6,6 +6,7 @@ use std::{fs, path::PathBuf};
 pub use config_option::*;
 pub use config_path::*;
 use radius_sdk::signature::{Address, ChainType, PrivateKeySigner};
+use tracing::info;
 
 pub const DEFAULT_HOME_PATH: &str = ".radius";
 pub const DATABASE_DIR_NAME: &str = "database";
@@ -19,8 +20,8 @@ const DEFAULT_CLUSTER_RPC_URL: &str = "http://127.0.0.1:5000";
 const DEFAULT_RADIUS_FOUNDATION_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 const DEFAULT_CHAIN_TYPE: &str = "ethereum";
 
-const DEFAULT_PARTIAL_KEY_GENERATION_CYCLE: u64 = 5;
-const DEFAULT_PARTIAL_KEY_AGGREGATION_CYCLE: u64 = 4;
+const DEFAULT_PARTIAL_KEY_GENERATION_CYCLE_MS: u64 = 500;
+const DEFAULT_PARTIAL_KEY_AGGREGATION_CYCLE_MS: u64 = 500;
 
 #[derive(Clone)]
 pub struct Config {
@@ -38,8 +39,8 @@ pub struct Config {
     radius_foundation_address: Address,
     chain_type: ChainType,
 
-    partial_key_generation_cycle: u64,
-    partial_key_aggregation_cycle: u64,
+    partial_key_generation_cycle_ms: u64,
+    partial_key_aggregation_cycle_ms: u64,
 }
 
 impl Config {
@@ -81,7 +82,7 @@ impl Config {
 
         // Merge configs from CLI input
         let merged_config_option = config_file.merge(config_option);
-        println!("chain_type: {:?}", merged_config_option);
+        info!("chain_type: {:?}", merged_config_option);
 
         let chain_type = merged_config_option.chain_type.unwrap().try_into().unwrap();
 
@@ -161,11 +162,11 @@ impl Config {
             .unwrap(),
             chain_type,
 
-            partial_key_generation_cycle: merged_config_option
-                .partial_key_generation_cycle
+            partial_key_generation_cycle_ms: merged_config_option
+                .partial_key_generation_cycle_ms
                 .unwrap(),
-            partial_key_aggregation_cycle: merged_config_option
-                .partial_key_aggregation_cycle
+            partial_key_aggregation_cycle_ms: merged_config_option
+                .partial_key_aggregation_cycle_ms
                 .unwrap(),
         })
     }
@@ -202,12 +203,12 @@ impl Config {
         &self.internal_rpc_url
     }
 
-    pub fn partial_key_generation_cycle(&self) -> u64 {
-        self.partial_key_generation_cycle
+    pub fn partial_key_generation_cycle_ms(&self) -> u64 {
+        self.partial_key_generation_cycle_ms
     }
 
-    pub fn partial_key_aggregation_cycle(&self) -> u64 {
-        self.partial_key_aggregation_cycle
+    pub fn partial_key_aggregation_cycle_ms(&self) -> u64 {
+        self.partial_key_aggregation_cycle_ms
     }
 
     pub fn cluster_rpc_url(&self) -> &String {

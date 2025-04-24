@@ -23,6 +23,7 @@ use radius_sdk::{
 pub use serde::{Deserialize, Serialize};
 // use skde::{delay_encryption::setup, BigUint};
 use tokio::task::JoinHandle;
+use tracing::info;
 
 #[derive(Debug, Deserialize, Parser, Serialize)]
 #[command(author, version, about, long_about = None)]
@@ -76,7 +77,7 @@ async fn main() -> Result<(), Error> {
             // Load the configuration from the path
             let config = Config::load(config_option)?;
 
-            tracing::info!(
+            info!(
                 "Successfully loaded the configuration file at {:?}.",
                 config.path(),
             );
@@ -86,7 +87,7 @@ async fn main() -> Result<(), Error> {
             if config.is_authority() {
                 let app_state = AppState::new(config.clone(), skde_params);
 
-                tracing::info!("Authority node: serving get_authorized_skde_params");
+                info!("Authority node: serving get_authorized_skde_params");
                 let handle = initialize_authority_rpc_server(&app_state).await?;
                 handle.await.unwrap();
 
@@ -104,7 +105,7 @@ async fn main() -> Result<(), Error> {
             KeyGeneratorList::initialize().map_err(error::Error::Database)?;
             SessionId::initialize().map_err(error::Error::Database)?;
 
-            tracing::info!(
+            info!(
                 "Successfully initialized the database at {:?}.",
                 config.database_path(),
             );
@@ -133,14 +134,13 @@ async fn main() -> Result<(), Error> {
             let app_state = AppState::new(config.clone(), skde_params);
 
             // Log node role
-            tracing::info!("Node started with role: {}", config.role());
+            info!("Node started with role: {}", config.role());
 
             // Based on the role, start appropriate services
             if config.is_leader() {
-                tracing::info!("Starting leader node operations...");
+                info!("Starting leader node operations...");
                 run_single_key_generator(app_state.clone());
             }
-
             // Initialize the internal RPC server
             initialize_internal_rpc_server(&app_state).await?;
 
@@ -167,7 +167,7 @@ async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Erro
         .await
         .map_err(error::Error::RpcServerError)?;
 
-    tracing::info!(
+    info!(
         "Successfully started the internal RPC server: {}",
         internal_rpc_url
     );
@@ -185,17 +185,15 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
     let key_generator_rpc_server = RpcServer::new(app_state.clone())
         .register_rpc_method::<cluster::GetKeyGeneratorList>()?
         .register_rpc_method::<cluster::SyncKeyGenerator>()?
-        .register_rpc_method::<cluster::SyncAggregatedKey>()?
         .register_rpc_method::<cluster::SyncPartialKey>()?
         .register_rpc_method::<cluster::SubmitPartialKey>()?
-        .register_rpc_method::<cluster::SubmitPartialKeyAck>()?
-        .register_rpc_method::<cluster::RunGeneratePartialKey>()?
+        .register_rpc_method::<cluster::RequestSubmitPartialKey>()?
         .register_rpc_method::<cluster::GetSkdeParams>()?
         .init(cluster_rpc_url.clone())
         .await
         .map_err(error::Error::RpcServerError)?;
 
-    tracing::info!(
+    info!(
         "Successfully started the cluster RPC server: {}",
         cluster_rpc_url
     );
@@ -215,13 +213,13 @@ async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHand
         .register_rpc_method::<external::GetEncryptionKey>()?
         .register_rpc_method::<external::GetDecryptionKey>()?
         .register_rpc_method::<external::GetLatestEncryptionKey>()?
-        .register_rpc_method::<external::GetLatestKeyId>()?
+        .register_rpc_method::<external::GetLatestSessionId>()?
         .register_rpc_method::<external::GetSkdeParams>()?
         .init(external_rpc_url.clone())
         .await
         .map_err(error::Error::RpcServerError)?;
 
-    tracing::info!(
+    info!(
         "Successfully started the external RPC server: {}",
         external_rpc_url
     );
@@ -246,7 +244,7 @@ async fn initialize_authority_rpc_server(app_state: &AppState) -> Result<JoinHan
         .await
         .map_err(Error::RpcServerError)?;
 
-    tracing::info!(
+    info!(
         "Successfully started the authority RPC server: {}",
         authority_rpc_url
     );
