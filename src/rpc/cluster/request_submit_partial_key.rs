@@ -39,9 +39,7 @@ impl RpcParameter<AppState> for RequestSubmitPartialKey {
             self.session_id.as_u64()
         );
 
-        let (secret_value, partial_key) = generate_partial_key(skde_params).unwrap();
-
-        // let manager = PartialKeyManager::global();
+        let (_, partial_key) = generate_partial_key(skde_params).unwrap();
 
         submit_partial_key_to_leader(my_address, self.session_id, partial_key, context.clone())
             .await?;

@@ -3,7 +3,7 @@ use radius_sdk::{
     signature::{Address, Signature},
 };
 use serde::{Deserialize, Serialize};
-use skde::key_generation::{PartialKey as SkdePartialKey, PartialKeyProof};
+use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::info;
 
 use crate::{
