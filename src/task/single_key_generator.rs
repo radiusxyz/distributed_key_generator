@@ -27,7 +27,7 @@ pub fn run_single_key_generator(context: AppState) {
         let partial_key_aggregation_cycle_ms = context.config().partial_key_aggregation_cycle_ms();
 
         info!(
-            "[{}] Partial key generation cycle: {} seconds, Partial key aggregation cycle: {} seconds",
+            "[{}] Partial key generation cycle: {} ms, Partial key aggregation cycle: {} ms",
             context.config().address().to_short(),
             partial_key_generation_cycle_ms,
             partial_key_aggregation_cycle_ms
@@ -71,7 +71,9 @@ pub fn run_single_key_generator(context: AppState) {
                     // Request partial keys from other generators when partial_key_address_list is empty
                     request_submit_partial_key(key_generator_rpc_url_list, current_session_id);
                 } else {
-                    if let Err(e) = broadcast_partial_keys(&context, current_session_id).await {
+                    if let Err(e) =
+                        broadcast_finalized_partial_keys(&context, current_session_id).await
+                    {
                         tracing::error!("Error during partial key broadcasting: {:?}", e);
                         return;
                     }
@@ -84,20 +86,8 @@ pub fn run_single_key_generator(context: AppState) {
                 );
 
                 // All nodes share the same aggregation function
-                let skde_aggregated_key =
+                let _skde_aggregated_key =
                     perform_randomized_aggregation(&context, current_session_id, &partial_key_list);
-
-                // TODO: This puzzle should be solved by the Solver node
-                let decryption_key =
-                    calculate_decryption_key(&context, current_session_id, &skde_aggregated_key)
-                        .unwrap();
-
-                info!(
-                    "[{}] Complete to get decryption key - session id: {:?} / decryption key: {:?}",
-                    context.config().address().to_short(),
-                    current_session_id,
-                    decryption_key.as_string()
-                );
 
                 // Increment session ID after successful key generation
                 session_id.increase_session_id();
@@ -149,7 +139,7 @@ pub fn request_submit_partial_key(key_generator_rpc_url_list: Vec<String>, sessi
     });
 }
 
-pub async fn broadcast_partial_keys(
+pub async fn broadcast_finalized_partial_keys(
     context: &AppState,
     session_id: SessionId,
 ) -> Result<(), RpcError> {

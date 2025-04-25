@@ -29,6 +29,7 @@ cat > "$NODE2_DATA_DIR/Config.toml" << EOL
 external_rpc_url = "http://127.0.0.1:7101"
 internal_rpc_url = "http://127.0.0.1:7201"
 cluster_rpc_url = "http://127.0.0.1:7301"
+leader_cluster_rpc_url = "http://127.0.0.1:7300"
 
 role = "committee"
 radius_foundation_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"

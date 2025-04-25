@@ -1,6 +1,8 @@
 #!/bin/bash
 
 set -e
+# Make all scripts executable 
+chmod +x scripts/execute/*.sh
 
 SCRIPT_PATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 PROJECT_ROOT_PATH="$( cd $SCRIPT_PATH/../.. >/dev/null 2>&1 ; pwd -P )"
