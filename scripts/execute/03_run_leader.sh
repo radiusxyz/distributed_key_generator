@@ -29,7 +29,9 @@ cat > "$NODE1_DATA_DIR/Config.toml" << EOL
 external_rpc_url = "http://127.0.0.1:7100"
 internal_rpc_url = "http://127.0.0.1:7200"
 cluster_rpc_url = "http://127.0.0.1:7300"
+# The endpoint of the leader rpc server for the solver: Solver -> Leader
 solver_rpc_url = "http://127.0.0.1:8400"
+# The endpoint of the solver rpc server: Leader -> Solver
 solver_solver_rpc_url = "http://127.0.0.1:8500"
 
 role = "leader"

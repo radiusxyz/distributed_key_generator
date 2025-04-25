@@ -18,26 +18,30 @@ async fn test_integration_run_multiple_committees_one_leader() {
 
     // 1. Start authority node
     let (_authority_process, _authority_ports, _authority_config) =
-        start_node(Role::Authority, 9, &mut temp_dirs).await;
+        start_node(Role::Authority, 0, &mut temp_dirs).await;
 
     // 2. Start leader node
     let (_leader_process, leader_ports, leader_config) =
-        start_node(Role::Leader, 0, &mut temp_dirs).await;
+        start_node(Role::Leader, 1, &mut temp_dirs).await;
 
-    // 3. Start committee nodes (8 nodes in total)
+    // 3. Start solver node
+    let (_solver_process, _solver_ports, _solver_config) =
+        start_node(Role::Solver, 2, &mut temp_dirs).await;
+
+    // 4. Start committee nodes (8 nodes in total)
     let mut committee_details = Vec::new();
 
-    // Create all committee nodes
-    for i in 1..9 {
-        let (_, ports, config) = start_node(Role::Committee, i, &mut temp_dirs).await;
+    // Create all committee nodes 3 ~ 8, total 6 nodes
+    for i in 0..6 {
+        let (_, ports, config) = start_node(Role::Committee, i + 3, &mut temp_dirs).await;
         committee_details.push((ports, config));
     }
 
     // 4. Register nodes in stages with time intervals
 
-    // Stage 1: Register first 3 committee nodes
+    // Stage 1: Register first 2 committee nodes
     println!("Registering first batch of committee nodes");
-    for i in 0..3 {
+    for i in 0..2 {
         let (ports, config) = &committee_details[i];
 
         register_nodes(&leader_ports, &leader_config, ports, config).await;
@@ -64,7 +68,7 @@ async fn test_integration_run_multiple_committees_one_leader() {
 
     // Stage 2: Register next 2 committee nodes
     println!("Registering second batch of committee nodes");
-    for i in 3..5 {
+    for i in 2..4 {
         let (ports, config) = &committee_details[i];
 
         register_nodes(&leader_ports, &leader_config, ports, config).await;
@@ -91,7 +95,7 @@ async fn test_integration_run_multiple_committees_one_leader() {
 
     // Stage 3: Register final 3 committee nodes
     println!("Registering final batch of committee nodes");
-    for i in 5..8 {
+    for i in 4..6 {
         let (ports, config) = &committee_details[i];
 
         register_nodes(&leader_ports, &leader_config, ports, config).await;

@@ -6,7 +6,7 @@ use radius_sdk::json_rpc::{
     server::{RpcError, RpcParameter},
 };
 use tokio::time::sleep;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::{
     rpc::{
@@ -71,7 +71,7 @@ pub fn run_single_key_generator(context: AppState) {
                     // Request partial keys from other generators when partial_key_address_list is empty
                     request_submit_partial_key(key_generator_rpc_url_list, current_session_id);
                 } else {
-                    if let Err(e) = broadcast_partial_key(&context, current_session_id).await {
+                    if let Err(e) = broadcast_partial_keys(&context, current_session_id).await {
                         tracing::error!("Error during partial key broadcasting: {:?}", e);
                         return;
                     }
@@ -149,21 +149,17 @@ pub fn request_submit_partial_key(key_generator_rpc_url_list: Vec<String>, sessi
     });
 }
 
-pub async fn broadcast_partial_key(
+pub async fn broadcast_partial_keys(
     context: &AppState,
     session_id: SessionId,
 ) -> Result<(), RpcError> {
-    // Debug purpose
-    warn!(
-        "Entered broadcast_partial_key_list_if_ready with session_id: {}",
-        session_id.as_u64()
-    );
-    // TODO: time check
+    // TODO: needs wait to collect partial keys, instead of loop
     let list = loop {
         if let Ok(list) = PartialKeyAddressList::get(session_id) {
             let current_count = list.len();
             debug!(
-                "PartialKeyList check - session_id: {}, collected: {}, threshold: {}",
+                "[{}] PartialKeyList - session_id: {}, collected: {}, threshold: {}",
+                context.config().address().to_short(),
                 session_id.as_u64(),
                 current_count,
                 THRESHOLD
@@ -171,7 +167,8 @@ pub async fn broadcast_partial_key(
 
             if current_count >= THRESHOLD {
                 info!(
-                    "Threshold met for session {} ({} >= {}), preparing to broadcast",
+                    "[{}] Threshold met for session {} ({} >= {}), preparing to broadcast",
+                    context.config().address().to_short(),
                     session_id.as_u64(),
                     current_count,
                     THRESHOLD
@@ -180,7 +177,8 @@ pub async fn broadcast_partial_key(
             }
         } else {
             debug!(
-                "PartialKeyList not yet available for session_id: {}",
+                "[{}] PartialKeyList not yet available for session_id: {}",
+                context.config().address().to_short(),
                 session_id.as_u64()
             );
         }
@@ -191,6 +189,7 @@ pub async fn broadcast_partial_key(
     let partial_senders = list.to_vec();
 
     // TODO: Add to make actual signature
+    // TODO: Timestampes, signatures, etc. should be collected assigned to   each partial key
     let signatures = partial_keys
         .iter()
         .zip(&partial_senders)
@@ -200,12 +199,13 @@ pub async fn broadcast_partial_key(
             create_signature(&encoded)
         })
         .collect();
+    let submit_timestamps = vec![get_current_timestamp(); partial_keys.len()];
 
     let payload = cluster::SyncPartialKeysPayload {
         partial_key_senders: partial_senders,
         partial_keys,
         session_id,
-        submit_timestamps: vec![get_current_timestamp()],
+        submit_timestamps,
         signatures,
         ack_timestamp: get_current_timestamp(),
     };
@@ -231,7 +231,8 @@ pub async fn broadcast_partial_key(
         );
     } else {
         info!(
-            "Successfully broadcasted partial key list to cluster for session {}",
+            "[{}] Successfully broadcasted partial key list to cluster for session {}",
+            context.config().address().to_short(),
             session_id.as_u64()
         );
     }

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
-    rpc::prelude::*,
+    rpc::{cluster::broadcast_decryption_key_ack, prelude::*},
     utils::{verify_signature, AddressExt},
 };
 
@@ -51,7 +51,12 @@ impl RpcParameter<AppState> for SubmitDecryptionKey {
         let decryption_key = DecryptionKey::new(self.payload.decryption_key.clone());
         decryption_key.put(self.payload.session_id)?;
 
-        // TODO: Add broadcast_decryption_key_ack
+        broadcast_decryption_key_ack(
+            self.payload.session_id,
+            self.payload.decryption_key.clone(),
+            self.payload.timestamp,
+            &_context,
+        )?;
 
         info!(
             "[{}] Complete to get decryption key - key_id: {:?} / decryption key: {:?}",

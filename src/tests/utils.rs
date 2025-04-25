@@ -152,7 +152,6 @@ pub fn spawn_node_process(
     let internal_port: u16 = (7100 + index).try_into().unwrap();
     let external_port: u16 = (7200 + index).try_into().unwrap();
     let cluster_port: u16 = (7300 + index).try_into().unwrap();
-    let solver_port: u16 = (8400 + index).try_into().unwrap();
 
     // Authority 노드는 프로젝트 루트의 /data 디렉토리 사용, 다른 노드는 임시 디렉토리 사용
     let (temp_path, temp_dir) = if role == Role::Authority {
@@ -180,17 +179,26 @@ pub fn spawn_node_process(
 
     let authority_rpc_url = format!("authority_rpc_url = \"http://127.0.0.1:6000\"");
 
-    let leader_solver_rpc_url = if role != Role::Leader {
-        format!("leader_solver_rpc_url = \"http://127.0.0.1:8400\"")
-    } else {
-        "".to_string()
+    // Leader와 Solver 역할에 따른 설정 초기화
+    let (solver_solver_rpc_url, leader_solver_rpc_url, solver_port) = match role {
+        Role::Leader => (
+            format!("solver_solver_rpc_url = \"http://127.0.0.1:8500\""),
+            "".to_string(),
+            format!("8400"),
+        ),
+        Role::Solver => (
+            "".to_string(),
+            format!("leader_solver_rpc_url = \"http://127.0.0.1:8400\""),
+            format!("8500"),
+        ),
+        _ => ("".to_string(), "".to_string(), "".to_string()),
     };
 
     // Create Config.toml file
     let config_path = temp_path.join("Config.toml");
     // Non-leader nodes need leader URL
     let leader_url = if role != Role::Leader {
-        format!("leader_cluster_rpc_url = \"http://127.0.0.1:7300\"")
+        format!("leader_cluster_rpc_url = \"http://127.0.0.1:7301\"")
     } else {
         "".to_string()
     };
@@ -209,6 +217,7 @@ pub fn spawn_node_process(
         leader_url.to_string(),
         authority_rpc_url.to_string(),
         leader_solver_rpc_url.to_string(),
+        solver_solver_rpc_url.to_string(),
     ]
     .join("\n");
 

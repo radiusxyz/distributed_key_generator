@@ -21,7 +21,7 @@ async fn test_integration_get_skde_params() {
 
     // 1. Start authority, leader and committee nodes
     let (_authority_process, _authority_ports, authority_config) =
-        start_node(Role::Authority, 9, &mut temp_dirs).await;
+        start_node(Role::Authority, 0, &mut temp_dirs).await;
 
     // Get authorized skde params from authority
     let rpc_client = RpcClient::new().unwrap();
@@ -43,7 +43,7 @@ async fn test_integration_get_skde_params() {
 
     // Get skde params from leader
     let (_leader_process, _leader_ports, _leader_config) =
-        start_node(Role::Leader, 0, &mut temp_dirs).await;
+        start_node(Role::Leader, 1, &mut temp_dirs).await;
 
     let response: GetSkdeParamsResponse = rpc_client
         .request(

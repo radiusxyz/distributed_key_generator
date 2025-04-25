@@ -40,7 +40,7 @@ impl RpcParameter<AppState> for SyncPartialKeys {
             session_id,
             submit_timestamps,
             ack_timestamp,
-            signatures: _,
+            signatures,
         } = &self.payload;
 
         info!(
@@ -52,13 +52,23 @@ impl RpcParameter<AppState> for SyncPartialKeys {
             ack_timestamp
         );
 
-        if partial_key_senders.len() != partial_keys.len()
-            || partial_keys.len() != submit_timestamps.len()
+        info!(
+            "[{}] Received partial keys ACK - partial_keys_senders:{:?}, partial_keys:{:?}, timestamps:{:?}, ack_timestamp: {}",
+            context.config().address().to_short(),
+            partial_key_senders.len(),
+            partial_keys.len(),
+            submit_timestamps.len(),
+            ack_timestamp
+        );
+
+        // TODO: timestampes also should be collected assigned to each partial key
+        if partial_key_senders.len() != partial_keys.len() || partial_keys.len() != signatures.len()
         {
             return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
                 "Mismatched vector lengths in partial key ACK payload".into(),
             )));
         }
+
         // TODO: Signature verification
         // for (sig, sender) in signatures.iter().zip(partial_key_senders) {
         //     let signer = verify_signature(sig, &self.payload)?;

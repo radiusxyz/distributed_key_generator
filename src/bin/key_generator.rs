@@ -193,6 +193,7 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
         .register_rpc_method::<cluster::SyncKeyGenerator>()?
         .register_rpc_method::<cluster::SyncPartialKey>()?
         .register_rpc_method::<cluster::SyncPartialKeys>()?
+        .register_rpc_method::<cluster::SyncDecryptionKey>()?
         .register_rpc_method::<cluster::SubmitPartialKey>()?
         .register_rpc_method::<cluster::RequestSubmitPartialKey>()?
         .register_rpc_method::<cluster::GetSkdeParams>()?

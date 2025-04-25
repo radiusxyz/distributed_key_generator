@@ -7,7 +7,7 @@ use crate::{
 };
 
 #[tokio::test]
-async fn test_integration_regsiter_nodes() {
+async fn test_regsiter_nodes() {
     // Initialize test environment
     init_test_environment("node registration test");
 
@@ -16,13 +16,13 @@ async fn test_integration_regsiter_nodes() {
 
     // 1. Start authority, leader and committee nodes
     let (_authority_process, _authority_ports, _authority_config) =
-        start_node(Role::Authority, 9, &mut temp_dirs).await;
+        start_node(Role::Authority, 0, &mut temp_dirs).await;
 
     let (_leader_process, leader_ports, leader_config) =
-        start_node(Role::Leader, 0, &mut temp_dirs).await;
+        start_node(Role::Leader, 1, &mut temp_dirs).await;
 
     let (_committee_process, committee_ports, committee_config) =
-        start_node(Role::Committee, 1, &mut temp_dirs).await;
+        start_node(Role::Committee, 3, &mut temp_dirs).await;
 
     // 2. Verify nodes are not registered to each other yet
     let (leader_found, committee_found) =
