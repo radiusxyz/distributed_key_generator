@@ -17,10 +17,7 @@ use skde::{
 };
 use tracing::info;
 
-use crate::{
-    error::KeyGenerationError, AggregatedKey, AppState, DecryptionKey,
-    SessionId,
-};
+use crate::{error::KeyGenerationError, AggregatedKey, AppState, DecryptionKey, SessionId};
 
 pub fn create_signature<T: Serialize>(_message: &T) -> Signature {
     Signature::from(vec![0; 64])

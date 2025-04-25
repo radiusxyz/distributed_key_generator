@@ -25,7 +25,7 @@ pub struct SyncPartialKey {
 pub struct SyncPartialKeyPayload {
     pub partial_key_sender: Address,
     pub partial_key: SkdePartialKey,
-    pub index: usize,
+    pub index: usize, // TODO: Remove this field
     pub session_id: SessionId,
     pub submit_timestamp: u64,
     pub ack_timestamp: u64,
