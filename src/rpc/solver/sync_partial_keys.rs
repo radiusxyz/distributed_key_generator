@@ -4,7 +4,7 @@ use radius_sdk::{
 };
 use serde::{Deserialize, Serialize};
 use skde::key_generation::PartialKey as SkdePartialKey;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use super::submit_decryption_key::{
     DecryptionKeyResponse, SubmitDecryptionKey, SubmitDecryptionKeyPayload,
@@ -14,8 +14,8 @@ use crate::{
     get_current_timestamp,
     rpc::prelude::*,
     utils::{
-        calculate_decryption_key, create_signature, perform_randomized_aggregation,
-        verify_signature, AddressExt,
+        calculate_decryption_key, create_signature, log_prefix_role_and_address,
+        perform_randomized_aggregation, verify_signature,
     },
 };
 
@@ -51,17 +51,15 @@ impl RpcParameter<AppState> for SyncPartialKeys {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let prefix = log_prefix_role_and_address(&context.config());
         // let sender_address = verify_signature(&self.signature, &self.payload)?;
 
         let payload = self.payload.clone();
 
         info!(
-            "[{}] Received partial keys ACK - senders:{:?}, session_id: {:?
+            "{} Received partial keys ACK - senders:{:?}, session_id: {:?
             }, timestamp: {}",
-            context.config().address().to_short(),
-            payload.partial_key_senders,
-            payload.session_id,
-            payload.ack_timestamp
+            prefix, payload.partial_key_senders, payload.session_id, payload.ack_timestamp
         );
 
         if payload.partial_key_senders.len() != payload.partial_keys.len()
@@ -116,16 +114,16 @@ impl RpcParameter<AppState> for SyncPartialKeys {
 
         tokio::spawn(async move {
             if let Err(err) = process_key_derivation(&context, payload.session_id).await {
-                tracing::error!(
-                    "[{}] Solve failed for session {}: {:?}",
-                    context.config().address().to_short(),
+                error!(
+                    "{} Solve failed for session {}: {:?}",
+                    prefix,
                     payload.session_id.as_u64(),
                     err
                 );
             } else {
-                tracing::info!(
-                    "[{}] Solve completed successfully for session {}",
-                    context.config().address().to_short(),
+                info!(
+                    "{} Solve completed successfully for session {}",
+                    prefix,
                     payload.session_id.as_u64()
                 );
             }
@@ -135,6 +133,7 @@ impl RpcParameter<AppState> for SyncPartialKeys {
 }
 
 async fn process_key_derivation(context: &AppState, session_id: SessionId) -> Result<(), Error> {
+    let prefix = log_prefix_role_and_address(&context.config());
     let partial_keys = PartialKeyAddressList::get(session_id)?.get_partial_key_list(session_id)?;
 
     let aggregated_key = perform_randomized_aggregation(context, session_id, &partial_keys);
@@ -173,19 +172,15 @@ async fn process_key_derivation(context: &AppState, session_id: SessionId) -> Re
 
     if response.success {
         info!(
-            "[{}] Successfully submitted decryption key : session_id: {:?
+            "{} Successfully submitted decryption key : session_id: {:?
             }, timestamp: {}",
-            context.config().address().to_short(),
-            session_id,
-            timestamp
+            prefix, session_id, timestamp
         );
     } else {
         warn!(
-            "[{}] Submission acknowledged but not successful : session_id: {:?
+            "{} Submission acknowledged but not successful : session_id: {:?
             }, timestamp: {}",
-            context.config().address().to_short(),
-            session_id,
-            timestamp
+            prefix, session_id, timestamp
         );
     }
 

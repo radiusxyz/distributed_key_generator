@@ -12,7 +12,7 @@ use tracing::info;
 
 use crate::{
     rpc::prelude::*,
-    utils::{create_signature, get_current_timestamp, AddressExt},
+    utils::{create_signature, get_current_timestamp, log_prefix_role_and_address, AddressExt},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -39,12 +39,13 @@ impl RpcParameter<AppState> for SyncPartialKey {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let prefix = log_prefix_role_and_address(&context.config());
         // let sender_address = verify_signature(&self.signature, &self.payload)?;
 
         info!(
-            "[{}] Received partial key ACK - sender:{:?}, session_id: {:?
+            "{} Received partial key ACK - sender:{:?}, session_id: {:?
             }, index: {}, timestamp: {}",
-            context.config().address().to_short(),
+            prefix,
             self.payload.partial_key_sender.to_short(),
             self.payload.session_id,
             self.payload.index,
@@ -81,17 +82,15 @@ pub fn broadcast_partial_key_ack(
     partial_key: SkdePartialKey,
     submit_timestamp: u64,
     index: usize,
-    _context: &AppState,
+    context: &AppState,
 ) -> Result<(), Error> {
+    let prefix = log_prefix_role_and_address(&context.config());
     let key_generator_rpc_url_list =
-        KeyGeneratorList::get()?.get_other_key_generator_rpc_url_list(&_context.config().address());
+        KeyGeneratorList::get()?.get_other_key_generator_rpc_url_list(&context.config().address());
 
     info!(
-        "[{}] Broadcasting partial key acknowledgment - session_id: {:?}, index: {}, timestamp: {}",
-        _context.config().address().to_short(),
-        session_id,
-        index,
-        submit_timestamp
+        "{} Broadcasting partial key acknowledgment - session_id: {:?}, index: {}, timestamp: {}",
+        prefix, session_id, index, submit_timestamp
     );
 
     let ack_timestamp = get_current_timestamp();

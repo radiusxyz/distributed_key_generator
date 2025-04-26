@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use skde::delay_encryption::setup;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::ConfigPath;
 
@@ -17,7 +17,7 @@ pub fn run_setup_skde_params(path: &ConfigPath) {
     let skde_path = config_dir.join("skde_params.json");
 
     if skde_path.exists() {
-        tracing::warn!("SKDE parameter file already exists: {:?}", skde_path);
+        warn!("SKDE parameter file already exists: {:?}", skde_path);
         return;
     }
 

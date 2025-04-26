@@ -12,6 +12,7 @@ use distributed_key_generation::{
         authority_setup::run_setup_skde_params, single_key_generator::run_single_key_generator,
     },
     types::*,
+    utils::{log_prefix_role_and_address, AddressExt},
 };
 use radius_sdk::{
     json_rpc::{
@@ -60,7 +61,7 @@ pub enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    tracing_subscriber::fmt().init();
+    tracing_subscriber::fmt().with_target(false).init();
 
     let mut cli = Cli::init();
 
@@ -78,7 +79,9 @@ async fn main() -> Result<(), Error> {
             let config = Config::load(config_option)?;
 
             info!(
-                "Successfully loaded the configuration file at {:?}.",
+                "[{}][{}] Successfully loaded the configuration file at {:?}.",
+                config.role(),
+                config.address().to_short(),
                 config.path(),
             );
 
@@ -86,8 +89,9 @@ async fn main() -> Result<(), Error> {
 
             if config.is_authority() {
                 let app_state = AppState::new(config.clone(), skde_params);
+                let prefix = log_prefix_role_and_address(&app_state.config());
 
-                info!("Authority node: serving get_authorized_skde_params");
+                info!("{} Serving get_authorized_skde_params", prefix);
                 let handle = initialize_authority_rpc_server(&app_state).await?;
                 handle.await.unwrap();
 
@@ -106,7 +110,9 @@ async fn main() -> Result<(), Error> {
             SessionId::initialize().map_err(error::Error::Database)?;
 
             info!(
-                "Successfully initialized the database at {:?}.",
+                "[{}][{}] Successfully initialized the database at {:?}.",
+                config.role(),
+                config.address().to_short(),
                 config.database_path(),
             );
 
@@ -132,19 +138,17 @@ async fn main() -> Result<(), Error> {
 
             // Initialize an application-wide state instance
             let app_state = AppState::new(config.clone(), skde_params);
-
-            // Log node role
-            info!("Node started with role: {}", config.role());
+            let prefix = log_prefix_role_and_address(&app_state.config());
 
             // Based on the role, start appropriate services
             if config.is_leader() {
-                info!("Starting leader node operations...");
+                info!("{} Starting leader node operations...", prefix);
                 run_single_key_generator(app_state.clone());
 
-                info!("Initializing solve RPC server on leader...");
+                info!("{} Initializing solve RPC server on leader...", prefix);
                 initialize_solve_rpc_server(&app_state).await?;
             } else if config.is_solver() {
-                info!("Initializing solve RPC server on solver...");
+                info!("{} Initializing solve RPC server on solver...", prefix);
                 initialize_solve_rpc_server(&app_state).await?;
             }
             // Initialize the internal RPC server
@@ -164,6 +168,7 @@ async fn main() -> Result<(), Error> {
 }
 
 async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Error> {
+    let prefix = log_prefix_role_and_address(app_state.config());
     let internal_rpc_url = app_state.config().internal_rpc_url().to_string();
 
     // Initialize the internal RPC server.
@@ -174,8 +179,8 @@ async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Erro
         .map_err(error::Error::RpcServerError)?;
 
     info!(
-        "Successfully started the internal RPC server: {}",
-        internal_rpc_url
+        "{} Successfully started the internal RPC server: {}",
+        prefix, internal_rpc_url
     );
 
     tokio::spawn(async move {
@@ -186,6 +191,7 @@ async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Erro
 }
 
 async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error> {
+    let prefix = log_prefix_role_and_address(app_state.config());
     let cluster_rpc_url = anywhere(&app_state.config().cluster_port()?);
 
     let key_generator_rpc_server = RpcServer::new(app_state.clone())
@@ -202,8 +208,8 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
         .map_err(error::Error::RpcServerError)?;
 
     info!(
-        "Successfully started the cluster RPC server: {}",
-        cluster_rpc_url
+        "{} Successfully started the cluster RPC server: {}",
+        prefix, cluster_rpc_url
     );
 
     tokio::spawn(async move {
@@ -214,6 +220,7 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
 }
 
 async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHandle<()>, Error> {
+    let prefix = log_prefix_role_and_address(app_state.config());
     let external_rpc_url = anywhere(&app_state.config().external_port()?);
 
     // Initialize the external RPC server.
@@ -228,8 +235,8 @@ async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHand
         .map_err(error::Error::RpcServerError)?;
 
     info!(
-        "Successfully started the external RPC server: {}",
-        external_rpc_url
+        "{} Successfully started the external RPC server: {}",
+        prefix, external_rpc_url
     );
 
     let server_handle = tokio::spawn(async move {
@@ -244,6 +251,7 @@ pub fn anywhere(port: &str) -> String {
 }
 
 async fn initialize_authority_rpc_server(app_state: &AppState) -> Result<JoinHandle<()>, Error> {
+    let prefix = log_prefix_role_and_address(app_state.config());
     let authority_rpc_url = anywhere(&app_state.config().authority_port()?);
 
     let rpc_server = RpcServer::new(app_state.clone())
@@ -253,8 +261,8 @@ async fn initialize_authority_rpc_server(app_state: &AppState) -> Result<JoinHan
         .map_err(Error::RpcServerError)?;
 
     info!(
-        "Successfully started the authority RPC server: {}",
-        authority_rpc_url
+        "{} Successfully started the authority RPC server: {}",
+        prefix, authority_rpc_url
     );
 
     let handle = tokio::spawn(async move {
@@ -265,6 +273,7 @@ async fn initialize_authority_rpc_server(app_state: &AppState) -> Result<JoinHan
 }
 
 async fn initialize_solve_rpc_server(app_state: &AppState) -> Result<JoinHandle<()>, Error> {
+    let prefix = log_prefix_role_and_address(app_state.config());
     let solver_rpc_url = app_state.config().solver_rpc_url().clone().unwrap();
 
     let rpc_server = RpcServer::new(app_state.clone())
@@ -275,7 +284,7 @@ async fn initialize_solve_rpc_server(app_state: &AppState) -> Result<JoinHandle<
         .await
         .map_err(Error::RpcServerError)?;
 
-    tracing::info!("Started solver RPC server at {}", solver_rpc_url);
+    info!("{} Started solver RPC server at {}", prefix, solver_rpc_url);
 
     let handle = tokio::spawn(async move {
         rpc_server.stopped().await;

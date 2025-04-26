@@ -5,34 +5,46 @@ use radius_sdk::json_rpc::{
     server::RpcParameter,
 };
 use skde::{delay_encryption::SkdeParams, BigUint};
-use tracing::info;
+use tracing::{error, info, warn};
 
 use super::{Config, Role};
-use crate::rpc::{
-    authority::{GetAuthorizedSkdeParams, GetAuthorizedSkdeParamsResponse},
-    cluster, solver,
+use crate::{
+    rpc::{
+        authority::{GetAuthorizedSkdeParams, GetAuthorizedSkdeParamsResponse},
+        cluster, solver,
+    },
+    utils::log_prefix_role_and_address,
 };
 
 async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
+    let prefix = log_prefix_role_and_address(config);
     match config.role() {
         Role::Authority => {
             let skde_path = config.path().join("skde_params.json");
 
             match fs::read_to_string(&skde_path) {
                 Ok(data) => {
-                    info!("Successfully read SKDE param file, length: {}", data.len());
+                    info!(
+                        "{} Successfully read SKDE param file, length: {}",
+                        prefix,
+                        data.len()
+                    );
                     match serde_json::from_str::<SkdeParams>(&data) {
                         Ok(parsed) => Some(parsed),
                         Err(e) => {
-                            tracing::error!("Failed to parse SKDE param file: {}", e);
+                            error!("Failed to parse SKDE param file: {}", e);
                             None
                         }
                     }
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to read SKDE param file at {:?}: {}", skde_path, e);
-                    tracing::warn!(
-                        "Authority node must run `setup-skde-params` to initialize SKDE parameters."
+                    warn!(
+                        "{} Failed to read SKDE param file at {:?}: {}",
+                        prefix, skde_path, e
+                    );
+                    warn!(
+                        "{} Must run `setup-skde-params` to initialize SKDE parameters.",
+                        prefix
                     );
                     None
                 }
@@ -45,7 +57,7 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
             let client = match RpcClient::new() {
                 Ok(c) => c,
                 Err(err) => {
-                    tracing::warn!("[{}] Failed to create RPC client: {}", config.role(), err);
+                    warn!("{} Failed to create RPC client: {}", prefix, err);
                     return None;
                 }
             };
@@ -62,7 +74,10 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
             match result {
                 Ok(response) => Some(response.into_skde_params()),
                 Err(err) => {
-                    tracing::warn!("[{}] Failed to fetch SkdeParams from authority: {}", config.role(), err);
+                    warn!(
+                        "{} Failed to fetch SkdeParams from authority: {}",
+                        prefix, err
+                    );
                     None
                 }
             }
@@ -73,7 +88,7 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                 let client = match RpcClient::new() {
                     Ok(c) => c,
                     Err(err) => {
-                        tracing::warn!("[{}] Failed to create RPC client: {}", config.role(), err);
+                        warn!("{} Failed to create RPC client: {}", prefix, err);
                         return None;
                     }
                 };
@@ -89,14 +104,14 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                 {
                     Ok(res) => res,
                     Err(err) => {
-                        tracing::warn!("[{}] Failed to fetch SkdeParams from leader: {}", config.role(), err);
+                        warn!("{} Failed to fetch SkdeParams from leader: {}", prefix, err);
                         return None;
                     }
                 };
 
                 Some(response.into_skde_params())
             } else {
-                tracing::warn!("[{}] Missing leader_cluster_rpc_url in config", config.role());
+                warn!("{} Missing leader_cluster_rpc_url in config", prefix,);
                 None
             }
         }
@@ -105,7 +120,7 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                 let client = match RpcClient::new() {
                     Ok(c) => c,
                     Err(err) => {
-                        tracing::warn!("Failed to create RPC client: {}", err);
+                        warn!("{} Failed to create RPC client: {}", prefix, err);
                         return None;
                     }
                 };
@@ -121,21 +136,18 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                 {
                     Ok(res) => res,
                     Err(err) => {
-                        tracing::warn!("[{}] Failed to fetch SkdeParams from leader: {}", config.role(), err);
+                        warn!("{} Failed to fetch SkdeParams from leader: {}", prefix, err);
                         return None;
                     }
                 };
                 Some(response.into_skde_params())
             } else {
-                tracing::warn!("[{}] Missing leader_cluster_rpc_url in config", config.role());
+                warn!("{} Missing leader_cluster_rpc_url in config", prefix,);
                 None
             }
         }
         _ => {
-            tracing::warn!(
-                "Unsupported role for SKDE param retrieval: {:?}",
-                config.role()
-            );
+            warn!("{} Unsupported role for SKDE param retrieval", prefix,);
             None
         }
     }
@@ -145,13 +157,14 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
 /// Panics if something unexpected goes wrong.
 /// TODO: Appropriate error handling and retry limits
 pub async fn fetch_skde_params_with_retry(config: &Config) -> SkdeParams {
+    let prefix = log_prefix_role_and_address(config);
     loop {
         if let Some(params) = fetch_skde_params(config).await {
-            info!("Successfully fetched SKDE params");
+            info!("{} Successfully fetched SKDE params", prefix);
             return params;
         }
 
-        tracing::warn!("[{}] Failed to fetch SKDE params, retrying in 1s...", config.role());
+        warn!("{} Failed to fetch SKDE params, retrying in 1s...", prefix,);
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 }

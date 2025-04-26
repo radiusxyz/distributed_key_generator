@@ -17,7 +17,7 @@ use skde::{
 };
 use tracing::info;
 
-use crate::{error::KeyGenerationError, AggregatedKey, AppState, DecryptionKey, SessionId};
+use crate::{error::KeyGenerationError, AggregatedKey, AppState, Config, DecryptionKey, SessionId};
 
 pub fn create_signature<T: Serialize>(_message: &T) -> Signature {
     Signature::from(vec![0; 64])
@@ -209,4 +209,17 @@ pub fn get_randomness(current_session_id: SessionId) -> Vec<u8> {
         Ok(key) => key.as_string().into_bytes(),
         Err(_) => b"default-randomness".to_vec(),
     }
+}
+
+pub fn log_prefix_role_and_address(config: &Config) -> String {
+    format!("[{}][{}]", config.role(), config.address().to_short(),)
+}
+
+pub fn log_prefix_with_session_id(config: &Config, session_id: &SessionId) -> String {
+    format!(
+        "[{}][{}][session:{}]",
+        config.role(),
+        config.address().to_short(),
+        session_id.as_u64()
+    )
 }

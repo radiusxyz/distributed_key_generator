@@ -7,7 +7,7 @@ use tracing::info;
 
 use crate::{
     rpc::{cluster::broadcast_decryption_key_ack, prelude::*},
-    utils::{verify_signature, AddressExt},
+    utils::{log_prefix_role_and_address, verify_signature},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -36,15 +36,14 @@ impl RpcParameter<AppState> for SubmitDecryptionKey {
         "submit_decryption_key"
     }
 
-    async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
+    async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let prefix = log_prefix_role_and_address(&context.config());
         // TODO: Add to verify actual signature
         let _sender_address = verify_signature(&self.signature, &self.payload)?;
 
         info!(
-            "[{}] Received decryption key - session_id: {:?}, timestamp: {}",
-            _context.config().address().to_short(),
-            self.payload.session_id,
-            self.payload.timestamp
+            "{} Received decryption key - session_id: {:?}, timestamp: {}",
+            prefix, self.payload.session_id, self.payload.timestamp
         );
 
         // Store decryption key
@@ -55,14 +54,12 @@ impl RpcParameter<AppState> for SubmitDecryptionKey {
             self.payload.session_id,
             self.payload.decryption_key.clone(),
             self.payload.timestamp,
-            &_context,
+            &context,
         )?;
 
         info!(
-            "[{}] Complete to get decryption key - key_id: {:?} / decryption key: {:?}",
-            _context.config().address().to_short(),
-            self.payload.session_id,
-            decryption_key
+            "{} Complete to get decryption key - key_id: {:?} / decryption key: {:?}",
+            prefix, self.payload.session_id, decryption_key
         );
 
         Ok(DecryptionKeyResponse { success: true })

@@ -11,7 +11,7 @@ use tracing::info;
 
 use crate::{
     rpc::prelude::*,
-    utils::{get_current_timestamp, AddressExt},
+    utils::{get_current_timestamp, log_prefix_role_and_address},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -35,18 +35,16 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
         "sync_decryption_key"
     }
 
-    async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
+    async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let prefix = log_prefix_role_and_address(&context.config());
         // let sender_address = verify_signature(&self.signature, &self.payload, &_context)?;
 
         let decryption_key = DecryptionKey::new(self.payload.decryption_key.clone());
         decryption_key.put(self.payload.session_id)?;
 
         info!(
-            "[{}, {}] Complete put decryption key - key_id: {:?} / decryption key: {:?}",
-            _context.role(),
-            _context.config().address().to_short(),
-            self.payload.session_id,
-            decryption_key
+            "{} Complete put decryption key - key_id: {:?} / decryption key: {:?}",
+            prefix, self.payload.session_id, decryption_key
         );
 
         Ok(())
@@ -60,13 +58,11 @@ pub fn broadcast_decryption_key_ack(
     solve_timestamp: u64,
     context: &AppState,
 ) -> Result<(), Error> {
+    let prefix = log_prefix_role_and_address(&context.config());
     let ack_solve_timestamp = get_current_timestamp();
     info!(
-        "[{}] Broadcast decryption key acknowledgment - session_id: {:?}, timestamps: {} / {}",
-        context.config().address().to_short(),
-        session_id,
-        solve_timestamp,
-        ack_solve_timestamp
+        "{} Broadcast decryption key acknowledgment - session_id: {:?}, timestamps: {} / {}",
+        prefix, session_id, solve_timestamp, ack_solve_timestamp
     );
 
     let other_key_generator_rpc_url_list =

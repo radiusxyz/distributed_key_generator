@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::info;
 
-use crate::{error::KeyGenerationError, rpc::prelude::*, utils::AddressExt};
+use crate::{error::KeyGenerationError, rpc::prelude::*, utils::log_prefix_role_and_address};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncPartialKeys {
@@ -32,6 +32,7 @@ impl RpcParameter<AppState> for SyncPartialKeys {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let prefix = log_prefix_role_and_address(&context.config());
         // let sender_address = verify_signature(&self.signature, &self.payload)?;
 
         let SyncPartialKeysPayload {
@@ -44,17 +45,14 @@ impl RpcParameter<AppState> for SyncPartialKeys {
         } = &self.payload;
 
         info!(
-            "[{}] Received partial keys ACK - senders:{:?}, session_id: {:?
+            "{} Received partial keys ACK - senders:{:?}, session_id: {:?
             }, timestamp: {}",
-            context.config().address().to_short(),
-            partial_key_senders,
-            session_id,
-            ack_timestamp
+            prefix, partial_key_senders, session_id, ack_timestamp
         );
 
         info!(
-            "[{}] Received partial keys ACK - partial_keys_senders:{:?}, partial_keys:{:?}, timestamps:{:?}, ack_timestamp: {}",
-            context.config().address().to_short(),
+            "{} Received partial keys ACK - partial_keys_senders:{:?}, partial_keys:{:?}, timestamps:{:?}, ack_timestamp: {}",
+            prefix,
             partial_key_senders.len(),
             partial_keys.len(),
             submit_timestamps.len(),
