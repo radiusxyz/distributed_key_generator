@@ -30,7 +30,7 @@ pub struct Config {
     external_rpc_url: String,
     internal_rpc_url: String,
     cluster_rpc_url: String,
-    solver_rpc_url: String,
+    solver_rpc_url: Option<String>,
     leader_cluster_rpc_url: Option<String>,
     leader_solver_rpc_url: Option<String>,
     solver_solver_rpc_url: Option<String>,
@@ -154,7 +154,7 @@ impl Config {
             external_rpc_url: merged_config_option.external_rpc_url.unwrap(),
             internal_rpc_url: merged_config_option.internal_rpc_url.unwrap(),
             cluster_rpc_url: merged_config_option.cluster_rpc_url.unwrap(),
-            solver_rpc_url: merged_config_option.solver_rpc_url.unwrap(),
+            solver_rpc_url: merged_config_option.solver_rpc_url.clone(),
             leader_cluster_rpc_url: merged_config_option.leader_cluster_rpc_url.clone(),
             leader_solver_rpc_url: merged_config_option.leader_solver_rpc_url.clone(),
             solver_solver_rpc_url: merged_config_option.solver_solver_rpc_url.clone(),
@@ -221,7 +221,7 @@ impl Config {
         &self.cluster_rpc_url
     }
 
-    pub fn solver_rpc_url(&self) -> &str {
+    pub fn solver_rpc_url(&self) -> &Option<String> {
         &self.solver_rpc_url
     }
 

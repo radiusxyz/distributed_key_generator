@@ -45,7 +45,7 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
             let client = match RpcClient::new() {
                 Ok(c) => c,
                 Err(err) => {
-                    tracing::warn!("Failed to create RPC client: {}", err);
+                    tracing::warn!("[{}] Failed to create RPC client: {}", config.role(), err);
                     return None;
                 }
             };
@@ -62,7 +62,7 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
             match result {
                 Ok(response) => Some(response.into_skde_params()),
                 Err(err) => {
-                    tracing::warn!("Failed to fetch SkdeParams from authority: {}", err);
+                    tracing::warn!("[{}] Failed to fetch SkdeParams from authority: {}", config.role(), err);
                     None
                 }
             }
@@ -73,7 +73,7 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                 let client = match RpcClient::new() {
                     Ok(c) => c,
                     Err(err) => {
-                        tracing::warn!("Failed to create RPC client: {}", err);
+                        tracing::warn!("[{}] Failed to create RPC client: {}", config.role(), err);
                         return None;
                     }
                 };
@@ -89,14 +89,14 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                 {
                     Ok(res) => res,
                     Err(err) => {
-                        tracing::warn!("Failed to fetch SkdeParams from leader: {}", err);
+                        tracing::warn!("[{}] Failed to fetch SkdeParams from leader: {}", config.role(), err);
                         return None;
                     }
                 };
 
                 Some(response.into_skde_params())
             } else {
-                tracing::warn!("Missing leader_cluster_rpc_url in config");
+                tracing::warn!("[{}] Missing leader_cluster_rpc_url in config", config.role());
                 None
             }
         }
@@ -121,13 +121,13 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                 {
                     Ok(res) => res,
                     Err(err) => {
-                        tracing::warn!("Failed to fetch SkdeParams from leader: {}", err);
+                        tracing::warn!("[{}] Failed to fetch SkdeParams from leader: {}", config.role(), err);
                         return None;
                     }
                 };
                 Some(response.into_skde_params())
             } else {
-                tracing::warn!("Missing leader_cluster_rpc_url in config");
+                tracing::warn!("[{}] Missing leader_cluster_rpc_url in config", config.role());
                 None
             }
         }
@@ -151,7 +151,7 @@ pub async fn fetch_skde_params_with_retry(config: &Config) -> SkdeParams {
             return params;
         }
 
-        tracing::warn!("Failed to fetch SKDE params, retrying in 1s...");
+        tracing::warn!("[{}] Failed to fetch SKDE params, retrying in 1s...", config.role());
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 }

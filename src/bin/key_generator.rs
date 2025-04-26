@@ -265,7 +265,7 @@ async fn initialize_authority_rpc_server(app_state: &AppState) -> Result<JoinHan
 }
 
 async fn initialize_solve_rpc_server(app_state: &AppState) -> Result<JoinHandle<()>, Error> {
-    let solver_rpc_url = app_state.config().solver_rpc_url().to_string();
+    let solver_rpc_url = app_state.config().solver_rpc_url().clone().unwrap();
 
     let rpc_server = RpcServer::new(app_state.clone())
         .register_rpc_method::<solver::GetSkdeParams>()?
