@@ -17,7 +17,8 @@ use crate::{
     state::AppState,
     types::*,
     utils::{
-        create_signature, log_prefix_with_session_id, perform_randomized_aggregation, AddressExt,
+        create_signature, log_prefix_role_and_address, log_prefix_with_session_id,
+        perform_randomized_aggregation,
     },
 };
 pub const THRESHOLD: usize = 1;
@@ -25,16 +26,14 @@ pub const THRESHOLD: usize = 1;
 // TODO: Decouple logic according to roles.
 // Spawns a loop that periodically generates partial keys and aggregates them
 pub fn run_single_key_generator(context: AppState) {
+    let prefix = log_prefix_role_and_address(&context.config());
     tokio::spawn(async move {
         let partial_key_generation_cycle_ms = context.config().partial_key_generation_cycle_ms();
         let partial_key_aggregation_cycle_ms = context.config().partial_key_aggregation_cycle_ms();
 
         info!(
-            "[{}][{}] Partial key generation cycle: {} ms, aggregation cycle: {} ms",
-            context.config().role(),
-            context.config().address().to_short(),
-            partial_key_generation_cycle_ms,
-            partial_key_aggregation_cycle_ms
+            "{} Partial key generation cycle: {} ms, aggregation cycle: {} ms",
+            prefix, partial_key_generation_cycle_ms, partial_key_aggregation_cycle_ms
         );
 
         loop {
@@ -174,7 +173,7 @@ pub async fn broadcast_finalized_partial_keys(
     let partial_senders = list.to_vec();
 
     // TODO: Add to make actual signature
-    // TODO: Timestampes, signatures, etc. should be collected assigned to   each partial key
+    // TODO: Timestampes, signatures, etc. should be collected assigned to each partial key
     let signatures = partial_keys
         .iter()
         .zip(&partial_senders)

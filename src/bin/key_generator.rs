@@ -12,7 +12,7 @@ use distributed_key_generation::{
         authority_setup::run_setup_skde_params, single_key_generator::run_single_key_generator,
     },
     types::*,
-    utils::{log_prefix_role_and_address, AddressExt},
+    utils::log_prefix_role_and_address,
 };
 use radius_sdk::{
     json_rpc::{
@@ -77,11 +77,11 @@ async fn main() -> Result<(), Error> {
         } => {
             // Load the configuration from the path
             let config = Config::load(config_option)?;
+            let prefix = log_prefix_role_and_address(&config);
 
             info!(
-                "[{}][{}] Successfully loaded the configuration file at {:?}.",
-                config.role(),
-                config.address().to_short(),
+                "{} Successfully loaded the configuration file at {:?}.",
+                prefix,
                 config.path(),
             );
 
@@ -110,9 +110,8 @@ async fn main() -> Result<(), Error> {
             SessionId::initialize().map_err(error::Error::Database)?;
 
             info!(
-                "[{}][{}] Successfully initialized the database at {:?}.",
-                config.role(),
-                config.address().to_short(),
+                "{} Successfully initialized the database at {:?}.",
+                prefix,
                 config.database_path(),
             );
 

@@ -151,8 +151,8 @@ impl Config {
             external_rpc_url: merged_config_option.external_rpc_url.unwrap(),
             internal_rpc_url: merged_config_option.internal_rpc_url.unwrap(),
             cluster_rpc_url: merged_config_option.cluster_rpc_url.unwrap(),
-            solver_rpc_url: merged_config_option.solver_rpc_url.clone(),
             leader_cluster_rpc_url: merged_config_option.leader_cluster_rpc_url.clone(),
+            solver_rpc_url: merged_config_option.solver_rpc_url.clone(),
             leader_solver_rpc_url: merged_config_option.leader_solver_rpc_url.clone(),
             solver_solver_rpc_url: merged_config_option.solver_solver_rpc_url.clone(),
             authority_rpc_url: merged_config_option.authority_rpc_url.unwrap(),
@@ -249,14 +249,14 @@ impl Config {
     pub fn is_leader(&self) -> bool {
         match &self.role {
             Role::Leader => true,
-            _ => self.leader_cluster_rpc_url.is_none(), // For backward compatibility
+            _ => false,
         }
     }
 
     pub fn is_committee(&self) -> bool {
         match &self.role {
             Role::Committee => true,
-            _ => true, // Default behavior is committee
+            _ => false,
         }
     }
 

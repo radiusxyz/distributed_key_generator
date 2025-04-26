@@ -64,6 +64,7 @@ pub fn perform_randomized_aggregation(
     session_id: SessionId,
     partial_key_list: &Vec<SkdePartialKey>,
 ) -> SkdeAggregatedKey {
+    let prefix = log_prefix_role_and_address(&context.config());
     let skde_params = context.skde_params().clone();
 
     let randomness = get_randomness(session_id);
@@ -77,10 +78,8 @@ pub fn perform_randomized_aggregation(
         .unwrap();
 
     info!(
-        "[{}] Completed to generate encryption key - session id: {:?} / encryption key: {:?}",
-        context.config().address().to_short(),
-        session_id,
-        skde_aggregated_key.u
+        "{} Completed to generate encryption key - session id: {:?} / encryption key: {:?}",
+        prefix, session_id, skde_aggregated_key.u
     );
     skde_aggregated_key
 }
