@@ -29,6 +29,7 @@ pub struct SyncDecryptionKeyPayload {
     pub ack_solve_timestamp: u64,
 }
 
+// TODO (Post-PoC): Decouple session start trigger from decryption key sync to improve robustness.
 impl RpcParameter<AppState> for SyncDecryptionKey {
     type Response = ();
 
@@ -41,6 +42,11 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
         let mut session_id = self.payload.session_id;
         // let sender_address = verify_signature(&self.signature, &self.payload, &_context)?;
 
+        // TODO: Before storing the decryption key,
+        // - Verify the signature on the decryption key payload
+        // - Retrieve the previously stored encryption key for the session
+        // - Verify that the decryption key is correctly derived from the encryption key
+        // Only after successful verification, store the decryption key with put.
         let decryption_key = DecryptionKey::new(self.payload.decryption_key.clone());
         decryption_key.put(session_id)?;
 

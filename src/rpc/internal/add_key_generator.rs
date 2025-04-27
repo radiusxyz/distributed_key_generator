@@ -16,6 +16,8 @@ pub struct AddKeyGeneratorMessage {
     external_rpc_url: String,
 }
 
+// TODO (Post-PoC): Replace leader self-RPC calls for partial key submission and decryption key sync with direct internal handling.
+// See Issue #38
 impl RpcParameter<AppState> for AddKeyGenerator {
     type Response = ();
 
