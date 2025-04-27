@@ -50,15 +50,6 @@ impl RpcParameter<AppState> for SyncPartialKeys {
             prefix, partial_key_senders, session_id, ack_timestamp
         );
 
-        info!(
-            "{} Received partial keys ACK - partial_keys_senders:{:?}, partial_keys:{:?}, timestamps:{:?}, ack_timestamp: {}",
-            prefix,
-            partial_key_senders.len(),
-            partial_keys.len(),
-            submit_timestamps.len(),
-            ack_timestamp
-        );
-
         // TODO: timestampes also should be collected assigned to each partial key
         if partial_key_senders.len() != partial_keys.len() || partial_keys.len() != signatures.len()
         {

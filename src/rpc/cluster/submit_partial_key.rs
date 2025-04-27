@@ -61,6 +61,8 @@ impl RpcParameter<AppState> for SubmitPartialKey {
 
         // if the sender is incluided in
         PartialKeyAddressList::apply(self.payload.session_id, |list| {
+            // TODO: Should fix race condition
+            info!("************ Inserted partial key into list: {:?} ", list);
             list.insert(self.payload.sender.clone());
         })?;
 

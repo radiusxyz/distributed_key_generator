@@ -11,7 +11,6 @@ use tracing::info;
 
 use super::{PartialKeyPayload, SubmitPartialKey};
 use crate::{
-    error::KeyGenerationError,
     rpc::prelude::*,
     utils::{create_signature, get_current_timestamp, log_prefix_with_session_id},
 };
@@ -41,7 +40,7 @@ impl RpcParameter<AppState> for RequestSubmitPartialKey {
         submit_partial_key_to_leader(my_address, self.session_id, partial_key, context.clone())
             .await?;
 
-        info!("{} Submitted precomputed partial key to leader", prefix);
+        info!("{} Submitted partial key to leader", prefix);
 
         Ok(Some(()))
     }
@@ -53,12 +52,9 @@ async fn submit_partial_key_to_leader(
     partial_key: SkdePartialKey,
     context: AppState,
 ) -> Result<(), RpcError> {
-    let leader_rpc_url = if let Some(url) = context.config().leader_cluster_rpc_url() {
-        url.clone()
-    } else {
-        return Err(RpcError::from(KeyGenerationError::InternalError(
-            "Leader RPC URL not found".to_string(),
-        )));
+    let leader_rpc_url = match context.config().is_leader() {
+        true => context.config().cluster_rpc_url(),
+        false => &context.config().leader_cluster_rpc_url().clone().unwrap(),
     };
 
     // Create payload with partial key and metadata

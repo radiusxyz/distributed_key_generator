@@ -49,7 +49,7 @@ pub fn run_single_key_generator(context: AppState) {
             tokio::spawn(async move {
                 let key_generator_rpc_url_list = KeyGeneratorList::get()
                     .unwrap()
-                    .get_other_key_generator_rpc_url_list(&context.config().address());
+                    .get_all_key_generator_rpc_url_list();
 
                 if key_generator_rpc_url_list.is_empty() {
                     return;
@@ -90,8 +90,7 @@ pub fn run_single_key_generator(context: AppState) {
                     partial_key_list.len()
                 );
 
-                let _skde_aggregated_key =
-                    perform_randomized_aggregation(&context, current_session_id, &partial_key_list);
+                perform_randomized_aggregation(&context, current_session_id, &partial_key_list);
 
                 session_id.increase_session_id();
                 session_id.update().unwrap();
