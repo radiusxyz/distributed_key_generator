@@ -32,11 +32,11 @@ role = "authority"
 external_rpc_url = "http://127.0.0.1:7102"
 internal_rpc_url = "http://127.0.0.1:7202"
 cluster_rpc_url = "http://127.0.0.1:7302"
-
+solver_rpc_url = "http://127.0.0.1:8500"
 radius_foundation_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 chain_type = "ethereum"
-partial_key_generation_cycle_ms = 500
-partial_key_aggregation_cycle_ms = 500
+partial_key_generation_cycle_ms = 1500
+partial_key_aggregation_cycle_ms = 1500
 EOL
 
 # Set private key (if not exists)

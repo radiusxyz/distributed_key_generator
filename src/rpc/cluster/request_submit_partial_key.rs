@@ -13,7 +13,7 @@ use super::{PartialKeyPayload, SubmitPartialKey};
 use crate::{
     error::KeyGenerationError,
     rpc::prelude::*,
-    utils::{get_current_timestamp, AddressExt},
+    utils::{create_signature, get_current_timestamp, log_prefix_with_session_id},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -30,25 +30,18 @@ impl RpcParameter<AppState> for RequestSubmitPartialKey {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let prefix = log_prefix_with_session_id(&context.config(), &self.session_id);
         let skde_params = context.skde_params();
         let my_address = context.config().address().clone();
 
-        info!(
-            "[{}] Requesting to submit partial key for session {}",
-            context.config().address().to_short(),
-            self.session_id.as_u64()
-        );
+        info!("{} Requesting to submit partial key", prefix,);
 
         let (_, partial_key) = generate_partial_key(skde_params).unwrap();
 
         submit_partial_key_to_leader(my_address, self.session_id, partial_key, context.clone())
             .await?;
 
-        info!(
-            "[{}] Submitted precomputed partial key to leader for session {}",
-            context.config().address().to_short(),
-            self.session_id.as_u64()
-        );
+        info!("{} Submitted precomputed partial key to leader", prefix);
 
         Ok(Some(()))
     }
@@ -77,7 +70,7 @@ async fn submit_partial_key_to_leader(
     };
 
     // Create signature for the payload
-    let signature = crate::rpc::common::create_signature(&payload);
+    let signature = create_signature(&payload);
 
     let parameter = SubmitPartialKey { signature, payload };
 

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use super::{SyncDecryptionKey, SyncPartialKey};
-use crate::rpc::{common::create_signature, prelude::*};
+use crate::{rpc::prelude::*, utils::create_signature};
 
 // Message from leader to verifiers
 #[derive(Clone, Debug, Deserialize, Serialize)]

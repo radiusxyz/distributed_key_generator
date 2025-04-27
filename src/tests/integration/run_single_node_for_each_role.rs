@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[tokio::test]
-async fn test_integration_single_node_for_each_role() {
+async fn test_single_node_for_each_role() {
     // Initialize test environment
     init_test_environment("submit partial key and ack test");
 
@@ -18,13 +18,16 @@ async fn test_integration_single_node_for_each_role() {
 
     // 1. Start authority, leader and committee nodes
     let (_authority_process, _authority_ports, _authority_config) =
-        start_node(Role::Authority, 9, &mut temp_dirs).await;
+        start_node(Role::Authority, 0, &mut temp_dirs).await;
 
     let (_leader_process, leader_ports, leader_config) =
-        start_node(Role::Leader, 0, &mut temp_dirs).await;
+        start_node(Role::Leader, 1, &mut temp_dirs).await;
+
+    let (_solver_process, _solver_ports, _solver_config) =
+        start_node(Role::Solver, 2, &mut temp_dirs).await;
 
     let (_committee_process, committee_ports, committee_config) =
-        start_node(Role::Committee, 1, &mut temp_dirs).await;
+        start_node(Role::Committee, 3, &mut temp_dirs).await;
 
     // 2. Register nodes with each other
     register_nodes(

@@ -9,7 +9,10 @@ use radius_sdk::{
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::{rpc::prelude::*, utils::get_current_timestamp};
+use crate::{
+    rpc::prelude::*,
+    utils::{get_current_timestamp, log_prefix_role_and_address},
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncDecryptionKey {
@@ -32,15 +35,17 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
         "sync_decryption_key"
     }
 
-    async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
+    async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let prefix = log_prefix_role_and_address(&context.config());
         // let sender_address = verify_signature(&self.signature, &self.payload, &_context)?;
 
-        info!(
-            "Received decryption key ACK - session_id: {:?}, timestamps: {} / {}",
-            self.payload.session_id, self.payload.solve_timestamp, self.payload.ack_solve_timestamp
-        );
+        let decryption_key = DecryptionKey::new(self.payload.decryption_key.clone());
+        decryption_key.put(self.payload.session_id)?;
 
-        // TODO: Verify the decryption key and store it in the `DecryptionKey`
+        info!(
+            "{} Complete put decryption key - key_id: {:?} / decryption key: {:?}",
+            prefix, self.payload.session_id, decryption_key
+        );
 
         Ok(())
     }
@@ -53,8 +58,15 @@ pub fn broadcast_decryption_key_ack(
     solve_timestamp: u64,
     context: &AppState,
 ) -> Result<(), Error> {
-    let all_key_generator_rpc_url_list =
-        KeyGeneratorList::get()?.get_all_key_generator_rpc_url_list();
+    let prefix = log_prefix_role_and_address(&context.config());
+    let ack_solve_timestamp = get_current_timestamp();
+    info!(
+        "{} Broadcast decryption key acknowledgment - session_id: {:?}, timestamps: {} / {}",
+        prefix, session_id, solve_timestamp, ack_solve_timestamp
+    );
+
+    let other_key_generator_rpc_url_list =
+        KeyGeneratorList::get()?.get_other_key_generator_rpc_url_list(context.config().address());
 
     let ack_solve_timestamp = get_current_timestamp();
 
@@ -77,7 +89,7 @@ pub fn broadcast_decryption_key_ack(
         if let Ok(rpc_client) = RpcClient::new() {
             let _ = rpc_client
                 .multicast(
-                    all_key_generator_rpc_url_list,
+                    other_key_generator_rpc_url_list,
                     SyncDecryptionKey::method(),
                     &parameter,
                     Id::Null,

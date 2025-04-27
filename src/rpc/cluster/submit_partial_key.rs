@@ -8,9 +8,9 @@ use tracing::info;
 
 use crate::{
     error::KeyGenerationError,
-    rpc::{cluster::broadcast_partial_key_ack, common::verify_signature, prelude::*},
+    rpc::{cluster::broadcast_partial_key_ack, prelude::*},
     types::SessionId,
-    utils::AddressExt,
+    utils::{log_prefix_role_and_address, verify_signature},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -35,13 +35,15 @@ impl RpcParameter<AppState> for SubmitPartialKey {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let prefix = log_prefix_role_and_address(&context.config());
+
         // TODO: Add to verify actual signature
         let _ = verify_signature(&self.signature, &self.payload)?;
         let sender_address = self.payload.sender.clone();
 
         info!(
-            "[{}] Received partial key - session_id: {:?}, sender: {}, timestamp: {}",
-            context.config().address().to_short(),
+            "{} Received partial key - session_id: {:?}, sender: {}, timestamp: {}",
+            prefix,
             self.payload.session_id,
             sender_address.as_hex_string(),
             self.payload.submit_timestamp

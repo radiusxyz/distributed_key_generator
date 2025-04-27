@@ -22,12 +22,9 @@ use tracing_subscriber::fmt;
 
 use crate::{
     config::Role,
-    rpc::{
-        cluster::{GetKeyGeneratorList, GetSkdeParams, GetSkdeParamsResponse, PartialKeyPayload},
-        common::create_signature,
-    },
+    rpc::cluster::{GetKeyGeneratorList, GetSkdeParams, GetSkdeParamsResponse, PartialKeyPayload},
     types::{Config, ConfigOption},
-    utils::get_current_timestamp,
+    utils::{create_signature, get_current_timestamp},
     SessionId,
 };
 
@@ -128,7 +125,10 @@ pub fn create_config_from_dir(temp_path: &PathBuf) -> Config {
         external_rpc_url: None,
         internal_rpc_url: None,
         cluster_rpc_url: None,
+        solver_rpc_url: None,
         leader_cluster_rpc_url: None,
+        leader_solver_rpc_url: None,
+        solver_solver_rpc_url: None,
         role: None,
         radius_foundation_address: None,
         chain_type: None,
@@ -179,37 +179,47 @@ pub fn spawn_node_process(
 
     let authority_rpc_url = format!("authority_rpc_url = \"http://127.0.0.1:6000\"");
 
+    // Leader와 Solver 역할에 따른 설정 초기화
+    let (solver_solver_rpc_url, leader_solver_rpc_url, solver_port) = match role {
+        Role::Leader => (
+            format!("solver_solver_rpc_url = \"http://127.0.0.1:8500\""),
+            "".to_string(),
+            format!("8400"),
+        ),
+        Role::Solver => (
+            "".to_string(),
+            format!("leader_solver_rpc_url = \"http://127.0.0.1:8400\""),
+            format!("8500"),
+        ),
+        _ => ("".to_string(), "".to_string(), "".to_string()),
+    };
+
     // Create Config.toml file
     let config_path = temp_path.join("Config.toml");
     // Non-leader nodes need leader URL
     let leader_url = if role != Role::Leader {
-        format!("leader_cluster_rpc_url = \"http://127.0.0.1:7300\"")
+        format!("leader_cluster_rpc_url = \"http://127.0.0.1:7301\"")
     } else {
         "".to_string()
     };
 
-    let config_content = format!(
-        r#"# NODE CONFIG: {} Node (Node {})
-external_rpc_url = "http://127.0.0.1:{}"
-internal_rpc_url = "http://127.0.0.1:{}"
-cluster_rpc_url = "http://127.0.0.1:{}"
-role = "{}"
-radius_foundation_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-chain_type = "ethereum"
-partial_key_generation_cycle_ms = 500
-partial_key_aggregation_cycle_ms = 500
-{}
-{}
-"#,
-        role,
-        index,
-        external_port,
-        internal_port,
-        cluster_port,
-        role.to_string().to_lowercase(),
-        leader_url,
-        authority_rpc_url
-    );
+    let config_content = [
+        format!("# NODE CONFIG: {} Node (Node {})", role, index),
+        format!(r#"external_rpc_url="http://127.0.0.1:{}""#, external_port),
+        format!(r#"internal_rpc_url="http://127.0.0.1:{}""#, internal_port),
+        format!(r#"cluster_rpc_url="http://127.0.0.1:{}""#, cluster_port),
+        format!(r#"solver_rpc_url="http://127.0.0.1:{}""#, solver_port),
+        format!(r#"role="{}""#, role.to_string().to_lowercase()),
+        r#"radius_foundation_address="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266""#.to_string(),
+        r#"chain_type="ethereum""#.to_string(),
+        r#"partial_key_generation_cycle_ms=500"#.to_string(),
+        r#"partial_key_aggregation_cycle_ms=500"#.to_string(),
+        leader_url.to_string(),
+        authority_rpc_url.to_string(),
+        leader_solver_rpc_url.to_string(),
+        solver_solver_rpc_url.to_string(),
+    ]
+    .join("\n");
 
     std::fs::write(&config_path, config_content).expect("Failed to write Config.toml");
     info!("Completed writing config file for {} node", role);

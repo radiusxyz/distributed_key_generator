@@ -6,7 +6,7 @@ use std::{fs, path::PathBuf};
 pub use config_option::*;
 pub use config_path::*;
 use radius_sdk::signature::{Address, ChainType, PrivateKeySigner};
-use tracing::info;
+use tracing::{info, warn};
 
 pub const DEFAULT_HOME_PATH: &str = ".radius";
 pub const DATABASE_DIR_NAME: &str = "database";
@@ -30,7 +30,10 @@ pub struct Config {
     external_rpc_url: String,
     internal_rpc_url: String,
     cluster_rpc_url: String,
+    solver_rpc_url: Option<String>,
     leader_cluster_rpc_url: Option<String>,
+    leader_solver_rpc_url: Option<String>,
+    solver_solver_rpc_url: Option<String>,
     authority_rpc_url: String,
     role: Role,
 
@@ -63,17 +66,17 @@ impl Config {
                 Ok(config_string) => match toml::from_str(&config_string) {
                     Ok(parsed) => parsed,
                     Err(e) => {
-                        tracing::warn!("Failed to parse config file: {}, using default values", e);
+                        warn!("Failed to parse config file: {}, using default values", e);
                         ConfigOption::default()
                     }
                 },
                 Err(e) => {
-                    tracing::warn!("Failed to read config file: {}, using default values", e);
+                    warn!("Failed to read config file: {}, using default values", e);
                     ConfigOption::default()
                 }
             }
         } else {
-            tracing::warn!(
+            warn!(
                 "Config file not found at {:?}, using default values",
                 config_file_path
             );
@@ -96,18 +99,15 @@ impl Config {
                     match PrivateKeySigner::from_str(chain_type, &clean_key) {
                         Ok(signer) => signer,
                         Err(err) => {
-                            tracing::warn!(
-                                "Invalid signing key in file: {}, using default key",
-                                err
-                            );
-                            tracing::warn!("Key string was: '{}'", clean_key);
+                            warn!("Invalid signing key in file: {}, using default key", err);
+                            warn!("Key string was: '{}'", clean_key);
                             let default_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
                             PrivateKeySigner::from_str(chain_type, default_key).unwrap()
                         }
                     }
                 }
                 Err(err) => {
-                    tracing::warn!(
+                    warn!(
                         "Failed to read signing key file: {}, using default key",
                         err
                     );
@@ -117,7 +117,7 @@ impl Config {
                 }
             }
         } else {
-            tracing::warn!(
+            warn!(
                 "Signing key file not found at {:?}, using default key",
                 signing_key_path
             );
@@ -138,7 +138,7 @@ impl Config {
             match role_str.parse::<Role>() {
                 Ok(role) => role,
                 Err(e) => {
-                    tracing::warn!("Invalid role: {}, ignoring role setting", e);
+                    warn!("Invalid role: {}, ignoring role setting", e);
                     Role::Committee
                 }
             }
@@ -152,6 +152,9 @@ impl Config {
             internal_rpc_url: merged_config_option.internal_rpc_url.unwrap(),
             cluster_rpc_url: merged_config_option.cluster_rpc_url.unwrap(),
             leader_cluster_rpc_url: merged_config_option.leader_cluster_rpc_url.clone(),
+            solver_rpc_url: merged_config_option.solver_rpc_url.clone(),
+            leader_solver_rpc_url: merged_config_option.leader_solver_rpc_url.clone(),
+            solver_solver_rpc_url: merged_config_option.solver_solver_rpc_url.clone(),
             authority_rpc_url: merged_config_option.authority_rpc_url.unwrap(),
             role,
             signer,
@@ -215,8 +218,20 @@ impl Config {
         &self.cluster_rpc_url
     }
 
+    pub fn solver_rpc_url(&self) -> &Option<String> {
+        &self.solver_rpc_url
+    }
+
     pub fn leader_cluster_rpc_url(&self) -> &Option<String> {
         &self.leader_cluster_rpc_url
+    }
+
+    pub fn leader_solver_rpc_url(&self) -> &Option<String> {
+        &self.leader_solver_rpc_url
+    }
+
+    pub fn solver_solver_rpc_url(&self) -> &Option<String> {
+        &self.solver_solver_rpc_url
     }
 
     pub fn authority_rpc_url(&self) -> &String {
@@ -234,14 +249,14 @@ impl Config {
     pub fn is_leader(&self) -> bool {
         match &self.role {
             Role::Leader => true,
-            _ => self.leader_cluster_rpc_url.is_none(), // For backward compatibility
+            _ => false,
         }
     }
 
     pub fn is_committee(&self) -> bool {
         match &self.role {
             Role::Committee => true,
-            _ => true, // Default behavior is committee
+            _ => false,
         }
     }
 

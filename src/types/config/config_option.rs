@@ -69,9 +69,21 @@ pub struct ConfigOption {
     #[clap(long = "cluster-rpc-url")]
     pub cluster_rpc_url: Option<String>,
 
-    #[doc = "Set the leader cluster rpc url (previously seed-cluster-rpc-url)"]
+    #[doc = "Set the solver rpc url"]
+    #[clap(long = "solver-rpc-url")]
+    pub solver_rpc_url: Option<String>,
+
+    #[doc = "Set the leader cluster rpc url"]
     #[clap(long = "leader-cluster-rpc-url")]
     pub leader_cluster_rpc_url: Option<String>,
+
+    #[doc = "Set the leader solver rpc url "]
+    #[clap(long = "leader-slover-rpc-url")]
+    pub leader_solver_rpc_url: Option<String>,
+
+    #[doc = "Set the solver solver rpc url"]
+    #[clap(long = "solver-slover-rpc-url")]
+    pub solver_solver_rpc_url: Option<String>,
 
     #[doc = "Set the authority rpc url (used by leader node at startup)"]
     #[clap(long = "authority-rpc-url")]
@@ -106,7 +118,10 @@ impl Default for ConfigOption {
             external_rpc_url: Some(DEFAULT_EXTERNAL_RPC_URL.into()),
             internal_rpc_url: Some(DEFAULT_INTERNAL_RPC_URL.into()),
             cluster_rpc_url: Some(DEFAULT_CLUSTER_RPC_URL.into()),
+            solver_rpc_url: None,
             leader_cluster_rpc_url: None,
+            leader_solver_rpc_url: None,
+            solver_solver_rpc_url: None,
             authority_rpc_url: None,
             role: None,
             radius_foundation_address: Some(DEFAULT_RADIUS_FOUNDATION_ADDRESS.into()),
@@ -130,11 +145,28 @@ impl ConfigOption {
         set_toml_comment(&mut toml_string, "Set cluster rpc url");
         set_toml_name_value(&mut toml_string, "cluster_rpc_url", &self.cluster_rpc_url);
 
+        set_toml_comment(&mut toml_string, "Set solver rpc url");
+        set_toml_name_value(&mut toml_string, "solver_rpc_url", &self.solver_rpc_url);
+
         set_toml_comment(&mut toml_string, "Set leader cluster rpc url");
         set_toml_name_value(
             &mut toml_string,
             "leader_cluster_rpc_url",
             &self.leader_cluster_rpc_url,
+        );
+
+        set_toml_comment(&mut toml_string, "Set leader solver rpc url");
+        set_toml_name_value(
+            &mut toml_string,
+            "leader_solver_rpc_url",
+            &self.leader_solver_rpc_url,
+        );
+
+        set_toml_comment(&mut toml_string, "Set solver solver rpc url");
+        set_toml_name_value(
+            &mut toml_string,
+            "solver_solver_rpc_url",
+            &self.solver_solver_rpc_url,
         );
 
         set_toml_comment(
@@ -200,9 +232,23 @@ impl ConfigOption {
             self.cluster_rpc_url.clone_from(&other.cluster_rpc_url);
         }
 
+        if other.solver_rpc_url.is_some() {
+            self.solver_rpc_url.clone_from(&other.solver_rpc_url);
+        }
+
         if other.leader_cluster_rpc_url.is_some() {
             self.leader_cluster_rpc_url
                 .clone_from(&other.leader_cluster_rpc_url);
+        }
+
+        if other.leader_solver_rpc_url.is_some() {
+            self.leader_solver_rpc_url
+                .clone_from(&other.leader_solver_rpc_url);
+        }
+
+        if other.solver_solver_rpc_url.is_some() {
+            self.solver_solver_rpc_url
+                .clone_from(&other.solver_solver_rpc_url);
         }
 
         if other.authority_rpc_url.is_some() {
