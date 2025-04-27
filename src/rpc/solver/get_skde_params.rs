@@ -1,16 +1,16 @@
-use crate::rpc::prelude::*;
+use crate::{rpc::prelude::*, task::authority_setup::SignedSkdeParams, utils::create_signature};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetSkdeParams;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetSkdeParamsResponse {
-    skde_params: skde::delay_encryption::SkdeParams,
+    pub signed_skde_params: SignedSkdeParams,
 }
 
 impl GetSkdeParamsResponse {
     pub fn into_skde_params(self) -> skde::delay_encryption::SkdeParams {
-        self.skde_params
+        self.signed_skde_params.params
     }
 }
 
@@ -22,10 +22,15 @@ impl RpcParameter<AppState> for GetSkdeParams {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        let skde_params = context.skde_params();
+        let skde_params = context.skde_params().clone();
 
-        Ok(GetSkdeParamsResponse {
-            skde_params: skde_params.clone(),
-        })
+        let signature = create_signature(&skde_params);
+
+        let signed_skde_params = SignedSkdeParams {
+            params: skde_params,
+            signature,
+        };
+
+        Ok(GetSkdeParamsResponse { signed_skde_params })
     }
 }

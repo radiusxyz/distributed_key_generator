@@ -1,15 +1,23 @@
 use std::{fs, path::PathBuf};
 
-use skde::delay_encryption::setup;
+use radius_sdk::signature::Signature;
+use serde::{Deserialize, Serialize};
+use skde::delay_encryption::{setup, SkdeParams};
 use tracing::{info, warn};
 
-use crate::ConfigPath;
+use crate::{utils::create_signature, ConfigPath};
 
 // Constants for SKDE setup parameters
 // TODO: Getting constants in a form of json file(?)
 const DEFAULT_TIME_PARAM_T: u32 = 4;
 const DEFAULT_GENERATOR: u32 = 4;
 const DEFAULT_MAX_SEQUENCER_NUMBER: u32 = 2;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SignedSkdeParams {
+    pub params: SkdeParams,
+    pub signature: Signature,
+}
 
 // TODO: Add error handling
 pub fn run_setup_skde_params(path: &ConfigPath) {
@@ -26,8 +34,12 @@ pub fn run_setup_skde_params(path: &ConfigPath) {
     let max = DEFAULT_MAX_SEQUENCER_NUMBER.into();
 
     let params = setup(t, g, max);
-    // TODO: Add sign
-    let serialized = serde_json::to_string_pretty(&params).unwrap();
+
+    let signature = create_signature(&params);
+
+    let signed_params = SignedSkdeParams { params, signature };
+
+    let serialized = serde_json::to_string_pretty(&signed_params).unwrap();
     fs::write(&skde_path, serialized).unwrap();
 
     info!("Successfully generated SKDE params at {:?}", skde_path);
