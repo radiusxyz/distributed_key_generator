@@ -47,7 +47,7 @@ impl RpcParameter<AppState> for SyncPartialKey {
             }, index: {}, timestamp: {}",
             prefix,
             self.payload.partial_key_sender.to_short(),
-            self.payload.session_id,
+            self.payload.session_id.as_u64(),
             self.payload.index,
             self.payload.ack_timestamp
         );

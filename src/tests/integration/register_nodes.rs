@@ -1,13 +1,12 @@
 // use skde::key_generation::generate_partial_key;
-use tokio::time::{sleep, Duration};
 use radius_sdk::json_rpc::client::{Id, RpcClient};
+use tokio::time::{sleep, Duration};
 
 use crate::{
     rpc::cluster::GetKeyGeneratorList,
     tests::utils::{
-        cleanup_existing_processes,init_test_environment,
-        register_nodes, register_nodes_with_duplicate_addresses, start_node,
-         verify_mutual_registration,
+        cleanup_existing_processes, init_test_environment, register_nodes,
+        register_nodes_with_duplicate_addresses, start_node, verify_mutual_registration,
     },
     Role,
 };
@@ -64,7 +63,7 @@ async fn test_register_nodes() {
         &leader_config,
     )
     .await;
-    
+
     // 5. Check if KeyGeneratorList still has 2 entries after duplicate registration attempt
     sleep(Duration::from_secs(2)).await;
 
@@ -87,8 +86,8 @@ async fn test_register_nodes() {
         .len();
 
     assert_eq!(
-        leader_key_generator_count, 
-        2, 
+        leader_key_generator_count,
+        2,
         "Leader's key generator list should have exactly 2 entries after attempted duplicate registration"
     );
 
@@ -110,8 +109,8 @@ async fn test_register_nodes() {
         .len();
 
     assert_eq!(
-        committee_key_generator_count, 
-        2, 
+        committee_key_generator_count,
+        2,
         "Committee's key generator list should have exactly 2 entries after attempted duplicate registration"
     );
 

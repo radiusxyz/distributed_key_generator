@@ -79,7 +79,8 @@ pub fn perform_randomized_aggregation(
 
     info!(
         "{} Completed to generate encryption key - session id: {:?}",
-        prefix, session_id,
+        prefix,
+        session_id.as_u64(),
     );
     skde_aggregated_key
 }

@@ -41,10 +41,7 @@ pub fn run_single_key_generator(context: AppState) {
             let current_session_id = session_id.clone();
             let prefix: String = log_prefix_with_session_id(&context.config(), &current_session_id);
 
-            info!(
-                "************ 🟡🟡🟡 Starting new session : {:?} 🟡🟡🟡 ************",
-                current_session_id
-            );
+            info!("{} Waiting to start session", prefix,);
 
             tokio::spawn(async move {
                 let key_generator_rpc_url_list = KeyGeneratorList::get()
