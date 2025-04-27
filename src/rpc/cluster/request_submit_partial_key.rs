@@ -1,9 +1,6 @@
-use radius_sdk::{
-    json_rpc::{
-        client::{Id, RpcClient},
-        server::{RpcError, RpcParameter},
-    },
-    signature::Address,
+use radius_sdk::json_rpc::{
+    client::{Id, RpcClient},
+    server::{RpcError, RpcParameter},
 };
 use serde::{Deserialize, Serialize};
 use skde::key_generation::{generate_partial_key, PartialKey as SkdePartialKey};
@@ -31,14 +28,9 @@ impl RpcParameter<AppState> for RequestSubmitPartialKey {
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let prefix = log_prefix_with_session_id(&context.config(), &self.session_id);
         let skde_params = context.skde_params();
-        let my_address = context.config().address().clone();
-
-        info!("{} Requesting to submit partial key", prefix,);
 
         let (_, partial_key) = generate_partial_key(skde_params).unwrap();
-
-        submit_partial_key_to_leader(my_address, self.session_id, partial_key, context.clone())
-            .await?;
+        submit_partial_key_to_leader(self.session_id, partial_key, context.clone()).await?;
 
         info!("{} Submitted partial key to leader", prefix);
 
@@ -46,8 +38,7 @@ impl RpcParameter<AppState> for RequestSubmitPartialKey {
     }
 }
 
-async fn submit_partial_key_to_leader(
-    sender: Address,
+pub async fn submit_partial_key_to_leader(
     session_id: SessionId,
     partial_key: SkdePartialKey,
     context: AppState,
@@ -59,7 +50,7 @@ async fn submit_partial_key_to_leader(
 
     // Create payload with partial key and metadata
     let payload = PartialKeyPayload {
-        sender: sender.clone(),
+        sender: context.config().address().clone(),
         partial_key,
         submit_timestamp: get_current_timestamp(),
         session_id,

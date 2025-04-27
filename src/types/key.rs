@@ -7,10 +7,8 @@ use radius_sdk::{
 use serde::{Deserialize, Serialize};
 use skde::{
     key_aggregation::AggregatedKey as SkdeAggregatedKey,
-    key_generation::{PartialKey as SkdePartialKey, PartialKeyProof},
+    key_generation::PartialKey as SkdePartialKey,
 };
-
-use crate::utils::get_current_timestamp;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
 #[kvstore(key(session_id: SessionId, address: &Address))]

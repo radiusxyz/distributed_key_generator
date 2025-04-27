@@ -28,13 +28,13 @@ pub struct PartialKeyPayload {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SyncPartialKeys {
+pub struct SyncFinalizedPartialKeys {
     pub signature: Signature,
-    pub payload: SyncPartialKeysPayload,
+    pub payload: SyncFinalizedPartialKeysPayload,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SyncPartialKeysPayload {
+pub struct SyncFinalizedPartialKeysPayload {
     pub partial_key_senders: Vec<Address>,
     pub partial_keys: Vec<SkdePartialKey>,
     pub session_id: SessionId,
@@ -43,7 +43,7 @@ pub struct SyncPartialKeysPayload {
     pub ack_timestamp: u64,
 }
 
-impl RpcParameter<AppState> for SyncPartialKeys {
+impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
     type Response = ();
 
     fn method() -> &'static str {
@@ -57,7 +57,7 @@ impl RpcParameter<AppState> for SyncPartialKeys {
         let payload = self.payload.clone();
 
         info!(
-            "{} Received partial keys ACK - senders:{:?}, session_id: {:?
+            "{} Received finalized partial keys ACK - senders:{:?}, session_id: {:?
             }, timestamp: {}",
             prefix, payload.partial_key_senders, payload.session_id, payload.ack_timestamp
         );
@@ -113,7 +113,7 @@ impl RpcParameter<AppState> for SyncPartialKeys {
         }
 
         tokio::spawn(async move {
-            if let Err(err) = process_key_derivation(&context, payload.session_id).await {
+            if let Err(err) = derive_and_submit_decryption_key(&context, payload.session_id).await {
                 error!(
                     "{} Solve failed for session {}: {:?}",
                     prefix,
@@ -132,10 +132,14 @@ impl RpcParameter<AppState> for SyncPartialKeys {
     }
 }
 
-async fn process_key_derivation(context: &AppState, session_id: SessionId) -> Result<(), Error> {
+async fn derive_and_submit_decryption_key(
+    context: &AppState,
+    session_id: SessionId,
+) -> Result<(), Error> {
     let prefix = log_prefix_role_and_address(&context.config());
     let partial_keys = PartialKeyAddressList::get(session_id)?.get_partial_key_list(session_id)?;
 
+    // Put aggregated key for a Solver
     let aggregated_key = perform_randomized_aggregation(context, session_id, &partial_keys);
 
     let decryption_key = calculate_decryption_key(context, session_id, &aggregated_key)

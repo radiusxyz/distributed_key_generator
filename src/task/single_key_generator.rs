@@ -16,10 +16,7 @@ use crate::{
     },
     state::AppState,
     types::*,
-    utils::{
-        create_signature, log_prefix_role_and_address, log_prefix_with_session_id,
-        perform_randomized_aggregation,
-    },
+    utils::{create_signature, log_prefix_role_and_address, log_prefix_with_session_id},
 };
 pub const THRESHOLD: usize = 1;
 
@@ -42,9 +39,12 @@ pub fn run_single_key_generator(context: AppState) {
 
             let mut session_id = SessionId::get_mut().unwrap();
             let current_session_id = session_id.clone();
-            let prefix = log_prefix_with_session_id(&context.config(), &current_session_id);
+            let prefix: String = log_prefix_with_session_id(&context.config(), &current_session_id);
 
-            info!("{} Starting new session...", prefix);
+            info!(
+                "************ 🟡🟡🟡 Starting new session : {:?} 🟡🟡🟡 ************",
+                current_session_id
+            );
 
             tokio::spawn(async move {
                 let key_generator_rpc_url_list = KeyGeneratorList::get()
@@ -65,13 +65,19 @@ pub fn run_single_key_generator(context: AppState) {
                     .get_partial_key_list(current_session_id)
                     .unwrap();
 
+                info!(
+                    "{} Partial key list length: {}",
+                    prefix,
+                    partial_key_list.len()
+                );
+
                 if partial_key_address_list.is_empty() {
-                    info!("{} Requested to submit partial key", prefix);
                     request_submit_partial_key(
                         &context,
                         key_generator_rpc_url_list,
                         current_session_id,
                     );
+                    return;
                 } else {
                     if let Err(err) =
                         broadcast_finalized_partial_keys(&context, current_session_id).await
@@ -83,14 +89,6 @@ pub fn run_single_key_generator(context: AppState) {
                         return;
                     }
                 }
-
-                info!(
-                    "{} Partial key list length: {}",
-                    prefix,
-                    partial_key_list.len()
-                );
-
-                perform_randomized_aggregation(&context, current_session_id, &partial_key_list);
 
                 session_id.increase_session_id();
                 session_id.update().unwrap();
@@ -165,7 +163,8 @@ pub async fn broadcast_finalized_partial_keys(
         } else {
             debug!("{} PartialKeyList not yet available", prefix);
         }
-        sleep(Duration::from_secs(1)).await;
+        // Should be declared as constant
+        sleep(Duration::from_millis(100)).await;
     };
 
     let partial_keys = list.get_partial_key_list(session_id).unwrap();
@@ -185,7 +184,7 @@ pub async fn broadcast_finalized_partial_keys(
 
     let submit_timestamps = vec![get_current_timestamp(); partial_keys.len()];
 
-    let payload = cluster::SyncPartialKeysPayload {
+    let payload = cluster::SyncFinalizedPartialKeysPayload {
         partial_key_senders: partial_senders,
         partial_keys,
         session_id,
@@ -195,16 +194,16 @@ pub async fn broadcast_finalized_partial_keys(
     };
 
     let signature = create_signature(&serialize(&payload)?);
-    let message = cluster::SyncPartialKeys { signature, payload };
-    let sender = context.config().signer().address();
-    let peers = KeyGeneratorList::get()?.get_other_key_generator_rpc_url_list(&sender);
+    let message = cluster::SyncFinalizedPartialKeys { signature, payload };
+
+    let peers = KeyGeneratorList::get()?.get_all_key_generator_rpc_url_list();
     let rpc_client = RpcClient::new()?;
     let prefix = log_prefix_with_session_id(&context.config(), &session_id);
 
     if let Err(err) = rpc_client
         .multicast(
             peers,
-            cluster::SyncPartialKeys::method(),
+            cluster::SyncFinalizedPartialKeys::method(),
             &message,
             Id::Null,
         )
@@ -213,7 +212,7 @@ pub async fn broadcast_finalized_partial_keys(
         error!("{} Failed to broadcast partial key list: {:?}", prefix, err);
     } else {
         info!(
-            "{} Successfully broadcasted partial key list to cluster",
+            "{} Successfully broadcasted finalized partial key list to cluster",
             prefix
         );
     }
@@ -223,7 +222,7 @@ pub async fn broadcast_finalized_partial_keys(
     let response = rpc_client
         .request::<_, ()>(
             solver_url.clone(),
-            solver::SyncPartialKeys::method(),
+            solver::SyncFinalizedPartialKeys::method(),
             &message,
             Id::Null,
         )
