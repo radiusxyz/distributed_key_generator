@@ -480,8 +480,19 @@ pub fn log_test_start(test_name: &str) {
     info!("Starting distributed key generation {}", test_name);
 }
 
-/// Initialize test environment (logging and cleanup existing processes)
+/// Initialize the test environment - build the project in release mode, clean up processes, and setup logging
 pub fn init_test_environment(test_name: &str) {
+    // Build the project in release mode
+    info!("Building project in release mode before running tests...");
+    let build_status = Command::new("cargo")
+        .args(["build", "--release"])
+        .status()
+        .expect("Failed to execute cargo build --release");
+
+    if !build_status.success() {
+        panic!("Failed to build the project in release mode");
+    }
+
     cleanup_existing_processes();
     init_test_logging();
     log_test_start(test_name);
@@ -505,6 +516,20 @@ pub async fn start_node(
 
 /// Register nodes with each other
 pub async fn register_nodes(
+    leader_ports: &TestPorts,
+    leader_config: &crate::types::Config,
+    committee_ports: &TestPorts,
+    committee_config: &crate::types::Config,
+) {
+    // Register leader with committee node
+    register_node(leader_ports, committee_config).await;
+
+    // Register committee with leader node
+    register_node(committee_ports, leader_config).await;
+}
+
+/// Register nodes with each other
+pub async fn register_nodes_with_duplicate_addresses(
     leader_ports: &TestPorts,
     leader_config: &crate::types::Config,
     committee_ports: &TestPorts,

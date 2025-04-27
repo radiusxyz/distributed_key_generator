@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[tokio::test]
-async fn test_integration_run_multiple_committees_one_leader() {
+async fn test_run_multiple_committees_one_leader() {
     // Initialize test environment
     init_test_environment("multiple committees with staggered peering test");
 
