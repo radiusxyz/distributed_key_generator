@@ -7,10 +7,11 @@ use radius_sdk::{
     signature::Signature,
 };
 use serde::{Deserialize, Serialize};
+use skde::key_generation::generate_partial_key;
 use tracing::info;
 
 use crate::{
-    rpc::prelude::*,
+    rpc::{cluster::request_submit_partial_key::submit_partial_key_to_leader, prelude::*},
     utils::{get_current_timestamp, log_prefix_role_and_address},
 };
 
@@ -37,14 +38,30 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let prefix = log_prefix_role_and_address(&context.config());
+        let mut session_id = self.payload.session_id;
         // let sender_address = verify_signature(&self.signature, &self.payload, &_context)?;
 
         let decryption_key = DecryptionKey::new(self.payload.decryption_key.clone());
-        decryption_key.put(self.payload.session_id)?;
+        decryption_key.put(session_id)?;
 
         info!(
-            "{} Complete put decryption key - key_id: {:?} / decryption key: {:?}",
-            prefix, self.payload.session_id, decryption_key
+            "{} Completed putting aggregated key - current_session_id: {:?}",
+            prefix, self.payload.session_id,
+        );
+
+        // TODO: Change it to Random Delay? for not deterministic behavior
+        // sleep(Duration::from_millis(1000)).await;
+
+        let skde_params = context.skde_params();
+        let (_, partial_key) = generate_partial_key(skde_params).unwrap();
+        session_id.increase_session_id();
+
+        // session_id is increased by 1
+        submit_partial_key_to_leader(session_id, partial_key, context.clone()).await?;
+
+        info!(
+            "{} Completed submitting partial key - session_id: {:?}",
+            prefix, self.payload.session_id
         );
 
         Ok(())
@@ -60,15 +77,13 @@ pub fn broadcast_decryption_key_ack(
 ) -> Result<(), Error> {
     let prefix = log_prefix_role_and_address(&context.config());
     let ack_solve_timestamp = get_current_timestamp();
+    let all_key_generator_rpc_url_list =
+        KeyGeneratorList::get()?.get_all_key_generator_rpc_url_list();
+
     info!(
-        "{} Broadcast decryption key acknowledgment - session_id: {:?}, timestamps: {} / {}",
-        prefix, session_id, solve_timestamp, ack_solve_timestamp
+        "{} Broadcast decryption key - session_id: {:?}, all_dkg_list: {:?}",
+        prefix, session_id, all_key_generator_rpc_url_list
     );
-
-    let other_key_generator_rpc_url_list =
-        KeyGeneratorList::get()?.get_other_key_generator_rpc_url_list(context.config().address());
-
-    let ack_solve_timestamp = get_current_timestamp();
 
     let payload = SyncDecryptionKeyPayload {
         session_id,
@@ -89,7 +104,7 @@ pub fn broadcast_decryption_key_ack(
         if let Ok(rpc_client) = RpcClient::new() {
             let _ = rpc_client
                 .multicast(
-                    other_key_generator_rpc_url_list,
+                    all_key_generator_rpc_url_list,
                     SyncDecryptionKey::method(),
                     &parameter,
                     Id::Null,

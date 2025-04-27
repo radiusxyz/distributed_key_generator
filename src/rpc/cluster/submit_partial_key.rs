@@ -10,7 +10,7 @@ use crate::{
     error::KeyGenerationError,
     rpc::{cluster::broadcast_partial_key_ack, prelude::*},
     types::SessionId,
-    utils::{log_prefix_role_and_address, verify_signature},
+    utils::{log_prefix_with_session_id, verify_signature, AddressExt},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -35,7 +35,7 @@ impl RpcParameter<AppState> for SubmitPartialKey {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        let prefix = log_prefix_role_and_address(&context.config());
+        let prefix = log_prefix_with_session_id(&context.config(), &self.payload.session_id);
 
         // TODO: Add to verify actual signature
         let _ = verify_signature(&self.signature, &self.payload)?;
@@ -45,7 +45,7 @@ impl RpcParameter<AppState> for SubmitPartialKey {
             "{} Received partial key - session_id: {:?}, sender: {}, timestamp: {}",
             prefix,
             self.payload.session_id,
-            sender_address.as_hex_string(),
+            sender_address.to_short(),
             self.payload.submit_timestamp
         );
 
@@ -61,13 +61,14 @@ impl RpcParameter<AppState> for SubmitPartialKey {
 
         // if the sender is incluided in
         PartialKeyAddressList::apply(self.payload.session_id, |list| {
+            // TODO: Should fix RACE condition
+            info!(" ! Inserted partial key into list: {:?} ", list);
             list.insert(self.payload.sender.clone());
         })?;
 
         let partial_key = PartialKey::new(self.payload.partial_key.clone());
         partial_key.put(self.payload.session_id, &self.payload.sender)?;
 
-        // TODO: handle appropriate paratial key index, (session_id, key_index in the session)
         let _ = broadcast_partial_key_ack(
             sender_address,
             self.payload.session_id,

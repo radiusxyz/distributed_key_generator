@@ -1,15 +1,31 @@
-use std::collections::{hash_set::Iter, HashSet};
+use std::{
+    collections::{hash_set::Iter, HashSet},
+    hash::{Hash, Hasher},
+};
 
 use radius_sdk::{kvstore::Model, signature::Address};
 
 use crate::{rpc::cluster::KeyGeneratorRpcInfo, types::prelude::*};
 
-#[derive(Clone, Hash, Eq, PartialEq, Debug, Deserialize, Serialize)]
-
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct KeyGenerator {
     address: Address,
     cluster_rpc_url: String,
     external_rpc_url: String,
+}
+
+impl PartialEq for KeyGenerator {
+    fn eq(&self, other: &Self) -> bool {
+        self.address == other.address
+    }
+}
+
+impl Eq for KeyGenerator {}
+
+impl Hash for KeyGenerator {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.address.hash(state);
+    }
 }
 
 impl KeyGenerator {

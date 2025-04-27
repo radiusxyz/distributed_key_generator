@@ -1,5 +1,5 @@
 use radius_sdk::signature::Address;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::rpc::{cluster::SyncKeyGenerator, prelude::*};
 
@@ -24,6 +24,20 @@ impl RpcParameter<AppState> for AddKeyGenerator {
     }
 
     async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
+        let key_generator_list = KeyGeneratorList::get()?;
+        if key_generator_list
+            .iter()
+            .any(|kg| kg.address() == &self.message.address)
+        {
+            warn!(
+                "Duplicate key generator registration - address: {:?} / cluster_rpc_url: {:?} / external_rpc_url: {:?}",
+                self.message.address.as_hex_string(),
+                self.message.cluster_rpc_url,
+                self.message.external_rpc_url
+            );
+            return Ok(());
+        }
+
         info!(
             "Add distributed key generation - address: {:?} / cluster_rpc_url: {:?} / external_rpc_url: {:?}",
             self.message.address.as_hex_string(),
@@ -36,11 +50,6 @@ impl RpcParameter<AppState> for AddKeyGenerator {
             self.message.cluster_rpc_url.clone(),
             self.message.external_rpc_url.clone(),
         );
-
-        let key_generator_address_list = KeyGeneratorList::get()?;
-        if key_generator_address_list.contains(&key_generator) {
-            return Ok(());
-        }
 
         KeyGeneratorList::apply(|key_generator_list| {
             key_generator_list.insert(key_generator);

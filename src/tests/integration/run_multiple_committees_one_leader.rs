@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[tokio::test]
-async fn test_integration_run_multiple_committees_one_leader() {
+async fn test_run_multiple_committees_one_leader() {
     // Initialize test environment
     init_test_environment("multiple committees with staggered peering test");
 
@@ -121,6 +121,6 @@ async fn test_integration_run_multiple_committees_one_leader() {
     sleep(Duration::from_secs(10)).await;
 
     // 5. Cleanup all processes
-    println!("Test complete. Cleaning up processes...");
+    println!("Test completed. Cleaning up processes...");
     cleanup_existing_processes();
 }

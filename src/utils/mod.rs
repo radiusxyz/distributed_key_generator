@@ -78,8 +78,8 @@ pub fn perform_randomized_aggregation(
         .unwrap();
 
     info!(
-        "{} Completed to generate encryption key - session id: {:?} / encryption key: {:?}",
-        prefix, session_id, skde_aggregated_key.u
+        "{} Completed to generate encryption key - session id: {:?}",
+        prefix, session_id,
     );
     skde_aggregated_key
 }

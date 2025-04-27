@@ -6,16 +6,20 @@ use serde::{Deserialize, Serialize};
 use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::info;
 
-use crate::{error::KeyGenerationError, rpc::prelude::*, utils::log_prefix_role_and_address};
+use crate::{
+    error::KeyGenerationError,
+    rpc::prelude::*,
+    utils::{log_prefix_role_and_address, perform_randomized_aggregation},
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SyncPartialKeys {
+pub struct SyncFinalizedPartialKeys {
     pub signature: Signature,
-    pub payload: SyncPartialKeysPayload,
+    pub payload: SyncFinalizedPartialKeysPayload,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SyncPartialKeysPayload {
+pub struct SyncFinalizedPartialKeysPayload {
     pub partial_key_senders: Vec<Address>,
     pub partial_keys: Vec<SkdePartialKey>,
     pub session_id: SessionId,
@@ -24,7 +28,7 @@ pub struct SyncPartialKeysPayload {
     pub ack_timestamp: u64,
 }
 
-impl RpcParameter<AppState> for SyncPartialKeys {
+impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
     type Response = ();
 
     fn method() -> &'static str {
@@ -35,28 +39,19 @@ impl RpcParameter<AppState> for SyncPartialKeys {
         let prefix = log_prefix_role_and_address(&context.config());
         // let sender_address = verify_signature(&self.signature, &self.payload)?;
 
-        let SyncPartialKeysPayload {
+        let SyncFinalizedPartialKeysPayload {
             partial_key_senders,
             partial_keys,
             session_id,
-            submit_timestamps,
             ack_timestamp,
             signatures,
+            ..
         } = &self.payload;
 
         info!(
-            "{} Received partial keys ACK - senders:{:?}, session_id: {:?
+            "{} Received finalized partial keys ACK - senders:{:?}, session_id: {:?
             }, timestamp: {}",
             prefix, partial_key_senders, session_id, ack_timestamp
-        );
-
-        info!(
-            "{} Received partial keys ACK - partial_keys_senders:{:?}, partial_keys:{:?}, timestamps:{:?}, ack_timestamp: {}",
-            prefix,
-            partial_key_senders.len(),
-            partial_keys.len(),
-            submit_timestamps.len(),
-            ack_timestamp
         );
 
         // TODO: timestampes also should be collected assigned to each partial key
@@ -66,6 +61,11 @@ impl RpcParameter<AppState> for SyncPartialKeys {
                 "Mismatched vector lengths in partial key ACK payload".into(),
             )));
         }
+
+        // Put aggregated key for a Cluster member
+        let partial_keys =
+            PartialKeyAddressList::get(*session_id)?.get_partial_key_list(*session_id)?;
+        perform_randomized_aggregation(&context, *session_id, &partial_keys);
 
         // TODO: Signature verification
         // for (sig, sender) in signatures.iter().zip(partial_key_senders) {

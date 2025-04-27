@@ -46,21 +46,12 @@ impl RpcParameter<AppState> for SubmitDecryptionKey {
             prefix, self.payload.session_id, self.payload.timestamp
         );
 
-        // Store decryption key
-        let decryption_key = DecryptionKey::new(self.payload.decryption_key.clone());
-        decryption_key.put(self.payload.session_id)?;
-
         broadcast_decryption_key_ack(
             self.payload.session_id,
             self.payload.decryption_key.clone(),
             self.payload.timestamp,
             &context,
         )?;
-
-        info!(
-            "{} Complete to get decryption key - key_id: {:?} / decryption key: {:?}",
-            prefix, self.payload.session_id, decryption_key
-        );
 
         Ok(DecryptionKeyResponse { success: true })
     }

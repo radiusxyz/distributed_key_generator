@@ -89,8 +89,11 @@ pub fn broadcast_partial_key_ack(
         KeyGeneratorList::get()?.get_other_key_generator_rpc_url_list(&context.config().address());
 
     info!(
-        "{} Broadcasting partial key acknowledgment - session_id: {:?}, index: {}, timestamp: {}",
-        prefix, session_id, index, submit_timestamp
+        "{} Broadcasting partial key acknowledgment - sender: {}, session_id: {:?}, timestamp: {}",
+        prefix,
+        sender_address.to_short(),
+        session_id,
+        submit_timestamp
     );
 
     let ack_timestamp = get_current_timestamp();
