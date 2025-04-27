@@ -46,7 +46,8 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
 
         info!(
             "{} Completed putting aggregated key - current_session_id: {:?}",
-            prefix, self.payload.session_id,
+            prefix,
+            self.payload.session_id.as_u64(),
         );
 
         // TODO: Change it to Random Delay? for not deterministic behavior
@@ -61,7 +62,8 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
 
         info!(
             "{} Completed submitting partial key - session_id: {:?}",
-            prefix, self.payload.session_id
+            prefix,
+            self.payload.session_id.as_u64()
         );
 
         Ok(())
