@@ -16,7 +16,10 @@ use crate::{
     },
     state::AppState,
     types::*,
-    utils::{signature::create_signature, log::{log_prefix_role_and_address, log_prefix_with_session_id}},
+    utils::{
+        log::{log_prefix_role_and_address, log_prefix_with_session_id},
+        signature::create_signature,
+    },
 };
 pub const THRESHOLD: usize = 1;
 
@@ -167,7 +170,7 @@ pub async fn broadcast_finalized_partial_keys(
     let partial_keys = list.get_partial_key_list(session_id).unwrap();
     let partial_senders = list.to_vec();
 
-    // TODO: Add to make actual signature
+    // TODO: Add to make actual signature from storage
     // TODO: Timestampes, signatures, etc. should be collected assigned to each partial key
     let signatures = partial_keys
         .iter()
@@ -182,6 +185,7 @@ pub async fn broadcast_finalized_partial_keys(
     let submit_timestamps = vec![get_current_timestamp(); partial_keys.len()];
 
     let payload = cluster::SyncFinalizedPartialKeysPayload {
+        sender: context.config().address().clone(),
         partial_key_senders: partial_senders,
         partial_keys,
         session_id,

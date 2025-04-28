@@ -4,15 +4,18 @@ use radius_sdk::{
         client::{Id, RpcClient},
         server::{RpcError, RpcParameter},
     },
-    signature::Signature,
+    signature::{Address, Signature},
 };
 use serde::{Deserialize, Serialize};
 use skde::key_generation::generate_partial_key;
 use tracing::info;
 
 use crate::{
+    error::KeyGenerationError,
     rpc::{cluster::request_submit_partial_key::submit_partial_key_to_leader, prelude::*},
-    utils::{time::get_current_timestamp, log::log_prefix_role_and_address},
+    utils::{
+        log::log_prefix_role_and_address, signature::verify_signature, time::get_current_timestamp,
+    },
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -23,6 +26,7 @@ pub struct SyncDecryptionKey {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncDecryptionKeyPayload {
+    pub sender: Address,
     pub decryption_key: String,
     pub session_id: SessionId,
     pub solve_timestamp: u64,
@@ -38,12 +42,17 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let sender_address = verify_signature(&self.signature, &self.payload)?;
+        if &sender_address != &self.payload.sender {
+            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+                "Signature does not match sender address".into(),
+            )));
+        }
+
         let prefix = log_prefix_role_and_address(&context.config());
         let mut session_id = self.payload.session_id;
-        // let sender_address = verify_signature(&self.signature, &self.payload, &_context)?;
 
         // TODO: Before storing the decryption key,
-        // - Verify the signature on the decryption key payload
         // - Retrieve the previously stored encryption key for the session
         // - Verify that the decryption key is correctly derived from the encryption key
         // Only after successful verification, store the decryption key with put.
@@ -94,6 +103,7 @@ pub fn broadcast_decryption_key_ack(
     );
 
     let payload = SyncDecryptionKeyPayload {
+        sender: context.config().address().clone(),
         session_id,
         decryption_key,
         solve_timestamp,

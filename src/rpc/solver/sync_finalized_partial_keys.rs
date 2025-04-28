@@ -14,7 +14,10 @@ use crate::{
     get_current_timestamp,
     rpc::prelude::*,
     utils::{
-        key::{calculate_decryption_key,perform_randomized_aggregation}, signature::{create_signature, verify_signature}, log::log_prefix_role_and_address,}
+        key::{calculate_decryption_key, perform_randomized_aggregation},
+        log::log_prefix_role_and_address,
+        signature::{create_signature, verify_signature},
+    },
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -27,6 +30,7 @@ pub struct PartialKeyPayload {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncFinalizedPartialKeys {
+    pub sender: Address,
     pub signature: Signature,
     pub payload: SyncFinalizedPartialKeysPayload,
 }
@@ -49,8 +53,14 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let sender_address = verify_signature(&self.signature, &self.payload)?;
+        if &sender_address != &self.sender {
+            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+                "Signature does not match sender address".into(),
+            )));
+        }
+
         let prefix = log_prefix_role_and_address(&context.config());
-        // let sender_address = verify_signature(&self.signature, &self.payload)?;
 
         let payload = self.payload.clone();
 
@@ -67,16 +77,16 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
                 "Mismatched vector lengths in partial key ACK payload".into(),
             )));
         }
-        // TODO: Signature verification
-        // for (sig, sender) in signatures.iter().zip(partial_key_senders) {
-        //     let signer = verify_signature(sig, &self.payload)?;
 
-        //     if &signer != sender {
-        //         return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-        //             "Signature does not match sender".into(),
-        //         )));
-        //     }
-        // }
+        for (sig, sender) in payload.signatures.iter().zip(payload.partial_key_senders) {
+            let signer = verify_signature(sig, &self.payload)?;
+
+            if &signer != &sender {
+                return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+                    "Signature does not match sender".into(),
+                )));
+            }
+        }
         PartialKeyAddressList::initialize(payload.session_id)?;
 
         for (_i, (((sender, key), timestamp), sig)) in self

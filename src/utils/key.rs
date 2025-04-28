@@ -9,7 +9,10 @@ use skde::{
 };
 use tracing::info;
 
-use crate::{error::KeyGenerationError, utils::log::log_prefix_role_and_address, AggregatedKey, AppState, DecryptionKey, SessionId};
+use crate::{
+    error::KeyGenerationError, utils::log::log_prefix_role_and_address, AggregatedKey, AppState,
+    DecryptionKey, SessionId,
+};
 
 // TODO: A more robust mechanism to handle delayed or missing solve operations should be designed.
 pub fn perform_randomized_aggregation(

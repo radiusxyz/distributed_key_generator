@@ -9,7 +9,10 @@ use tracing::info;
 use crate::{
     error::KeyGenerationError,
     rpc::prelude::*,
-    utils::{log::log_prefix_role_and_address, key::perform_randomized_aggregation},
+    utils::{
+        key::perform_randomized_aggregation, log::log_prefix_role_and_address,
+        signature::verify_signature,
+    },
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -20,6 +23,7 @@ pub struct SyncFinalizedPartialKeys {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncFinalizedPartialKeysPayload {
+    pub sender: Address,
     pub partial_key_senders: Vec<Address>,
     pub partial_keys: Vec<SkdePartialKey>,
     pub session_id: SessionId,
@@ -36,6 +40,13 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let sender_address = verify_signature(&self.signature, &self.payload)?;
+        if &sender_address != &self.payload.sender {
+            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+                "Signature does not match sender address".into(),
+            )));
+        }
+
         let prefix = log_prefix_role_and_address(&context.config());
         // let sender_address = verify_signature(&self.signature, &self.payload)?;
 
@@ -62,23 +73,18 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
             )));
         }
 
-        // Put aggregated key for a Cluster member
-        let partial_keys =
-            PartialKeyAddressList::get(*session_id)?.get_partial_key_list(*session_id)?;
+        for (sig, sender) in signatures.iter().zip(partial_key_senders) {
+            let signer = verify_signature(sig, &self.payload)?;
+
+            if &signer != sender {
+                return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+                    "Signature does not match sender".into(),
+                )));
+            }
+        }
+
+        // TODO: Store this encryption key if signatures are valid and use for decryption key verification
         perform_randomized_aggregation(&context, *session_id, &partial_keys);
-
-        // TODO: Signature verification
-        // for (sig, sender) in signatures.iter().zip(partial_key_senders) {
-        //     let signer = verify_signature(sig, &self.payload)?;
-
-        //     if &signer != sender {
-        //         return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-        //             "Signature does not match sender".into(),
-        //         )));
-        //     }
-        // }
-
-        // TODO: Calculate and store encryption key if signatures are valid
 
         Ok(())
     }

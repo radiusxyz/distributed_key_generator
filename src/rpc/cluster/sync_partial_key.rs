@@ -11,8 +11,13 @@ use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::info;
 
 use crate::{
+    error::KeyGenerationError,
     rpc::prelude::*,
-    utils::{signature::create_signature, time::get_current_timestamp, log::{log_prefix_role_and_address, AddressExt}},
+    utils::{
+        log::{log_prefix_role_and_address, AddressExt},
+        signature::{create_signature, verify_signature},
+        time::get_current_timestamp,
+    },
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -23,6 +28,7 @@ pub struct SyncPartialKey {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncPartialKeyPayload {
+    pub sender: Address,
     pub partial_key_sender: Address,
     pub partial_key: SkdePartialKey,
     pub index: usize, // TODO: Remove this field
@@ -39,8 +45,14 @@ impl RpcParameter<AppState> for SyncPartialKey {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let sender_address = verify_signature(&self.signature, &self.payload)?;
+        if &sender_address != &self.payload.sender {
+            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+                "Signature does not match sender address".into(),
+            )));
+        }
+
         let prefix = log_prefix_role_and_address(&context.config());
-        // let sender_address = verify_signature(&self.signature, &self.payload)?;
 
         info!(
             "{} Received partial key ACK - sender:{:?}, session_id: {:?
@@ -99,6 +111,7 @@ pub fn broadcast_partial_key_ack(
     let ack_timestamp = get_current_timestamp();
 
     let payload = SyncPartialKeyPayload {
+        sender: context.config().address().clone(),
         partial_key_sender: sender_address,
         session_id,
         partial_key,

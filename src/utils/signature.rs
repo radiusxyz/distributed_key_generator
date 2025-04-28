@@ -1,25 +1,21 @@
+use ethers::{types::Signature as EthersSignature, utils::keccak256};
+use radius_sdk::signature::{Address, Signature, SignatureError};
 use serde::Serialize;
+
 use crate::AppState;
 
-use radius_sdk::
-    signature::{Address, Signature, SignatureError}
-;
-use ethers::types::Signature as EthersSignature;
-use ethers::utils::keccak256;
-
-pub fn create_signature<T: Serialize>(context: &AppState, message: &T) -> Result<Signature, SignatureError> {
-    context
-        .config()
-        .signer()
-        .sign_message(message)
+pub fn create_signature<T: Serialize>(
+    context: &AppState,
+    message: &T,
+) -> Result<Signature, SignatureError> {
+    context.config().signer().sign_message(message)
 }
 
 pub fn verify_signature<T: Serialize>(
     signature: &Signature,
     message: &T,
 ) -> Result<Address, SignatureError> {
-    let message_bytes = bincode::serialize(message)
-        .map_err(SignatureError::SerializeMessage)?;
+    let message_bytes = bincode::serialize(message).map_err(SignatureError::SerializeMessage)?;
 
     let sig_bytes = signature.as_bytes();
     if sig_bytes.len() != 65 {
@@ -41,9 +37,9 @@ pub fn verify_signature<T: Serialize>(
         .map_err(|_| SignatureError::UnsupportedChainType("Signature parse failed".to_string()))?;
 
     // Recover signer address
-    let recovered_pubkey = ethers_signature
-        .recover(message_hash)
-        .map_err(|_| SignatureError::UnsupportedChainType("Signature recover failed".to_string()))?;
+    let recovered_pubkey = ethers_signature.recover(message_hash).map_err(|_| {
+        SignatureError::UnsupportedChainType("Signature recover failed".to_string())
+    })?;
 
     Ok(Address::from(recovered_pubkey.as_bytes().to_vec()))
 }

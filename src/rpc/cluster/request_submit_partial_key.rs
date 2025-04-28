@@ -9,7 +9,9 @@ use tracing::info;
 use super::{PartialKeyPayload, SubmitPartialKey};
 use crate::{
     rpc::prelude::*,
-    utils::{signature::create_signature, time::get_current_timestamp, log::log_prefix_with_session_id},
+    utils::{
+        log::log_prefix_with_session_id, signature::create_signature, time::get_current_timestamp,
+    },
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

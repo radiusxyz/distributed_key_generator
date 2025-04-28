@@ -8,7 +8,8 @@ use std::{
 
 use bincode::serialize as serialize_to_bincode;
 use radius_sdk::{
-    json_rpc::client::{Id, RpcClient}, signature::{Address, ChainType}
+    json_rpc::client::{Id, RpcClient},
+    signature::{Address, ChainType},
 };
 use skde::{
     delay_encryption::SkdeParams,
@@ -20,7 +21,11 @@ use tracing::{info, Level};
 use tracing_subscriber::fmt;
 
 use crate::{
-    config::Role, rpc::cluster::{GetKeyGeneratorList, GetSkdeParams, GetSkdeParamsResponse, PartialKeyPayload}, types::{Config, ConfigOption}, utils::{signature::create_signature, time::get_current_timestamp}, AppState, SessionId
+    config::Role,
+    rpc::cluster::{GetKeyGeneratorList, GetSkdeParams, GetSkdeParamsResponse, PartialKeyPayload},
+    types::{Config, ConfigOption},
+    utils::{signature::create_signature, time::get_current_timestamp},
+    AppState, SessionId,
 };
 
 const TEST_PRIVATE_KEYS: [&str; 10] = [

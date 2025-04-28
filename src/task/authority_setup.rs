@@ -33,7 +33,10 @@ pub fn run_setup_skde_params(path: &ConfigPath) {
     let signing_key_hex = match fs::read_to_string(&signing_key_path) {
         Ok(key) => key.trim().to_string(),
         Err(e) => {
-            warn!("Failed to read signing key from {:?}: {}", signing_key_path, e);
+            warn!(
+                "Failed to read signing key from {:?}: {}",
+                signing_key_path, e
+            );
             return;
         }
     };

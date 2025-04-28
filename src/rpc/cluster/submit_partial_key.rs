@@ -10,7 +10,10 @@ use crate::{
     error::KeyGenerationError,
     rpc::{cluster::broadcast_partial_key_ack, prelude::*},
     types::SessionId,
-    utils::{log::{log_prefix_with_session_id, AddressExt}, signature::verify_signature},
+    utils::{
+        log::{log_prefix_with_session_id, AddressExt},
+        signature::verify_signature,
+    },
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -35,11 +38,14 @@ impl RpcParameter<AppState> for SubmitPartialKey {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        let prefix = log_prefix_with_session_id(&context.config(), &self.payload.session_id);
+        let sender_address = verify_signature(&self.signature, &self.payload)?;
+        if &sender_address != &self.payload.sender {
+            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+                "Signature does not match sender address".into(),
+            )));
+        }
 
-        // TODO: Add to verify actual signature
-        let _ = verify_signature(&self.signature, &self.payload)?;
-        let sender_address = self.payload.sender.clone();
+        let prefix = log_prefix_with_session_id(&context.config(), &self.payload.session_id);
 
         info!(
             "{} Received partial key - session_id: {:?}, sender: {}, timestamp: {}",

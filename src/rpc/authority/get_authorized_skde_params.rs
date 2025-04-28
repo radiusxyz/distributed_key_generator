@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use skde::delay_encryption::SkdeParams;
 
-use crate::{rpc::prelude::*, task::authority_setup::SignedSkdeParams, utils::signature::create_signature};
+use crate::{
+    rpc::prelude::*, task::authority_setup::SignedSkdeParams, utils::signature::create_signature,
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetAuthorizedSkdeParams;

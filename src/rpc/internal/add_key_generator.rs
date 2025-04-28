@@ -1,11 +1,15 @@
-use radius_sdk::signature::Address;
+use radius_sdk::signature::{Address, Signature};
 use tracing::{info, warn};
 
-use crate::rpc::{cluster::SyncKeyGenerator, prelude::*};
+use crate::{
+    error::KeyGenerationError,
+    rpc::{cluster::SyncKeyGenerator, prelude::*},
+    utils::signature::verify_signature,
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AddKeyGenerator {
-    // signature: Signature, // TODO: Uncomment this code
+    signature: Signature,
     message: AddKeyGeneratorMessage,
 }
 
@@ -26,6 +30,13 @@ impl RpcParameter<AppState> for AddKeyGenerator {
     }
 
     async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
+        let signer = verify_signature(&self.signature, &self.message)?;
+        if &signer != &self.message.address {
+            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+                "Signature does not match sender address".into(),
+            )));
+        }
+
         let key_generator_list = KeyGeneratorList::get()?;
         if key_generator_list
             .iter()

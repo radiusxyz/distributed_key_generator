@@ -1,4 +1,6 @@
-use crate::{rpc::prelude::*, task::authority_setup::SignedSkdeParams, utils::signature::create_signature};
+use crate::{
+    rpc::prelude::*, task::authority_setup::SignedSkdeParams, utils::signature::create_signature,
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetSkdeParams;
