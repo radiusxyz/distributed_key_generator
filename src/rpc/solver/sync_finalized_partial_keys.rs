@@ -1,9 +1,8 @@
 use radius_sdk::{
     json_rpc::server::{RpcError, RpcParameter},
-    signature::{Address, Signature},
+    signature::Signature,
 };
 use serde::{Deserialize, Serialize};
-use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::{error, info, warn};
 
 use super::submit_decryption_key::{
@@ -12,7 +11,10 @@ use super::submit_decryption_key::{
 use crate::{
     error::KeyGenerationError,
     get_current_timestamp,
-    rpc::prelude::*,
+    rpc::{
+        common::{PartialKeyPayload, SyncFinalizedPartialKeysPayload},
+        prelude::*,
+    },
     utils::{
         key::{calculate_decryption_key, perform_randomized_aggregation},
         log::log_prefix_role_and_address,
@@ -21,31 +23,12 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct PartialKeyPayload {
-    pub sender: Address,
-    pub partial_key: SkdePartialKey,
-    pub submit_timestamp: u64,
-    pub session_id: SessionId,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SyncFinalizedPartialKeys {
+pub struct SolverSyncFinalizedPartialKeys {
     pub signature: Signature,
     pub payload: SyncFinalizedPartialKeysPayload,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SyncFinalizedPartialKeysPayload {
-    pub sender: Address,
-    pub partial_key_senders: Vec<Address>,
-    pub partial_keys: Vec<SkdePartialKey>,
-    pub session_id: SessionId,
-    pub submit_timestamps: Vec<u64>,
-    pub signatures: Vec<Signature>,
-    pub ack_timestamp: u64,
-}
-
-impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
+impl RpcParameter<AppState> for SolverSyncFinalizedPartialKeys {
     type Response = ();
 
     fn method() -> &'static str {

@@ -1,14 +1,13 @@
 use radius_sdk::{
     json_rpc::server::{RpcError, RpcParameter},
-    signature::{Address, Signature},
+    signature::Signature,
 };
 use serde::{Deserialize, Serialize};
-use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::info;
 
 use crate::{
     error::KeyGenerationError,
-    rpc::prelude::*,
+    rpc::{common::SyncFinalizedPartialKeysPayload, prelude::*},
     utils::{
         key::perform_randomized_aggregation, log::log_prefix_role_and_address,
         signature::verify_signature,
@@ -16,23 +15,12 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SyncFinalizedPartialKeys {
+pub struct ClusterSyncFinalizedPartialKeys {
     pub signature: Signature,
     pub payload: SyncFinalizedPartialKeysPayload,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SyncFinalizedPartialKeysPayload {
-    pub sender: Address,
-    pub partial_key_senders: Vec<Address>,
-    pub partial_keys: Vec<SkdePartialKey>,
-    pub session_id: SessionId,
-    pub submit_timestamps: Vec<u64>,
-    pub signatures: Vec<Signature>,
-    pub ack_timestamp: u64,
-}
-
-impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
+impl RpcParameter<AppState> for ClusterSyncFinalizedPartialKeys {
     type Response = ();
 
     fn method() -> &'static str {

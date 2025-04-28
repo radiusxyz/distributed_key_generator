@@ -197,7 +197,7 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
         .register_rpc_method::<cluster::GetKeyGeneratorList>()?
         .register_rpc_method::<cluster::SyncKeyGenerator>()?
         .register_rpc_method::<cluster::SyncPartialKey>()?
-        .register_rpc_method::<cluster::SyncFinalizedPartialKeys>()?
+        .register_rpc_method::<cluster::ClusterSyncFinalizedPartialKeys>()?
         .register_rpc_method::<cluster::SyncDecryptionKey>()?
         .register_rpc_method::<cluster::SubmitPartialKey>()?
         .register_rpc_method::<cluster::RequestSubmitPartialKey>()?
@@ -278,7 +278,7 @@ async fn initialize_solve_rpc_server(app_state: &AppState) -> Result<JoinHandle<
     let rpc_server = RpcServer::new(app_state.clone())
         .register_rpc_method::<solver::GetSkdeParams>()?
         .register_rpc_method::<solver::SubmitDecryptionKey>()?
-        .register_rpc_method::<solver::SyncFinalizedPartialKeys>()?
+        .register_rpc_method::<solver::SolverSyncFinalizedPartialKeys>()?
         .init(solver_rpc_url.clone())
         .await
         .map_err(Error::RpcServerError)?;

@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 use skde::key_generation::{generate_partial_key, PartialKey as SkdePartialKey};
 use tracing::info;
 
-use super::{PartialKeyPayload, SubmitPartialKey};
+use super::SubmitPartialKey;
 use crate::{
-    rpc::prelude::*,
+    rpc::{common::PartialKeyPayload, prelude::*},
     utils::{
         log::log_prefix_with_session_id, signature::create_signature, time::get_current_timestamp,
     },

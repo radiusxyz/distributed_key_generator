@@ -1,15 +1,13 @@
 use radius_sdk::{
     json_rpc::server::{RpcError, RpcParameter},
-    signature::{Address, Signature},
+    signature::Signature,
 };
 use serde::{Deserialize, Serialize};
-use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::info;
 
 use crate::{
     error::KeyGenerationError,
-    rpc::{cluster::broadcast_partial_key_ack, prelude::*},
-    types::SessionId,
+    rpc::{cluster::broadcast_partial_key_ack, common::PartialKeyPayload, prelude::*},
     utils::{
         log::{log_prefix_with_session_id, AddressExt},
         signature::verify_signature,
@@ -20,14 +18,6 @@ use crate::{
 pub struct SubmitPartialKey {
     pub signature: Signature,
     pub payload: PartialKeyPayload,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct PartialKeyPayload {
-    pub sender: Address,
-    pub partial_key: SkdePartialKey,
-    pub submit_timestamp: u64,
-    pub session_id: SessionId,
 }
 
 impl RpcParameter<AppState> for SubmitPartialKey {

@@ -10,8 +10,9 @@ use tracing::{debug, error, info};
 use crate::{
     get_current_timestamp,
     rpc::{
-        cluster::{self, PartialKeyPayload, RequestSubmitPartialKey},
-        solver,
+        cluster::{ClusterSyncFinalizedPartialKeys, RequestSubmitPartialKey},
+        common::{PartialKeyPayload, SyncFinalizedPartialKeysPayload},
+        solver::SolverSyncFinalizedPartialKeys,
     },
     state::AppState,
     types::*,
@@ -170,14 +171,6 @@ pub async fn broadcast_finalized_partial_keys(
 
     // TODO: Add to make actual signature from storage
     // TODO: Timestampes, signatures, etc. should be collected assigned to each partial key
-    // let signatures = partial_keys
-    //     .iter()
-    //     .zip(&partial_senders)
-    //     .map(|(key, sender)| {
-    //         let message = (sender, key, session_id);
-    //         create_signature(context.config().signer(), &message).unwrap()
-    //     })
-    //     .collect();
 
     let submit_timestamps = vec![get_current_timestamp(); partial_keys.len()];
 
@@ -195,7 +188,7 @@ pub async fn broadcast_finalized_partial_keys(
             create_signature(context.config().signer(), &message).unwrap()
         })
         .collect();
-    let payload = cluster::SyncFinalizedPartialKeysPayload {
+    let payload = SyncFinalizedPartialKeysPayload {
         sender: context.config().address().clone(),
         partial_key_senders: partial_senders.clone(),
         partial_keys: partial_keys.clone(),
@@ -206,7 +199,10 @@ pub async fn broadcast_finalized_partial_keys(
     };
 
     let signature = create_signature(context.config().signer(), &payload).unwrap();
-    let message = cluster::SyncFinalizedPartialKeys { signature, payload };
+    let message = ClusterSyncFinalizedPartialKeys {
+        signature: signature.clone(),
+        payload: payload.clone(),
+    };
 
     let peers = KeyGeneratorList::get()?.get_all_key_generator_rpc_url_list();
     let rpc_client = RpcClient::new()?;
@@ -215,7 +211,7 @@ pub async fn broadcast_finalized_partial_keys(
     if let Err(err) = rpc_client
         .multicast(
             peers,
-            cluster::SyncFinalizedPartialKeys::method(),
+            ClusterSyncFinalizedPartialKeys::method(),
             &message,
             Id::Null,
         )
@@ -229,25 +225,14 @@ pub async fn broadcast_finalized_partial_keys(
         );
     }
 
-    let payload = solver::SyncFinalizedPartialKeysPayload {
-        sender: context.config().address().clone(),
-        partial_key_senders: partial_senders,
-        partial_keys,
-        session_id,
-        submit_timestamps,
-        signatures,
-        ack_timestamp: get_current_timestamp(),
-    };
-
-    let signature = create_signature(context.config().signer(), &payload).unwrap();
-    let message = solver::SyncFinalizedPartialKeys { signature, payload };
+    let message = SolverSyncFinalizedPartialKeys { signature, payload };
 
     let solver_url = context.config().solver_solver_rpc_url().clone().unwrap();
     let rpc_client = RpcClient::new()?;
     let response = rpc_client
         .request::<_, ()>(
             solver_url.clone(),
-            solver::SyncFinalizedPartialKeys::method(),
+            SolverSyncFinalizedPartialKeys::method(),
             &message,
             Id::Null,
         )
