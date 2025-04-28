@@ -23,7 +23,7 @@ impl RpcParameter<AppState> for GetAuthorizedSkdeParams {
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let skde_params = context.skde_params().clone();
 
-        let signature = create_signature(&context.config().signer(), &skde_params).unwrap();
+        let signature = create_signature(context.config().signer(), &skde_params).unwrap();
 
         let signed_skde_params = SignedSkdeParams {
             params: skde_params,

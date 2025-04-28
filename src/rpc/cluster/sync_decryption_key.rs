@@ -43,13 +43,13 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let sender_address = verify_signature(&self.signature, &self.payload)?;
-        if &sender_address != &self.payload.sender {
+        if sender_address != self.payload.sender {
             return Err(RpcError::from(KeyGenerationError::InternalError(
                 "Signature does not match sender address".into(),
             )));
         }
 
-        let prefix = log_prefix_role_and_address(&context.config());
+        let prefix = log_prefix_role_and_address(context.config());
         let mut session_id = self.payload.session_id;
 
         // TODO: Before storing the decryption key,
@@ -92,7 +92,7 @@ pub fn broadcast_decryption_key_ack(
     solve_timestamp: u64,
     context: &AppState,
 ) -> Result<(), Error> {
-    let prefix = log_prefix_role_and_address(&context.config());
+    let prefix = log_prefix_role_and_address(context.config());
     let ack_solve_timestamp = get_current_timestamp();
     let all_key_generator_rpc_url_list =
         KeyGeneratorList::get()?.get_all_key_generator_rpc_url_list();

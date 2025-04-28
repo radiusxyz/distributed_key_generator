@@ -39,13 +39,13 @@ impl RpcParameter<AppState> for SubmitDecryptionKey {
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let sender_address = verify_signature(&self.signature, &self.payload)?;
-        if &sender_address != &self.payload.sender {
+        if sender_address != self.payload.sender {
             return Err(RpcError::from(KeyGenerationError::InternalError(
                 "Signature does not match sender address".into(),
             )));
         }
 
-        let prefix = log_prefix_role_and_address(&context.config());
+        let prefix = log_prefix_role_and_address(context.config());
 
         info!(
             "{} Received decryption key - session_id: {:?}, timestamp: {}",

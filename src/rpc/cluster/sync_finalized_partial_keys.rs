@@ -7,7 +7,10 @@ use tracing::info;
 
 use crate::{
     error::KeyGenerationError,
-    rpc::{common::SyncFinalizedPartialKeysPayload, prelude::*},
+    rpc::{
+        common::{PartialKeyPayload, SyncFinalizedPartialKeysPayload},
+        prelude::*,
+    },
     utils::{
         key::perform_randomized_aggregation, log::log_prefix_role_and_address,
         signature::verify_signature,
@@ -29,14 +32,13 @@ impl RpcParameter<AppState> for ClusterSyncFinalizedPartialKeys {
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let sender_address = verify_signature(&self.signature, &self.payload)?;
-        if &sender_address != &self.payload.sender {
+        if sender_address != self.payload.sender {
             return Err(RpcError::from(KeyGenerationError::InternalError(
                 "Signature does not match sender address".into(),
             )));
         }
 
         let prefix = log_prefix_role_and_address(context.config());
-        // let sender_address = verify_signature(&self.signature, &self.payload)?;
 
         let SyncFinalizedPartialKeysPayload {
             partial_key_senders,
@@ -61,14 +63,38 @@ impl RpcParameter<AppState> for ClusterSyncFinalizedPartialKeys {
             )));
         }
 
-        for (sig, sender) in signatures.iter().zip(partial_key_senders) {
-            let signer = verify_signature(sig, &self.payload)?;
+        for (i, (((sender, key), timestamp), sig)) in self
+            .payload
+            .partial_key_senders
+            .iter()
+            .zip(self.payload.partial_keys.iter())
+            .zip(self.payload.submit_timestamps.iter())
+            .zip(self.payload.signatures.iter())
+            .enumerate()
+        {
+            let signable_message = PartialKeyPayload {
+                sender: sender.clone(),
+                partial_key: key.clone(),
+                submit_timestamp: *timestamp,
+                session_id: self.payload.session_id,
+            };
+
+            let signer = verify_signature(sig, &signable_message)?;
 
             if &signer != sender {
                 return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-                    "Signature does not match partial key sender".into(),
+                    format!(
+                        "[Cluster] Signature mismatch at index {}: expected {:?}, got {:?}",
+                        i, sender, signer
+                    ),
                 )));
             }
+
+            PartialKeyAddressList::apply(self.payload.session_id, |list| {
+                list.insert(sender.clone());
+            })?;
+
+            PartialKey::new(key.clone()).put(self.payload.session_id, sender)?;
         }
 
         // TODO: Store this encryption key if signatures are valid and use for decryption key verification

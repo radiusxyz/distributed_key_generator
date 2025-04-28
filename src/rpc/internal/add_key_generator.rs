@@ -29,7 +29,7 @@ impl RpcParameter<AppState> for AddKeyGenerator {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        let prefix = log_prefix_role_and_address(&context.config());
+        let prefix = log_prefix_role_and_address(context.config());
 
         let key_generator_list = KeyGeneratorList::get()?;
         if key_generator_list
@@ -71,7 +71,7 @@ impl RpcParameter<AppState> for AddKeyGenerator {
 }
 
 pub fn sync_key_generator(context: AppState, add_key_generator: AddKeyGenerator) {
-    let prefix = log_prefix_role_and_address(&context.config());
+    let prefix = log_prefix_role_and_address(context.config());
     let key_generator_rpc_url_list = KeyGeneratorList::get()
         .unwrap()
         .get_all_key_generator_rpc_url_list();

@@ -173,6 +173,7 @@ pub async fn broadcast_finalized_partial_keys(
     // TODO: Timestampes, signatures, etc. should be collected assigned to each partial key
 
     let submit_timestamps = vec![get_current_timestamp(); partial_keys.len()];
+    let ack_timestamp = get_current_timestamp();
 
     let signatures: Vec<radius_sdk::signature::Signature> = partial_keys
         .iter()
@@ -195,7 +196,7 @@ pub async fn broadcast_finalized_partial_keys(
         session_id,
         submit_timestamps: submit_timestamps.clone(),
         signatures: signatures.clone(),
-        ack_timestamp: get_current_timestamp(),
+        ack_timestamp: ack_timestamp,
     };
 
     let signature = create_signature(context.config().signer(), &payload).unwrap();

@@ -28,7 +28,7 @@ impl RpcParameter<AppState> for RequestSubmitPartialKey {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        let prefix = log_prefix_with_session_id(&context.config(), &self.session_id);
+        let prefix = log_prefix_with_session_id(context.config(), &self.session_id);
         let skde_params = context.skde_params();
 
         let (_, partial_key) = generate_partial_key(skde_params).unwrap();

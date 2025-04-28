@@ -30,7 +30,7 @@ impl RpcParameter<AppState> for SubmitPartialKey {
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let sender_address = verify_signature(&self.signature, &self.payload)?;
 
-        if &sender_address != &self.payload.sender {
+        if sender_address != self.payload.sender {
             return Err(RpcError::from(KeyGenerationError::InternalError(
                 "Signature does not match sender address".into(),
             )));
