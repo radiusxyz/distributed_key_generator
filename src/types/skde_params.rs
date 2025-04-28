@@ -14,7 +14,7 @@ use crate::{
         cluster, solver,
     },
     task::authority_setup::SignedSkdeParams,
-    utils::{log_prefix_role_and_address, verify_signature},
+    utils::{log::log_prefix_role_and_address, signature::verify_signature},
 };
 
 async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {

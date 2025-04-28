@@ -7,7 +7,7 @@ use tracing::info;
 
 use crate::{
     rpc::{cluster::broadcast_decryption_key_ack, prelude::*},
-    utils::{log_prefix_role_and_address, verify_signature},
+    utils::{log::log_prefix_role_and_address, signature::verify_signature},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

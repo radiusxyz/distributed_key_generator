@@ -8,7 +8,7 @@ use tracing::info;
 use crate::{
     state::AppState,
     types::{KeyGenerator, KeyGeneratorList},
-    utils::log_prefix_role_and_address,
+    utils::log::log_prefix_role_and_address,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

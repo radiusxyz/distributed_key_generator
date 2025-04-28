@@ -12,7 +12,7 @@ use tracing::info;
 
 use crate::{
     rpc::prelude::*,
-    utils::{create_signature, get_current_timestamp, log_prefix_role_and_address, AddressExt},
+    utils::{signature::create_signature, time::get_current_timestamp, log::{log_prefix_role_and_address, AddressExt}},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -108,7 +108,7 @@ pub fn broadcast_partial_key_ack(
     };
 
     // TODO: Add to make actual signature
-    let signature = create_signature(&serialize_to_bincode(&payload).unwrap());
+    let signature = create_signature(context, &serialize_to_bincode(&payload).unwrap()).unwrap();
 
     let parameter = SyncPartialKey { signature, payload };
 

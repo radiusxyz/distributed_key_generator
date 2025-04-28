@@ -9,7 +9,7 @@ use tracing::info;
 use crate::{
     error::KeyGenerationError,
     rpc::prelude::*,
-    utils::{log_prefix_role_and_address, perform_randomized_aggregation},
+    utils::{log::log_prefix_role_and_address, key::perform_randomized_aggregation},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

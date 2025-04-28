@@ -16,7 +16,7 @@ use crate::{
     },
     state::AppState,
     types::*,
-    utils::{create_signature, log_prefix_role_and_address, log_prefix_with_session_id},
+    utils::{signature::create_signature, log::{log_prefix_role_and_address, log_prefix_with_session_id}},
 };
 pub const THRESHOLD: usize = 1;
 
@@ -175,7 +175,7 @@ pub async fn broadcast_finalized_partial_keys(
         .map(|(key, sender)| {
             let message = (sender, key, session_id);
             let encoded = bincode::serialize(&message).unwrap();
-            create_signature(&encoded)
+            create_signature(context, &encoded).unwrap()
         })
         .collect();
 
@@ -190,7 +190,7 @@ pub async fn broadcast_finalized_partial_keys(
         ack_timestamp: get_current_timestamp(),
     };
 
-    let signature = create_signature(&serialize(&payload)?);
+    let signature = create_signature(context, &serialize(&payload)?).unwrap();
     let message = cluster::SyncFinalizedPartialKeys { signature, payload };
 
     let peers = KeyGeneratorList::get()?.get_all_key_generator_rpc_url_list();

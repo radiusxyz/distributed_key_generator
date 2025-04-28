@@ -1,4 +1,4 @@
-use crate::{rpc::prelude::*, task::authority_setup::SignedSkdeParams, utils::create_signature};
+use crate::{rpc::prelude::*, task::authority_setup::SignedSkdeParams, utils::signature::create_signature};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetSkdeParams;
@@ -24,7 +24,7 @@ impl RpcParameter<AppState> for GetSkdeParams {
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let skde_params = context.skde_params().clone();
 
-        let signature = create_signature(&skde_params);
+        let signature = create_signature(&context, &skde_params).unwrap();
 
         let signed_skde_params = SignedSkdeParams {
             params: skde_params,

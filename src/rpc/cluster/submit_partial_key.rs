@@ -10,7 +10,7 @@ use crate::{
     error::KeyGenerationError,
     rpc::{cluster::broadcast_partial_key_ack, prelude::*},
     types::SessionId,
-    utils::{log_prefix_with_session_id, verify_signature, AddressExt},
+    utils::{log::{log_prefix_with_session_id, AddressExt}, signature::verify_signature},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

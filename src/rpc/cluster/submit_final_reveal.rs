@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use super::{SyncDecryptionKey, SyncPartialKey};
-use crate::{rpc::prelude::*, utils::create_signature};
+use crate::{rpc::prelude::*, utils::signature::create_signature};
 
 // Message from leader to verifiers
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -61,7 +61,7 @@ pub fn broadcast_final_reveal(
     session_id: SessionId,
     partial_keys: Vec<SyncPartialKey>,
     sync_decryption_key: SyncDecryptionKey,
-    _context: &AppState,
+    context: &AppState,
 ) -> Result<(), Error> {
     let all_key_generator_rpc_url_list =
         KeyGeneratorList::get()?.get_all_key_generator_rpc_url_list();
@@ -73,7 +73,7 @@ pub fn broadcast_final_reveal(
     };
 
     // TODO: Add to make actual signature
-    let signature = create_signature(&serialize_to_bincode(&payload).unwrap());
+    let signature = create_signature(context, &serialize_to_bincode(&payload).unwrap()).unwrap();
 
     let parameter = SubmitFinalReveal { signature, payload };
 

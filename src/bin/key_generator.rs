@@ -12,7 +12,7 @@ use distributed_key_generation::{
         authority_setup::run_setup_skde_params, single_key_generator::run_single_key_generator,
     },
     types::*,
-    utils::log_prefix_role_and_address,
+    utils::log::log_prefix_role_and_address,
 };
 use radius_sdk::{
     json_rpc::{

@@ -9,7 +9,7 @@ use tracing::info;
 use super::{PartialKeyPayload, SubmitPartialKey};
 use crate::{
     rpc::prelude::*,
-    utils::{create_signature, get_current_timestamp, log_prefix_with_session_id},
+    utils::{signature::create_signature, time::get_current_timestamp, log::log_prefix_with_session_id},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -30,7 +30,7 @@ impl RpcParameter<AppState> for RequestSubmitPartialKey {
         let skde_params = context.skde_params();
 
         let (_, partial_key) = generate_partial_key(skde_params).unwrap();
-        submit_partial_key_to_leader(self.session_id, partial_key, context.clone()).await?;
+        submit_partial_key_to_leader(self.session_id, partial_key, &context.clone()).await?;
 
         info!("{} Submitted partial key to leader", prefix);
 
@@ -41,7 +41,7 @@ impl RpcParameter<AppState> for RequestSubmitPartialKey {
 pub async fn submit_partial_key_to_leader(
     session_id: SessionId,
     partial_key: SkdePartialKey,
-    context: AppState,
+    context: &AppState,
 ) -> Result<(), RpcError> {
     let leader_rpc_url = match context.config().is_leader() {
         true => context.config().cluster_rpc_url(),
@@ -57,7 +57,7 @@ pub async fn submit_partial_key_to_leader(
     };
 
     // Create signature for the payload
-    let signature = create_signature(&payload);
+    let signature = create_signature(context, &payload).unwrap();
 
     let parameter = SubmitPartialKey { signature, payload };
 

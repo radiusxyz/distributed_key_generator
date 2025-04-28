@@ -14,9 +14,7 @@ use crate::{
     get_current_timestamp,
     rpc::prelude::*,
     utils::{
-        calculate_decryption_key, create_signature, log_prefix_role_and_address,
-        perform_randomized_aggregation, verify_signature,
-    },
+        key::{calculate_decryption_key,perform_randomized_aggregation}, signature::{create_signature, verify_signature}, log::log_prefix_role_and_address,}
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -161,7 +159,7 @@ async fn derive_and_submit_decryption_key(
     };
 
     let timestamp = payload.timestamp;
-    let signature = create_signature(&bincode::serialize(&payload).unwrap());
+    let signature = create_signature(context, &bincode::serialize(&payload).unwrap()).unwrap();
     let request = SubmitDecryptionKey { signature, payload };
 
     let rpc_client = RpcClient::new()?;

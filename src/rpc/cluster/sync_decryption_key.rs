@@ -12,7 +12,7 @@ use tracing::info;
 
 use crate::{
     rpc::{cluster::request_submit_partial_key::submit_partial_key_to_leader, prelude::*},
-    utils::{get_current_timestamp, log_prefix_role_and_address},
+    utils::{time::get_current_timestamp, log::log_prefix_role_and_address},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -64,7 +64,7 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
         session_id.increase_session_id();
 
         // session_id is increased by 1
-        submit_partial_key_to_leader(session_id, partial_key, context.clone()).await?;
+        submit_partial_key_to_leader(session_id, partial_key, &context.clone()).await?;
 
         info!(
             "{} Completed submitting partial key - session_id: {:?}",
