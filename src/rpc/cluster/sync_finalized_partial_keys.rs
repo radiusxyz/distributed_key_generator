@@ -42,12 +42,12 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let sender_address = verify_signature(&self.signature, &self.payload)?;
         if &sender_address != &self.payload.sender {
-            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+            return Err(RpcError::from(KeyGenerationError::InternalError(
                 "Signature does not match sender address".into(),
             )));
         }
 
-        let prefix = log_prefix_role_and_address(&context.config());
+        let prefix = log_prefix_role_and_address(context.config());
         // let sender_address = verify_signature(&self.signature, &self.payload)?;
 
         let SyncFinalizedPartialKeysPayload {
@@ -78,7 +78,7 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
 
             if &signer != sender {
                 return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-                    "Signature does not match sender".into(),
+                    "Signature does not match partial key sender".into(),
                 )));
             }
         }

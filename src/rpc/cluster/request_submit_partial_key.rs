@@ -59,7 +59,7 @@ pub async fn submit_partial_key_to_leader(
     };
 
     // Create signature for the payload
-    let signature = create_signature(context, &payload).unwrap();
+    let signature = create_signature(context.config().signer(), &payload).unwrap();
 
     let parameter = SubmitPartialKey { signature, payload };
 

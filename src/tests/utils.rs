@@ -437,7 +437,11 @@ pub async fn submit_partial_key_to_leader(
     };
 
     // Generate signature
-    let signature = create_signature(context, &serialize_to_bincode(&payload).unwrap()).unwrap();
+    let signature = create_signature(
+        context.config().signer(),
+        &serialize_to_bincode(&payload).unwrap(),
+    )
+    .unwrap();
 
     // Create JSON parameter
     let parameter = serde_json::json!({

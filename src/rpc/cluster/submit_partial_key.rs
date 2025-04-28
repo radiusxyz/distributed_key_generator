@@ -39,27 +39,28 @@ impl RpcParameter<AppState> for SubmitPartialKey {
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let sender_address = verify_signature(&self.signature, &self.payload)?;
+
         if &sender_address != &self.payload.sender {
-            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+            return Err(RpcError::from(KeyGenerationError::InternalError(
                 "Signature does not match sender address".into(),
             )));
         }
 
-        let prefix = log_prefix_with_session_id(&context.config(), &self.payload.session_id);
+        let prefix = log_prefix_with_session_id(context.config(), &self.payload.session_id);
 
         info!(
             "{} Received partial key - session_id: {:?}, sender: {}, timestamp: {}",
             prefix,
             self.payload.session_id.as_u64(),
-            sender_address.to_short(),
+            self.payload.sender.to_short(),
             self.payload.submit_timestamp
         );
 
         // Check if key generator is registered in the cluster
         let key_generator_list = KeyGeneratorList::get()?;
-        if !key_generator_list.is_key_generator_in_cluster(&sender_address) {
+        if !key_generator_list.is_key_generator_in_cluster(&self.payload.sender) {
             return Err(RpcError::from(KeyGenerationError::NotRegisteredGenerator(
-                sender_address.as_hex_string(),
+                self.payload.sender.as_hex_string(),
             )));
         }
 
@@ -76,7 +77,7 @@ impl RpcParameter<AppState> for SubmitPartialKey {
         partial_key.put(self.payload.session_id, &self.payload.sender)?;
 
         let _ = broadcast_partial_key_ack(
-            sender_address,
+            self.payload.sender,
             self.payload.session_id,
             self.payload.partial_key,
             self.payload.submit_timestamp,

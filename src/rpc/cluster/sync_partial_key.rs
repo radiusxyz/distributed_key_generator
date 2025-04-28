@@ -47,7 +47,7 @@ impl RpcParameter<AppState> for SyncPartialKey {
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let sender_address = verify_signature(&self.signature, &self.payload)?;
         if &sender_address != &self.payload.sender {
-            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+            return Err(RpcError::from(KeyGenerationError::InternalError(
                 "Signature does not match sender address".into(),
             )));
         }
@@ -98,7 +98,7 @@ pub fn broadcast_partial_key_ack(
 ) -> Result<(), Error> {
     let prefix = log_prefix_role_and_address(&context.config());
     let key_generator_rpc_url_list =
-        KeyGeneratorList::get()?.get_other_key_generator_rpc_url_list(&context.config().address());
+        KeyGeneratorList::get()?.get_other_key_generator_rpc_url_list(context.config().address());
 
     info!(
         "{} Broadcasting partial key acknowledgment - sender: {}, session_id: {:?}, timestamp: {}",
@@ -121,7 +121,11 @@ pub fn broadcast_partial_key_ack(
     };
 
     // TODO: Add to make actual signature
-    let signature = create_signature(context, &serialize_to_bincode(&payload).unwrap()).unwrap();
+    let signature = create_signature(
+        context.config().signer(),
+        &serialize_to_bincode(&payload).unwrap(),
+    )
+    .unwrap();
 
     let parameter = SyncPartialKey { signature, payload };
 

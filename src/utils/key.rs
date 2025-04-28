@@ -18,13 +18,13 @@ use crate::{
 pub fn perform_randomized_aggregation(
     context: &AppState,
     session_id: SessionId,
-    partial_key_list: &Vec<SkdePartialKey>,
+    partial_key_list: &[SkdePartialKey],
 ) -> SkdeAggregatedKey {
-    let prefix = log_prefix_role_and_address(&context.config());
+    let prefix = log_prefix_role_and_address(context.config());
     let skde_params = context.skde_params().clone();
 
     let randomness = get_randomness(session_id);
-    let mut selected_keys = select_random_partial_keys(&partial_key_list, &randomness);
+    let mut selected_keys = select_random_partial_keys(partial_key_list, &randomness);
     let derived_key = derive_partial_key(&selected_keys, &skde_params);
     selected_keys.push(derived_key);
 
@@ -61,7 +61,7 @@ pub fn calculate_decryption_key(
 }
 
 pub fn select_random_partial_keys(
-    partial_keys: &Vec<SkdePartialKey>,
+    partial_keys: &[SkdePartialKey],
     randomness: &[u8],
 ) -> Vec<SkdePartialKey> {
     let indices = select_ordered_indices(partial_keys.len(), randomness);
@@ -143,7 +143,7 @@ pub fn select_ordered_indices(n: usize, randomness: &[u8]) -> Vec<usize> {
     for i in (1..n).rev() {
         let mut hasher = Sha256::new();
         sha2::Digest::update(&mut hasher, &state);
-        sha2::Digest::update(&mut hasher, &[i as u8]);
+        sha2::Digest::update(&mut hasher, [i as u8]);
         let hash = hasher.finalize();
         let rand_byte = u64::from_le_bytes(hash[0..8].try_into().unwrap());
         let j = (rand_byte % (i as u64 + 1)) as usize;

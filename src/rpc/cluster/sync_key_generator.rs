@@ -1,6 +1,6 @@
 use radius_sdk::{
     json_rpc::server::{RpcError, RpcParameter},
-    signature::{Address, Signature},
+    signature::Address,
 };
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -11,15 +11,12 @@ use crate::{
     utils::log::log_prefix_role_and_address,
 };
 
-// TODO: The `signature` field must contain a valid signature from the authority who has the right to manage the KeyGenerator set.
-// This ensures that only authorized entities can synchronize key generator information across the cluster.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncKeyGenerator {
-    signature: Signature,
+    // signature: Signature, // TODO: Uncomment this code
     message: SyncKeyGeneratorMessage,
 }
 
-// TODO: The `address` field inside `SyncKeyGeneratorMessage` must also be set to the authority's address.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct SyncKeyGeneratorMessage {
     address: Address,
@@ -43,6 +40,13 @@ impl RpcParameter<AppState> for SyncKeyGenerator {
             self.message.cluster_rpc_url,
             self.message.external_rpc_url
         );
+
+        // TODO: Uncomment this code
+        // self.signature.verify_signature(
+        //     serialize_to_bincode(&self.message)?.as_slice(),
+        //     context.config().radius_foundation_address().as_slice(),
+        //     context.config().chain_type().clone(),
+        // )?;
 
         let key_generator = KeyGenerator::new(
             self.message.address.clone(),

@@ -30,13 +30,13 @@ pub struct PartialKeyPayload {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncFinalizedPartialKeys {
-    pub sender: Address,
     pub signature: Signature,
     pub payload: SyncFinalizedPartialKeysPayload,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncFinalizedPartialKeysPayload {
+    pub sender: Address,
     pub partial_key_senders: Vec<Address>,
     pub partial_keys: Vec<SkdePartialKey>,
     pub session_id: SessionId,
@@ -54,8 +54,8 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let sender_address = verify_signature(&self.signature, &self.payload)?;
-        if &sender_address != &self.sender {
-            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+        if &sender_address != &self.payload.sender {
+            return Err(RpcError::from(KeyGenerationError::InternalError(
                 "Signature does not match sender address".into(),
             )));
         }
@@ -78,15 +78,29 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
             )));
         }
 
-        for (sig, sender) in payload.signatures.iter().zip(payload.partial_key_senders) {
-            let signer = verify_signature(sig, &self.payload)?;
+        // for (((sender, partial_key), submit_timestamp), sig) in payload
+        //     .partial_key_senders
+        //     .iter()
+        //     .zip(&payload.partial_keys)
+        //     .zip(&payload.submit_timestamps)
+        //     .zip(&payload.signatures)
+        // {
+        //     let message = PartialKeyPayload {
+        //         sender: sender.clone(),
+        //         partial_key: partial_key.clone(),
+        //         submit_timestamp: *submit_timestamp,
+        //         session_id: payload.session_id,
+        //     };
 
-            if &signer != &sender {
-                return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-                    "Signature does not match sender".into(),
-                )));
-            }
-        }
+        //     let signer = verify_signature(sig, &message)?;
+
+        //     if &signer != sender {
+        //         return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+        //             "Signature does not match partial key sender".into(),
+        //         )));
+        //     }
+        // }
+
         PartialKeyAddressList::initialize(payload.session_id)?;
 
         for (_i, (((sender, key), timestamp), sig)) in self
@@ -117,7 +131,7 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
             PartialKeyAddressList::apply(payload.session_id, |list| {
                 list.insert(sender.clone());
             })?;
-            PartialKey::new(key.clone()).put(payload.session_id, &sender)?;
+            PartialKey::new(key.clone()).put(payload.session_id, sender)?;
         }
 
         tokio::spawn(async move {
@@ -158,18 +172,18 @@ async fn derive_and_submit_decryption_key(
     DecryptionKey::new(decryption_key.clone()).put(session_id)?;
 
     // Submit to leader
-    let sender = context.config().signer().address();
+    let node = context.config().signer();
     let leader_rpc_url = context.config().leader_solver_rpc_url().clone().unwrap();
 
     let payload = SubmitDecryptionKeyPayload {
-        sender: sender.clone(),
+        sender: node.address().clone(),
         decryption_key: decryption_key.clone(),
         session_id,
         timestamp: get_current_timestamp(),
     };
 
     let timestamp = payload.timestamp;
-    let signature = create_signature(context, &bincode::serialize(&payload).unwrap()).unwrap();
+    let signature = create_signature(node, &payload).unwrap();
     let request = SubmitDecryptionKey { signature, payload };
 
     let rpc_client = RpcClient::new()?;

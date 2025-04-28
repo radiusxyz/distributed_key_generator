@@ -73,7 +73,11 @@ pub fn broadcast_final_reveal(
     };
 
     // TODO: Add to make actual signature
-    let signature = create_signature(context, &serialize_to_bincode(&payload).unwrap()).unwrap();
+    let signature = create_signature(
+        context.config().signer(),
+        &serialize_to_bincode(&payload).unwrap(),
+    )
+    .unwrap();
 
     let parameter = SubmitFinalReveal { signature, payload };
 

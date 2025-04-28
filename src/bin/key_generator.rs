@@ -89,7 +89,7 @@ async fn main() -> Result<(), Error> {
 
             if config.is_authority() {
                 let app_state = AppState::new(config.clone(), skde_params);
-                let prefix = log_prefix_role_and_address(&app_state.config());
+                let prefix = log_prefix_role_and_address(app_state.config());
 
                 info!("{} Serving get_authorized_skde_params", prefix);
                 let handle = initialize_authority_rpc_server(&app_state).await?;
@@ -137,7 +137,7 @@ async fn main() -> Result<(), Error> {
 
             // Initialize an application-wide state instance
             let app_state = AppState::new(config.clone(), skde_params);
-            let prefix = log_prefix_role_and_address(&app_state.config());
+            let prefix = log_prefix_role_and_address(app_state.config());
 
             // Based on the role, start appropriate services
             if config.is_leader() {

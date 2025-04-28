@@ -13,7 +13,7 @@ impl AddressExt for Address {
         if hex.len() < 10 {
             hex
         } else {
-            format!("{}", &hex[..6])
+            (hex[..6]).to_string()
         }
     }
 }
