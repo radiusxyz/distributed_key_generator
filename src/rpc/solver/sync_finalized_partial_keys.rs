@@ -10,12 +10,11 @@ use super::submit_decryption_key::{
     DecryptionKeyResponse, SubmitDecryptionKey, SubmitDecryptionKeyPayload,
 };
 use crate::{
-    error::KeyGenerationError,
     get_current_timestamp,
     rpc::prelude::*,
     utils::{
         calculate_decryption_key, create_signature, log_prefix_role_and_address,
-        perform_randomized_aggregation, verify_signature,
+        perform_randomized_aggregation,
     },
 };
 
@@ -35,11 +34,8 @@ pub struct SyncFinalizedPartialKeys {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncFinalizedPartialKeysPayload {
-    pub partial_key_senders: Vec<Address>,
-    pub partial_keys: Vec<SkdePartialKey>,
+    pub partial_key_submissions: Vec<PartialKeySubmission>,
     pub session_id: SessionId,
-    pub submit_timestamps: Vec<u64>,
-    pub signatures: Vec<Signature>,
     pub ack_timestamp: u64,
 }
 
@@ -57,18 +53,14 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
         let payload = self.payload.clone();
 
         info!(
-            "{} Received finalized partial keys ACK - senders:{:?}, session_id: {:?
+            "{} Received finalized partial keys ACK - partial_key_submissions.len(): {:?}, session_id: {:?
             }, timestamp: {}",
-            prefix, payload.partial_key_senders, payload.session_id, payload.ack_timestamp
+            prefix,
+            payload.partial_key_submissions.len(),
+            payload.session_id,
+            payload.ack_timestamp
         );
 
-        if payload.partial_key_senders.len() != payload.partial_keys.len()
-            || payload.partial_keys.len() != payload.submit_timestamps.len()
-        {
-            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-                "Mismatched vector lengths in partial key ACK payload".into(),
-            )));
-        }
         // TODO: Signature verification
         // for (sig, sender) in signatures.iter().zip(partial_key_senders) {
         //     let signer = verify_signature(sig, &self.payload)?;
@@ -81,23 +73,16 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
         // }
         PartialKeyAddressList::initialize(payload.session_id)?;
 
-        for (_i, (((sender, key), timestamp), sig)) in self
-            .payload
-            .partial_key_senders
-            .iter()
-            .zip(&self.payload.partial_keys)
-            .zip(&self.payload.submit_timestamps)
-            .zip(&self.payload.signatures)
-            .enumerate()
-        {
-            let signable_message = PartialKeyPayload {
+        for (_, partial_key_submission) in payload.partial_key_submissions.iter().enumerate() {
+            let sender = partial_key_submission.payload.sender.clone();
+            let _signable_message = PartialKeyPayload {
                 sender: sender.clone(),
-                partial_key: key.clone(),
-                submit_timestamp: *timestamp,
+                partial_key: partial_key_submission.payload.partial_key.clone(),
+                submit_timestamp: partial_key_submission.payload.submit_timestamp,
                 session_id: payload.session_id,
             };
 
-            let _signer = verify_signature(sig, &signable_message)?;
+            // TODO: Signature verification
             // if &signer != sender {
             //     return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
             //         format!(
@@ -107,9 +92,10 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
             //     )));
             // }
             PartialKeyAddressList::apply(payload.session_id, |list| {
-                list.insert(sender.clone());
+                list.insert(partial_key_submission.payload.sender.clone());
             })?;
-            PartialKey::new(key.clone()).put(payload.session_id, &sender)?;
+            PartialKeySubmission::clone_from(partial_key_submission)
+                .put(payload.session_id, &sender)?;
         }
 
         tokio::spawn(async move {
@@ -137,7 +123,13 @@ async fn derive_and_submit_decryption_key(
     session_id: SessionId,
 ) -> Result<(), Error> {
     let prefix = log_prefix_role_and_address(&context.config());
-    let partial_keys = PartialKeyAddressList::get(session_id)?.get_partial_key_list(session_id)?;
+    let partial_key_submissions =
+        PartialKeyAddressList::get(session_id)?.get_partial_key_list(session_id)?;
+
+    let partial_keys: Vec<SkdePartialKey> = partial_key_submissions
+        .iter()
+        .map(|partial_key_submission| partial_key_submission.payload.partial_key.clone())
+        .collect();
 
     // Put aggregated key for a Solver
     let aggregated_key = perform_randomized_aggregation(context, session_id, &partial_keys);

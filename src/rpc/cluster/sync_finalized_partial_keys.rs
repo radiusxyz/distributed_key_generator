@@ -1,13 +1,12 @@
 use radius_sdk::{
     json_rpc::server::{RpcError, RpcParameter},
-    signature::{Address, Signature},
+    signature::Signature,
 };
 use serde::{Deserialize, Serialize};
 use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::info;
 
 use crate::{
-    error::KeyGenerationError,
     rpc::prelude::*,
     utils::{log_prefix_role_and_address, perform_randomized_aggregation},
 };
@@ -20,11 +19,8 @@ pub struct SyncFinalizedPartialKeys {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncFinalizedPartialKeysPayload {
-    pub partial_key_senders: Vec<Address>,
-    pub partial_keys: Vec<SkdePartialKey>,
+    pub partial_key_submissions: Vec<PartialKeySubmission>,
     pub session_id: SessionId,
-    pub submit_timestamps: Vec<u64>,
-    pub signatures: Vec<Signature>,
     pub ack_timestamp: u64,
 }
 
@@ -40,31 +36,27 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
         // let sender_address = verify_signature(&self.signature, &self.payload)?;
 
         let SyncFinalizedPartialKeysPayload {
-            partial_key_senders,
-            partial_keys,
+            partial_key_submissions,
             session_id,
             ack_timestamp,
-            signatures,
-            ..
         } = &self.payload;
 
         info!(
-            "{} Received finalized partial keys ACK - senders:{:?}, session_id: {:?
+            "{} Received finalized partial keys ACK - partial_key_submissions.len(): {:?}, session_id: {:?
             }, timestamp: {}",
-            prefix, partial_key_senders, session_id, ack_timestamp
+            prefix,
+            partial_key_submissions.len(),
+            session_id,
+            ack_timestamp
         );
 
-        // TODO: timestampes also should be collected assigned to each partial key
-        if partial_key_senders.len() != partial_keys.len() || partial_keys.len() != signatures.len()
-        {
-            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-                "Mismatched vector lengths in partial key ACK payload".into(),
-            )));
-        }
-
         // Put aggregated key for a Cluster member
-        let partial_keys =
+        let partial_key_submissions =
             PartialKeyAddressList::get(*session_id)?.get_partial_key_list(*session_id)?;
+        let partial_keys: Vec<SkdePartialKey> = partial_key_submissions
+            .iter()
+            .map(|partial_key_submission| partial_key_submission.payload.partial_key.clone())
+            .collect();
         perform_randomized_aggregation(&context, *session_id, &partial_keys);
 
         // TODO: Signature verification
@@ -77,8 +69,6 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
         //         )));
         //     }
         // }
-
-        // TODO: Calculate and store encryption key if signatures are valid
 
         Ok(())
     }

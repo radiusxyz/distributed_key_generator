@@ -58,14 +58,14 @@ pub fn run_single_key_generator(context: AppState) {
                 )
                 .unwrap();
 
-                let partial_key_list = partial_key_address_list
+                let partial_key_submissions = partial_key_address_list
                     .get_partial_key_list(current_session_id)
                     .unwrap();
 
                 info!(
                     "{} Partial key list length: {}",
                     prefix,
-                    partial_key_list.len()
+                    partial_key_submissions.len()
                 );
 
                 if partial_key_address_list.is_empty() {
@@ -164,31 +164,32 @@ pub async fn broadcast_finalized_partial_keys(
         sleep(Duration::from_millis(100)).await;
     };
 
-    let partial_keys = list.get_partial_key_list(session_id).unwrap();
-    let partial_senders = list.to_vec();
-
     // TODO: Add to make actual signature
     // TODO: Timestampes, signatures, etc. should be collected assigned to each partial key
-    let signatures = partial_keys
-        .iter()
-        .zip(&partial_senders)
-        .map(|(key, sender)| {
-            let message = (sender, key, session_id);
-            let encoded = bincode::serialize(&message).unwrap();
-            create_signature(&encoded)
-        })
-        .collect();
+    let partial_key_submissions = list.get_partial_key_list(session_id).unwrap();
 
-    let submit_timestamps = vec![get_current_timestamp(); partial_keys.len()];
+    // TODO: Replace actual PartialKeySubmissions
+    // let partial_key_submissions = partial_keys
+    //     .iter()
+    //     .zip(&partial_senders)
+    //     .zip(&signatures)
+    //     .map(|((key, sender), signature)| SubmitPartialKey {
+    //         signature: signature.clone(),
+    //         payload: PartialKeyPayload {
+    //             partial_key: key.clone(),
+    //             sender: sender.clone(),
+    //             submit_timestamp: submit_timestamps[i],
+    //             session_id,
+    //         },
+    //     })
+    //     .collect();
 
-    let payload = cluster::SyncFinalizedPartialKeysPayload {
-        partial_key_senders: partial_senders,
-        partial_keys,
-        session_id,
-        submit_timestamps,
-        signatures,
-        ack_timestamp: get_current_timestamp(),
-    };
+    let payload: cluster::SyncFinalizedPartialKeysPayload =
+        cluster::SyncFinalizedPartialKeysPayload {
+            partial_key_submissions,
+            session_id,
+            ack_timestamp: get_current_timestamp(),
+        };
 
     let signature = create_signature(&serialize(&payload)?);
     let message = cluster::SyncFinalizedPartialKeys { signature, payload };

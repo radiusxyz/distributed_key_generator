@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[tokio::test]
-async fn test_integration_get_skde_params() {
+async fn test_get_skde_params() {
     // Initialize test environment
     init_test_environment("node registration test");
 

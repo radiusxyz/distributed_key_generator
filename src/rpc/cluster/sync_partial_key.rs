@@ -7,7 +7,6 @@ use radius_sdk::{
     signature::{Address, Signature},
 };
 use serde::{Deserialize, Serialize};
-use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::info;
 
 use crate::{
@@ -23,11 +22,8 @@ pub struct SyncPartialKey {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncPartialKeyPayload {
-    pub partial_key_sender: Address,
-    pub partial_key: SkdePartialKey,
-    pub index: usize, // TODO: Remove this field
+    pub partial_key_submission: PartialKeySubmission,
     pub session_id: SessionId,
-    pub submit_timestamp: u64,
     pub ack_timestamp: u64,
 }
 
@@ -44,20 +40,21 @@ impl RpcParameter<AppState> for SyncPartialKey {
 
         info!(
             "{} Received partial key ACK - sender:{:?}, session_id: {:?
-            }, index: {}, timestamp: {}",
+            }, timestamp: {}",
             prefix,
-            self.payload.partial_key_sender.to_short(),
+            self.payload
+                .partial_key_submission
+                .payload
+                .sender
+                .to_short(),
             self.payload.session_id.as_u64(),
-            self.payload.index,
             self.payload.ack_timestamp
         );
 
         // TODO: Leader verification (only leader can send ACK)
 
-        // TODO: Store and process partial key index information
-        // (In actual implementation, a structure to store index information is needed)
         // If sender is me, ignore
-        if self.payload.partial_key_sender == context.config().address() {
+        if self.payload.partial_key_submission.payload.sender == context.config().address() {
             return Ok(());
         }
 
@@ -65,11 +62,15 @@ impl RpcParameter<AppState> for SyncPartialKey {
 
         // if the sender is incluided in
         PartialKeyAddressList::apply(self.payload.session_id, |list| {
-            list.insert(self.payload.partial_key_sender.clone());
+            list.insert(self.payload.partial_key_submission.payload.sender.clone());
         })?;
 
-        let partial_key = PartialKey::new(self.payload.partial_key);
-        partial_key.put(self.payload.session_id, &self.payload.partial_key_sender)?;
+        let partial_key_submission =
+            PartialKeySubmission::clone_from(&self.payload.partial_key_submission);
+        partial_key_submission.put(
+            self.payload.session_id,
+            &self.payload.partial_key_submission.payload.sender,
+        )?;
 
         Ok(())
     }
@@ -78,10 +79,7 @@ impl RpcParameter<AppState> for SyncPartialKey {
 // Broadcast partial key acknowledgment from leader to the entire network
 pub fn broadcast_partial_key_ack(
     sender_address: Address,
-    session_id: SessionId,
-    partial_key: SkdePartialKey,
-    submit_timestamp: u64,
-    index: usize,
+    partial_key_submission: PartialKeySubmission,
     context: &AppState,
 ) -> Result<(), Error> {
     let prefix = log_prefix_role_and_address(&context.config());
@@ -92,18 +90,15 @@ pub fn broadcast_partial_key_ack(
         "{} Broadcasting partial key acknowledgment - sender: {}, session_id: {:?}, timestamp: {}",
         prefix,
         sender_address.to_short(),
-        session_id,
-        submit_timestamp
+        partial_key_submission.payload.session_id,
+        partial_key_submission.payload.submit_timestamp
     );
 
     let ack_timestamp = get_current_timestamp();
 
     let payload = SyncPartialKeyPayload {
-        partial_key_sender: sender_address,
-        session_id,
-        partial_key,
-        index,
-        submit_timestamp,
+        partial_key_submission: partial_key_submission.clone(),
+        session_id: partial_key_submission.payload.session_id,
         ack_timestamp,
     };
 

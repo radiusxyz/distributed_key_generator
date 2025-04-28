@@ -2,25 +2,33 @@ use std::collections::HashSet;
 
 use radius_sdk::{
     kvstore::{KvStoreError, Model},
-    signature::Address,
+    signature::{Address, Signature},
 };
 use serde::{Deserialize, Serialize};
-use skde::{
-    key_aggregation::AggregatedKey as SkdeAggregatedKey,
-    key_generation::PartialKey as SkdePartialKey,
-};
+use skde::key_aggregation::AggregatedKey as SkdeAggregatedKey;
+
+use crate::rpc::cluster::{PartialKeyPayload, SubmitPartialKey};
 
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
 #[kvstore(key(session_id: SessionId, address: &Address))]
-pub struct PartialKey(SkdePartialKey);
+pub struct PartialKeySubmission {
+    pub signature: Signature,
+    pub payload: PartialKeyPayload,
+}
 
-impl PartialKey {
-    pub fn new(partial_key: SkdePartialKey) -> Self {
-        Self(partial_key)
+impl PartialKeySubmission {
+    pub fn from_submit_partial_key(submit_partial_key: &SubmitPartialKey) -> Self {
+        Self {
+            signature: submit_partial_key.signature.clone(),
+            payload: submit_partial_key.payload.clone(),
+        }
     }
 
-    pub fn into_inner(self) -> SkdePartialKey {
-        self.0
+    pub fn clone_from(partial_key_submission: &PartialKeySubmission) -> Self {
+        Self {
+            signature: partial_key_submission.signature.clone(),
+            payload: partial_key_submission.payload.clone(),
+        }
     }
 }
 
@@ -55,9 +63,9 @@ impl PartialKeyAddressList {
 
     pub fn initialize(session_id: SessionId) -> Result<(), KvStoreError> {
         if Self::get(session_id).is_err() {
-            let partial_key_list = PartialKeyAddressList::default();
+            let partial_key_address_list = PartialKeyAddressList::default();
 
-            partial_key_list.put(session_id)?;
+            partial_key_address_list.put(session_id)?;
         }
 
         Ok(())
@@ -66,16 +74,16 @@ impl PartialKeyAddressList {
     pub fn get_partial_key_list(
         &self,
         session_id: SessionId,
-    ) -> Result<Vec<SkdePartialKey>, KvStoreError> {
-        let partial_key_list: Result<Vec<PartialKey>, _> = self
+    ) -> Result<Vec<PartialKeySubmission>, KvStoreError> {
+        let partial_key_submissions: Result<Vec<PartialKeySubmission>, _> = self
             .0
             .iter()
-            .map(|address| PartialKey::get(session_id, address))
+            .map(|address| PartialKeySubmission::get(session_id, address))
             .collect();
 
-        partial_key_list?
+        partial_key_submissions?
             .into_iter()
-            .map(|partial_key| Ok(partial_key.into_inner()))
+            .map(|partial_key_submission| Ok(partial_key_submission))
             .collect()
     }
 }
