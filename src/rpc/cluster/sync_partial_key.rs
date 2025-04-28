@@ -59,8 +59,6 @@ impl RpcParameter<AppState> for SyncPartialKey {
         }
 
         PartialKeyAddressList::initialize(self.payload.session_id)?;
-
-        // if the sender is incluided in
         PartialKeyAddressList::apply(self.payload.session_id, |list| {
             list.insert(self.payload.partial_key_submission.payload.sender.clone());
         })?;

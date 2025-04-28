@@ -88,7 +88,7 @@ impl PartialKeyAddressList {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Model, Default)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Model, Default, Hash)]
 #[kvstore(key())]
 pub struct SessionId(u64);
 

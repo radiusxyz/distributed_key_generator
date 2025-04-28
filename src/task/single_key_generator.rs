@@ -41,7 +41,7 @@ pub fn run_single_key_generator(context: AppState) {
             let current_session_id = session_id.clone();
             let prefix: String = log_prefix_with_session_id(&context.config(), &current_session_id);
 
-            info!("{} Waiting to start session", prefix,);
+            info!("{} 🔑🗝️🔑 Waiting to start session 🔑🗝️🔑", prefix,);
 
             tokio::spawn(async move {
                 let key_generator_rpc_url_list = KeyGeneratorList::get()
@@ -60,7 +60,7 @@ pub fn run_single_key_generator(context: AppState) {
 
                 let partial_key_submissions = partial_key_address_list
                     .get_partial_key_list(current_session_id)
-                    .unwrap();
+                    .unwrap_or(Vec::new());
 
                 info!(
                     "{} Partial key list length: {}",
