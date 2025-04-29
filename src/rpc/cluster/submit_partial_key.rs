@@ -1,16 +1,9 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex as StdMutex},
-};
-
-use once_cell::sync::Lazy;
 use radius_sdk::{
     json_rpc::server::{RpcError, RpcParameter},
     signature::{Address, Signature},
 };
 use serde::{Deserialize, Serialize};
 use skde::key_generation::PartialKey as SkdePartialKey;
-use tokio::sync::Mutex as TokioMutex;
 use tracing::info;
 
 use crate::{
@@ -19,9 +12,6 @@ use crate::{
     types::SessionId,
     utils::{log_prefix_with_session_id, verify_signature, AddressExt},
 };
-
-static SESSION_LOCKS: Lazy<StdMutex<HashMap<SessionId, Arc<TokioMutex<()>>>>> =
-    Lazy::new(|| StdMutex::new(HashMap::new()));
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SubmitPartialKey {
@@ -51,15 +41,6 @@ impl RpcParameter<AppState> for SubmitPartialKey {
         let _ = verify_signature(&self.signature, &self.payload)?;
         let sender_address = self.payload.sender.clone();
 
-        let session_mutex = {
-            let mut map = SESSION_LOCKS.lock().unwrap();
-            map.entry(self.payload.session_id)
-                .or_insert_with(|| Arc::new(TokioMutex::new(())))
-                .clone()
-        };
-        // Lock the session
-        let _guard = session_mutex.lock().await;
-
         info!(
             "{} Received partial key - session_id: {:?}, sender: {}, timestamp: {}",
             prefix,
@@ -75,7 +56,6 @@ impl RpcParameter<AppState> for SubmitPartialKey {
                 sender_address.as_hex_string(),
             )));
         }
-        PartialKeyAddressList::initialize(self.payload.session_id)?;
 
         PartialKeyAddressList::apply(self.payload.session_id, |list| {
             list.insert(sender_address.clone());

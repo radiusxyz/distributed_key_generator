@@ -16,7 +16,10 @@ use crate::{
     },
     state::AppState,
     types::*,
-    utils::{create_signature, log_prefix_role_and_address, log_prefix_with_session_id},
+    utils::{
+        create_signature, initialize_next_session_from_current, log_prefix_role_and_address,
+        log_prefix_with_session_id,
+    },
 };
 pub const THRESHOLD: usize = 1;
 
@@ -27,6 +30,7 @@ pub fn run_single_key_generator(context: AppState) {
     tokio::spawn(async move {
         let partial_key_generation_cycle_ms = context.config().partial_key_generation_cycle_ms();
         let partial_key_aggregation_cycle_ms = context.config().partial_key_aggregation_cycle_ms();
+        PartialKeyAddressList::initialize(SessionId::from(0)).unwrap();
 
         info!(
             "{} Partial key generation cycle: {} ms, aggregation cycle: {} ms",
@@ -39,6 +43,8 @@ pub fn run_single_key_generator(context: AppState) {
 
             let mut session_id = SessionId::get_mut().unwrap();
             let current_session_id = session_id.clone();
+            initialize_next_session_from_current(&current_session_id);
+
             let prefix: String = log_prefix_with_session_id(&context.config(), &current_session_id);
 
             info!("{} 🔑🗝️🔑 Waiting to start session 🔑🗝️🔑", prefix,);

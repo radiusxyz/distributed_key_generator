@@ -17,7 +17,10 @@ use skde::{
 };
 use tracing::info;
 
-use crate::{error::KeyGenerationError, AggregatedKey, AppState, Config, DecryptionKey, SessionId};
+use crate::{
+    error::KeyGenerationError, types::PartialKeyAddressList, AggregatedKey, AppState, Config,
+    DecryptionKey, SessionId,
+};
 
 pub fn create_signature<T: Serialize>(_message: &T) -> Signature {
     Signature::from(vec![0; 64])
@@ -222,4 +225,11 @@ pub fn log_prefix_with_session_id(config: &Config, session_id: &SessionId) -> St
         config.address().to_short(),
         session_id.as_u64()
     )
+}
+
+pub fn initialize_next_session_from_current(current_session_id: &SessionId) {
+    let mut next_session_id = current_session_id.clone();
+    next_session_id.increase_session_id();
+
+    PartialKeyAddressList::initialize(next_session_id).unwrap();
 }
