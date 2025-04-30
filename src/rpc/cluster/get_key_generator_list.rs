@@ -3,6 +3,7 @@ use crate::rpc::prelude::*;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetKeyGeneratorList;
 
+// TODO: The `address` field inside `KeyGeneratorRpcInfo` must also be set to the authority's address.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct KeyGeneratorRpcInfo {
     pub address: String,

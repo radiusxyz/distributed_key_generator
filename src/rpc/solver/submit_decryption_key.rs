@@ -6,8 +6,9 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
+    error::KeyGenerationError,
     rpc::{cluster::broadcast_decryption_key_ack, prelude::*},
-    utils::{log_prefix_role_and_address, verify_signature},
+    utils::{log::log_prefix_role_and_address, signature::verify_signature},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -37,9 +38,14 @@ impl RpcParameter<AppState> for SubmitDecryptionKey {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        let prefix = log_prefix_role_and_address(&context.config());
-        // TODO: Add to verify actual signature
-        let _sender_address = verify_signature(&self.signature, &self.payload)?;
+        let sender_address = verify_signature(&self.signature, &self.payload)?;
+        if sender_address != self.payload.sender {
+            return Err(RpcError::from(KeyGenerationError::InternalError(
+                "Signature does not match sender address".into(),
+            )));
+        }
+
+        let prefix = log_prefix_role_and_address(context.config());
 
         info!(
             "{} Received decryption key - session_id: {:?}, timestamp: {}",

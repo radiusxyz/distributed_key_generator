@@ -11,9 +11,10 @@ use super::{Config, Role};
 use crate::{
     rpc::{
         authority::{GetAuthorizedSkdeParams, GetAuthorizedSkdeParamsResponse},
-        cluster, solver,
+        common::{GetSkdeParams, GetSkdeParamsResponse},
     },
-    utils::log_prefix_role_and_address,
+    task::authority_setup::SignedSkdeParams,
+    utils::{log::log_prefix_role_and_address, signature::verify_signature},
 };
 
 async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
@@ -29,8 +30,18 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                         prefix,
                         data.len()
                     );
-                    match serde_json::from_str::<SkdeParams>(&data) {
-                        Ok(parsed) => Some(parsed),
+
+                    match serde_json::from_str::<SignedSkdeParams>(&data) {
+                        Ok(signed) => match verify_signature(&signed.signature, &signed.params) {
+                            Ok(_signer_address) => {
+                                info!("{} Successfully verified SKDE params signature", prefix);
+                                Some(signed.params)
+                            }
+                            Err(e) => {
+                                warn!("{} Failed to verify SKDE params signature: {}", prefix, e);
+                                None
+                            }
+                        },
                         Err(e) => {
                             error!("Failed to parse SKDE param file: {}", e);
                             None
@@ -72,7 +83,23 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                 .await;
 
             match result {
-                Ok(response) => Some(response.into_skde_params()),
+                Ok(response) => {
+                    let signed = response.signed_skde_params;
+
+                    match verify_signature(&signed.signature, &signed.params) {
+                        Ok(_signer_address) => {
+                            info!(
+                                "{} Successfully verified SKDE params signature from authority",
+                                prefix
+                            );
+                            Some(signed.params) // 검증 성공 시 params만 넘김
+                        }
+                        Err(e) => {
+                            warn!("{} Failed to verify SKDE params signature: {}", prefix, e);
+                            None
+                        }
+                    }
+                }
                 Err(err) => {
                     warn!(
                         "{} Failed to fetch SkdeParams from authority: {}",
@@ -93,28 +120,44 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                     }
                 };
 
-                let response: cluster::GetSkdeParamsResponse = match client
+                let result: Result<GetSkdeParamsResponse, RpcClientError> = client
                     .request(
                         leader_url,
-                        cluster::GetSkdeParams::method(),
-                        &cluster::GetSkdeParams,
+                        GetSkdeParams::method(),
+                        &GetSkdeParams,
                         Id::Null,
                     )
-                    .await
-                {
-                    Ok(res) => res,
+                    .await;
+
+                match result {
+                    Ok(response) => {
+                        let signed = response.signed_skde_params;
+
+                        match verify_signature(&signed.signature, &signed.params) {
+                            Ok(_signer_address) => {
+                                info!(
+                                    "{} Successfully verified SKDE params signature from leader",
+                                    prefix
+                                );
+                                Some(signed.params)
+                            }
+                            Err(e) => {
+                                warn!("{} Failed to verify SKDE params signature: {}", prefix, e);
+                                None
+                            }
+                        }
+                    }
                     Err(err) => {
                         warn!("{} Failed to fetch SkdeParams from leader: {}", prefix, err);
-                        return None;
+                        None
                     }
-                };
-
-                Some(response.into_skde_params())
+                }
             } else {
-                warn!("{} Missing leader_cluster_rpc_url in config", prefix,);
+                warn!("{} Missing leader_cluster_rpc_url in config", prefix);
                 None
             }
         }
+
         Role::Solver => {
             if let Some(leader_url) = config.leader_solver_rpc_url() {
                 let client = match RpcClient::new() {
@@ -125,27 +168,44 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                     }
                 };
 
-                let response: solver::GetSkdeParamsResponse = match client
+                let result: Result<GetSkdeParamsResponse, RpcClientError> = client
                     .request(
                         leader_url,
-                        solver::GetSkdeParams::method(),
-                        &solver::GetSkdeParams,
+                        GetSkdeParams::method(),
+                        &GetSkdeParams,
                         Id::Null,
                     )
-                    .await
-                {
-                    Ok(res) => res,
+                    .await;
+
+                match result {
+                    Ok(response) => {
+                        let signed = response.signed_skde_params;
+
+                        match verify_signature(&signed.signature, &signed.params) {
+                            Ok(_signer_address) => {
+                                info!(
+                                    "{} Successfully verified SKDE params signature from leader",
+                                    prefix
+                                );
+                                Some(signed.params)
+                            }
+                            Err(e) => {
+                                warn!("{} Failed to verify SKDE params signature: {}", prefix, e);
+                                None
+                            }
+                        }
+                    }
                     Err(err) => {
                         warn!("{} Failed to fetch SkdeParams from leader: {}", prefix, err);
-                        return None;
+                        None
                     }
-                };
-                Some(response.into_skde_params())
+                }
             } else {
-                warn!("{} Missing leader_cluster_rpc_url in config", prefix,);
+                warn!("{} Missing leader_solver_rpc_url in config", prefix);
                 None
             }
         }
+
         _ => {
             warn!("{} Unsupported role for SKDE param retrieval", prefix,);
             None

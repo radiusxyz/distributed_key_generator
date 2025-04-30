@@ -4,7 +4,7 @@ use distributed_key_generation::{
     rpc::{
         authority::GetAuthorizedSkdeParams,
         cluster::{self, GetKeyGeneratorList, GetKeyGeneratorRpcUrlListResponse},
-        external, internal, solver,
+        common, external, internal, solver,
     },
     skde_params::fetch_skde_params_with_retry,
     state::AppState,
@@ -12,7 +12,7 @@ use distributed_key_generation::{
         authority_setup::run_setup_skde_params, single_key_generator::run_single_key_generator,
     },
     types::*,
-    utils::log_prefix_role_and_address,
+    utils::log::log_prefix_role_and_address,
 };
 use radius_sdk::{
     json_rpc::{
@@ -89,7 +89,7 @@ async fn main() -> Result<(), Error> {
 
             if config.is_authority() {
                 let app_state = AppState::new(config.clone(), skde_params);
-                let prefix = log_prefix_role_and_address(&app_state.config());
+                let prefix = log_prefix_role_and_address(app_state.config());
 
                 info!("{} Serving get_authorized_skde_params", prefix);
                 let handle = initialize_authority_rpc_server(&app_state).await?;
@@ -137,7 +137,7 @@ async fn main() -> Result<(), Error> {
 
             // Initialize an application-wide state instance
             let app_state = AppState::new(config.clone(), skde_params);
-            let prefix = log_prefix_role_and_address(&app_state.config());
+            let prefix = log_prefix_role_and_address(app_state.config());
 
             // Based on the role, start appropriate services
             if config.is_leader() {
@@ -197,11 +197,11 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
         .register_rpc_method::<cluster::GetKeyGeneratorList>()?
         .register_rpc_method::<cluster::SyncKeyGenerator>()?
         .register_rpc_method::<cluster::SyncPartialKey>()?
-        .register_rpc_method::<cluster::SyncFinalizedPartialKeys>()?
+        .register_rpc_method::<cluster::ClusterSyncFinalizedPartialKeys>()?
         .register_rpc_method::<cluster::SyncDecryptionKey>()?
         .register_rpc_method::<cluster::SubmitPartialKey>()?
         .register_rpc_method::<cluster::RequestSubmitPartialKey>()?
-        .register_rpc_method::<cluster::GetSkdeParams>()?
+        .register_rpc_method::<common::GetSkdeParams>()?
         .init(cluster_rpc_url.clone())
         .await
         .map_err(error::Error::RpcServerError)?;
@@ -228,7 +228,7 @@ async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHand
         .register_rpc_method::<external::GetDecryptionKey>()?
         .register_rpc_method::<external::GetLatestEncryptionKey>()?
         .register_rpc_method::<external::GetLatestSessionId>()?
-        .register_rpc_method::<external::GetSkdeParams>()?
+        .register_rpc_method::<common::GetSkdeParams>()?
         .init(external_rpc_url.clone())
         .await
         .map_err(error::Error::RpcServerError)?;
@@ -275,15 +275,23 @@ async fn initialize_solve_rpc_server(app_state: &AppState) -> Result<JoinHandle<
     let prefix = log_prefix_role_and_address(app_state.config());
     let solver_rpc_url = app_state.config().solver_rpc_url().clone().unwrap();
 
-    let rpc_server = RpcServer::new(app_state.clone())
-        .register_rpc_method::<solver::GetSkdeParams>()?
-        .register_rpc_method::<solver::SubmitDecryptionKey>()?
-        .register_rpc_method::<solver::SyncFinalizedPartialKeys>()?
+    let rpc_server_builder = RpcServer::new(app_state.clone());
+
+    let rpc_server = if app_state.config().is_leader() {
+        rpc_server_builder
+            .register_rpc_method::<common::GetSkdeParams>()?
+            .register_rpc_method::<solver::SubmitDecryptionKey>()?
+    } else {
+        rpc_server_builder
+            .register_rpc_method::<solver::SolverSyncFinalizedPartialKeys>()?
+    };
+
+    let rpc_server = rpc_server
         .init(solver_rpc_url.clone())
         .await
         .map_err(Error::RpcServerError)?;
 
-    info!("{} Started solver RPC server at {}", prefix, solver_rpc_url);
+    info!("{} Started solve RPC server at {}", prefix, solver_rpc_url);
 
     let handle = tokio::spawn(async move {
         rpc_server.stopped().await;
@@ -291,3 +299,4 @@ async fn initialize_solve_rpc_server(app_state: &AppState) -> Result<JoinHandle<
 
     Ok(handle)
 }
+
