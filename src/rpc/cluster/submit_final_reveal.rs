@@ -72,7 +72,6 @@ pub fn broadcast_final_reveal(
         sync_decryption_key,
     };
 
-    // TODO: Add to make actual signature
     let signature = create_signature(
         context.config().signer(),
         &serialize_to_bincode(&payload).unwrap(),

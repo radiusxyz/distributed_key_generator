@@ -275,15 +275,23 @@ async fn initialize_solve_rpc_server(app_state: &AppState) -> Result<JoinHandle<
     let prefix = log_prefix_role_and_address(app_state.config());
     let solver_rpc_url = app_state.config().solver_rpc_url().clone().unwrap();
 
-    let rpc_server = RpcServer::new(app_state.clone())
-        .register_rpc_method::<common::GetSkdeParams>()?
-        .register_rpc_method::<solver::SubmitDecryptionKey>()?
-        .register_rpc_method::<solver::SolverSyncFinalizedPartialKeys>()?
+    let rpc_server_builder = RpcServer::new(app_state.clone());
+
+    let rpc_server = if app_state.config().is_leader() {
+        rpc_server_builder
+            .register_rpc_method::<common::GetSkdeParams>()?
+            .register_rpc_method::<solver::SubmitDecryptionKey>()?
+    } else {
+        rpc_server_builder
+            .register_rpc_method::<solver::SolverSyncFinalizedPartialKeys>()?
+    };
+
+    let rpc_server = rpc_server
         .init(solver_rpc_url.clone())
         .await
         .map_err(Error::RpcServerError)?;
 
-    info!("{} Started solver RPC server at {}", prefix, solver_rpc_url);
+    info!("{} Started solve RPC server at {}", prefix, solver_rpc_url);
 
     let handle = tokio::spawn(async move {
         rpc_server.stopped().await;
@@ -291,3 +299,4 @@ async fn initialize_solve_rpc_server(app_state: &AppState) -> Result<JoinHandle<
 
     Ok(handle)
 }
+

@@ -120,7 +120,6 @@ pub fn broadcast_partial_key_ack(
         ack_timestamp,
     };
 
-    // TODO: Add to make actual signature
     let signature = create_signature(
         context.config().signer(),
         &serialize_to_bincode(&payload).unwrap(),
