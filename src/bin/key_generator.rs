@@ -4,7 +4,7 @@ use distributed_key_generation::{
     rpc::{
         authority::GetAuthorizedSkdeParams,
         cluster::{self, GetKeyGeneratorList, GetKeyGeneratorRpcUrlListResponse},
-        external, internal, solver,
+        common, external, internal, solver,
     },
     skde_params::fetch_skde_params_with_retry,
     state::AppState,
@@ -201,7 +201,7 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
         .register_rpc_method::<cluster::SyncDecryptionKey>()?
         .register_rpc_method::<cluster::SubmitPartialKey>()?
         .register_rpc_method::<cluster::RequestSubmitPartialKey>()?
-        .register_rpc_method::<cluster::GetSkdeParams>()?
+        .register_rpc_method::<common::GetSkdeParams>()?
         .init(cluster_rpc_url.clone())
         .await
         .map_err(error::Error::RpcServerError)?;
@@ -228,7 +228,7 @@ async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHand
         .register_rpc_method::<external::GetDecryptionKey>()?
         .register_rpc_method::<external::GetLatestEncryptionKey>()?
         .register_rpc_method::<external::GetLatestSessionId>()?
-        .register_rpc_method::<external::GetSkdeParams>()?
+        .register_rpc_method::<common::GetSkdeParams>()?
         .init(external_rpc_url.clone())
         .await
         .map_err(error::Error::RpcServerError)?;
@@ -276,7 +276,7 @@ async fn initialize_solve_rpc_server(app_state: &AppState) -> Result<JoinHandle<
     let solver_rpc_url = app_state.config().solver_rpc_url().clone().unwrap();
 
     let rpc_server = RpcServer::new(app_state.clone())
-        .register_rpc_method::<solver::GetSkdeParams>()?
+        .register_rpc_method::<common::GetSkdeParams>()?
         .register_rpc_method::<solver::SubmitDecryptionKey>()?
         .register_rpc_method::<solver::SolverSyncFinalizedPartialKeys>()?
         .init(solver_rpc_url.clone())

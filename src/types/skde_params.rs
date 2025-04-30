@@ -11,7 +11,7 @@ use super::{Config, Role};
 use crate::{
     rpc::{
         authority::{GetAuthorizedSkdeParams, GetAuthorizedSkdeParamsResponse},
-        cluster, solver,
+        common::{GetSkdeParams, GetSkdeParamsResponse},
     },
     task::authority_setup::SignedSkdeParams,
     utils::{log::log_prefix_role_and_address, signature::verify_signature},
@@ -120,11 +120,11 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                     }
                 };
 
-                let result: Result<cluster::GetSkdeParamsResponse, RpcClientError> = client
+                let result: Result<GetSkdeParamsResponse, RpcClientError> = client
                     .request(
                         leader_url,
-                        cluster::GetSkdeParams::method(),
-                        &cluster::GetSkdeParams,
+                        GetSkdeParams::method(),
+                        &GetSkdeParams,
                         Id::Null,
                     )
                     .await;
@@ -168,11 +168,11 @@ async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {
                     }
                 };
 
-                let result: Result<solver::GetSkdeParamsResponse, RpcClientError> = client
+                let result: Result<GetSkdeParamsResponse, RpcClientError> = client
                     .request(
                         leader_url,
-                        solver::GetSkdeParams::method(),
-                        &solver::GetSkdeParams,
+                        GetSkdeParams::method(),
+                        &GetSkdeParams,
                         Id::Null,
                     )
                     .await;

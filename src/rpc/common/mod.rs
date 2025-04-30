@@ -1,8 +1,24 @@
+mod get_skde_params;
+
 use radius_sdk::signature::{Address, Signature};
 use serde::{Deserialize, Serialize};
-use skde::key_generation::PartialKey as SkdePartialKey;
+use skde::{delay_encryption::SkdeParams, key_generation::PartialKey as SkdePartialKey};
 
-use crate::SessionId;
+use crate::{task::authority_setup::SignedSkdeParams, SessionId};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct GetSkdeParams;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct GetSkdeParamsResponse {
+    pub signed_skde_params: SignedSkdeParams,
+}
+
+impl GetSkdeParamsResponse {
+    pub fn into_skde_params(self) -> SkdeParams {
+        self.signed_skde_params.params
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncFinalizedPartialKeysPayload {

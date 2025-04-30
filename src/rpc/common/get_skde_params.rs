@@ -1,20 +1,11 @@
 use crate::{
-    rpc::prelude::*, task::authority_setup::SignedSkdeParams, utils::signature::create_signature,
+    rpc::{
+        common::{GetSkdeParams, GetSkdeParamsResponse},
+        prelude::*,
+    },
+    task::authority_setup::SignedSkdeParams,
+    utils::signature::create_signature,
 };
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct GetSkdeParams;
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct GetSkdeParamsResponse {
-    pub signed_skde_params: SignedSkdeParams,
-}
-
-impl GetSkdeParamsResponse {
-    pub fn into_skde_params(self) -> skde::delay_encryption::SkdeParams {
-        self.signed_skde_params.params
-    }
-}
 
 impl RpcParameter<AppState> for GetSkdeParams {
     type Response = GetSkdeParamsResponse;
