@@ -3,28 +3,27 @@ use radius_sdk::{
     signature::Signature,
 };
 use serde::{Deserialize, Serialize};
-use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::info;
 
 use crate::{
-    rpc::prelude::*,
-    utils::{log_prefix_role_and_address, perform_randomized_aggregation},
+    error::KeyGenerationError,
+    rpc::{
+        common::{PartialKeyPayload, SyncFinalizedPartialKeysPayload},
+        prelude::*,
+    },
+    utils::{
+        key::perform_randomized_aggregation, log::log_prefix_role_and_address,
+        signature::verify_signature,
+    },
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SyncFinalizedPartialKeys {
+pub struct ClusterSyncFinalizedPartialKeys {
     pub signature: Signature,
     pub payload: SyncFinalizedPartialKeysPayload,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SyncFinalizedPartialKeysPayload {
-    pub partial_key_submissions: Vec<PartialKeySubmission>,
-    pub session_id: SessionId,
-    pub ack_timestamp: u64,
-}
-
-impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
+impl RpcParameter<AppState> for ClusterSyncFinalizedPartialKeys {
     type Response = ();
 
     fn method() -> &'static str {
@@ -32,8 +31,14 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        let prefix = log_prefix_role_and_address(&context.config());
-        // let sender_address = verify_signature(&self.signature, &self.payload)?;
+        let sender_address = verify_signature(&self.signature, &self.payload)?;
+        if sender_address != self.payload.sender {
+            return Err(RpcError::from(KeyGenerationError::InternalError(
+                "Signature does not match sender address".into(),
+            )));
+        }
+
+        let prefix = log_prefix_role_and_address(context.config());
 
         let SyncFinalizedPartialKeysPayload {
             partial_key_submissions,
@@ -57,6 +62,41 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
             .iter()
             .map(|partial_key_submission| partial_key_submission.payload.partial_key.clone())
             .collect();
+        for (i, (((sender, key), timestamp), sig)) in self
+            .payload
+            .partial_key_senders
+            .iter()
+            .zip(self.payload.partial_keys.iter())
+            .zip(self.payload.submit_timestamps.iter())
+            .zip(self.payload.signatures.iter())
+            .enumerate()
+        {
+            let signable_message = PartialKeyPayload {
+                sender: sender.clone(),
+                partial_key: key.clone(),
+                submit_timestamp: *timestamp,
+                session_id: self.payload.session_id,
+            };
+
+            let signer = verify_signature(sig, &signable_message)?;
+
+            if &signer != sender {
+                return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+                    format!(
+                        "[Cluster] Signature mismatch at index {}: expected {:?}, got {:?}",
+                        i, sender, signer
+                    ),
+                )));
+            }
+
+            PartialKeyAddressList::apply(self.payload.session_id, |list| {
+                list.insert(sender.clone());
+            })?;
+
+            PartialKey::new(key.clone()).put(self.payload.session_id, sender)?;
+        }
+
+        // TODO: Store this encryption key if signatures are valid and use for decryption key verification
         perform_randomized_aggregation(&context, *session_id, &partial_keys);
 
         // TODO: Signature verification
@@ -69,6 +109,8 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
         //         )));
         //     }
         // }
+
+        // TODO: Calculate and store encryption key if signatures are valid
 
         Ok(())
     }

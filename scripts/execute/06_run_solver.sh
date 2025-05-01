@@ -42,7 +42,7 @@ partial_key_aggregation_cycle_ms = 1500
 EOL
 
 # Set private key
-echo -n "0x59c6995e998f97a5a0044966f094538c5f2e60c4d637ba3d7a7c4e5c5b97a813" > "$NODE_DATA_DIR/signing_key"
+echo -n "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a" > "$NODE_DATA_DIR/signing_key"
 
 # Copy and run binary
 cp -f "$BINARY_PATH" "$NODE_DATA_DIR/key-generator"

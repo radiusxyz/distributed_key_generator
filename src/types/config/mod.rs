@@ -247,31 +247,19 @@ impl Config {
     }
 
     pub fn is_leader(&self) -> bool {
-        match &self.role {
-            Role::Leader => true,
-            _ => false,
-        }
+        matches!(&self.role, Role::Leader)
     }
 
     pub fn is_committee(&self) -> bool {
-        match &self.role {
-            Role::Committee => true,
-            _ => false,
-        }
+        matches!(&self.role, Role::Committee)
     }
 
     pub fn is_solver(&self) -> bool {
-        match &self.role {
-            Role::Solver => true,
-            _ => false,
-        }
+        matches!(&self.role, Role::Solver)
     }
 
     pub fn is_verifier(&self) -> bool {
-        match &self.role {
-            Role::Verifier => true,
-            _ => false,
-        }
+        matches!(&self.role, Role::Verifier)
     }
 
     pub fn external_port(&self) -> Result<String, ConfigError> {

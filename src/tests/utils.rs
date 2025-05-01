@@ -22,10 +22,13 @@ use tracing_subscriber::fmt;
 
 use crate::{
     config::Role,
-    rpc::cluster::{GetKeyGeneratorList, GetSkdeParams, GetSkdeParamsResponse, PartialKeyPayload},
+    rpc::{
+        cluster::GetKeyGeneratorList,
+        common::{GetSkdeParams, GetSkdeParamsResponse, PartialKeyPayload},
+    },
     types::{Config, ConfigOption},
-    utils::{create_signature, get_current_timestamp},
-    SessionId,
+    utils::{signature::create_signature, time::get_current_timestamp},
+    AppState, SessionId,
 };
 
 const TEST_PRIVATE_KEYS: [&str; 10] = [
@@ -414,6 +417,7 @@ pub async fn generate_partial_key_with_proof(
 /// Submits a partial key from a committee node to a leader node    
 /// Should be removed after test_integration_submit_partial_key_and_ack.rs is removed
 pub async fn submit_partial_key_to_leader(
+    context: &AppState,
     committee_address: Address,
     leader_port: u16,
     partial_key: skde::key_generation::PartialKey,
@@ -436,7 +440,11 @@ pub async fn submit_partial_key_to_leader(
     };
 
     // Generate signature
-    let signature = create_signature(&serialize_to_bincode(&payload).unwrap());
+    let signature = create_signature(
+        context.config().signer(),
+        &serialize_to_bincode(&payload).unwrap(),
+    )
+    .unwrap();
 
     // Create JSON parameter
     let parameter = serde_json::json!({

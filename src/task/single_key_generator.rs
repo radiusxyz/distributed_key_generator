@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use bincode::serialize;
 use radius_sdk::json_rpc::{
     client::{Id, RpcClient, RpcClientError},
     server::{RpcError, RpcParameter},
@@ -11,22 +10,23 @@ use tracing::{debug, error, info};
 use crate::{
     get_current_timestamp,
     rpc::{
-        cluster::{self, RequestSubmitPartialKey},
-        solver,
+        cluster::{ClusterSyncFinalizedPartialKeys, RequestSubmitPartialKey},
+        common::{PartialKeyPayload, SyncFinalizedPartialKeysPayload},
+        solver::SolverSyncFinalizedPartialKeys,
     },
     state::AppState,
     types::*,
     utils::{
-        create_signature, initialize_next_session_from_current, log_prefix_role_and_address,
-        log_prefix_with_session_id,
+        initialize_next_session_from_current,
+        log::{log_prefix_role_and_address, log_prefix_with_session_id},
+        signature::create_signature,
     },
 };
 pub const THRESHOLD: usize = 1;
 
-// TODO: Decouple logic according to roles.
 // Spawns a loop that periodically generates partial keys and aggregates them
 pub fn run_single_key_generator(context: AppState) {
-    let prefix = log_prefix_role_and_address(&context.config());
+    let prefix = log_prefix_role_and_address(context.config());
     tokio::spawn(async move {
         let partial_key_generation_cycle_ms = context.config().partial_key_generation_cycle_ms();
         let partial_key_aggregation_cycle_ms = context.config().partial_key_aggregation_cycle_ms();
@@ -145,7 +145,7 @@ pub async fn broadcast_finalized_partial_keys(
     context: &AppState,
     session_id: SessionId,
 ) -> Result<(), RpcError> {
-    let prefix = log_prefix_with_session_id(&context.config(), &session_id);
+    let prefix = log_prefix_with_session_id(context.config(), &session_id);
 
     // TODO: needs wait to collect partial keys, instead of loop
     let list = loop {
@@ -197,17 +197,17 @@ pub async fn broadcast_finalized_partial_keys(
             ack_timestamp: get_current_timestamp(),
         };
 
-    let signature = create_signature(&serialize(&payload)?);
+    let signature = create_signature(context.config().signer(), &payload).unwrap();
     let message = cluster::SyncFinalizedPartialKeys { signature, payload };
 
     let peers = KeyGeneratorList::get()?.get_all_key_generator_rpc_url_list();
     let rpc_client = RpcClient::new()?;
-    let prefix = log_prefix_with_session_id(&context.config(), &session_id);
+    let prefix = log_prefix_with_session_id(context.config(), &session_id);
 
     if let Err(err) = rpc_client
         .multicast(
             peers,
-            cluster::SyncFinalizedPartialKeys::method(),
+            ClusterSyncFinalizedPartialKeys::method(),
             &message,
             Id::Null,
         )
@@ -221,12 +221,14 @@ pub async fn broadcast_finalized_partial_keys(
         );
     }
 
+    let message = SolverSyncFinalizedPartialKeys { signature, payload };
+
     let solver_url = context.config().solver_solver_rpc_url().clone().unwrap();
     let rpc_client = RpcClient::new()?;
     let response = rpc_client
         .request::<_, ()>(
             solver_url.clone(),
-            solver::SyncFinalizedPartialKeys::method(),
+            SolverSyncFinalizedPartialKeys::method(),
             &message,
             Id::Null,
         )

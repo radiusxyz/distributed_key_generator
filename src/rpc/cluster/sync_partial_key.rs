@@ -10,8 +10,13 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
+    error::KeyGenerationError,
     rpc::prelude::*,
-    utils::{create_signature, get_current_timestamp, log_prefix_role_and_address, AddressExt},
+    utils::{
+        log::{log_prefix_role_and_address, AddressExt},
+        signature::{create_signature, verify_signature},
+        time::get_current_timestamp,
+    },
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -35,8 +40,14 @@ impl RpcParameter<AppState> for SyncPartialKey {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        let prefix = log_prefix_role_and_address(&context.config());
-        // let sender_address = verify_signature(&self.signature, &self.payload)?;
+        let sender_address = verify_signature(&self.signature, &self.payload)?;
+        if sender_address != self.payload.sender {
+            return Err(RpcError::from(KeyGenerationError::InternalError(
+                "Signature does not match sender address".into(),
+            )));
+        }
+
+        let prefix = log_prefix_role_and_address(context.config());
 
         info!(
             "{} Received partial key ACK - sender:{:?}, session_id: {:?
@@ -80,9 +91,9 @@ pub fn broadcast_partial_key_ack(
     partial_key_submission: PartialKeySubmission,
     context: &AppState,
 ) -> Result<(), Error> {
-    let prefix = log_prefix_role_and_address(&context.config());
+    let prefix = log_prefix_role_and_address(context.config());
     let key_generator_rpc_url_list =
-        KeyGeneratorList::get()?.get_other_key_generator_rpc_url_list(&context.config().address());
+        KeyGeneratorList::get()?.get_other_key_generator_rpc_url_list(context.config().address());
 
     info!(
         "{} Broadcasting partial key acknowledgment - sender: {}, session_id: {:?}, timestamp: {}",
@@ -100,8 +111,11 @@ pub fn broadcast_partial_key_ack(
         ack_timestamp,
     };
 
-    // TODO: Add to make actual signature
-    let signature = create_signature(&serialize_to_bincode(&payload).unwrap());
+    let signature = create_signature(
+        context.config().signer(),
+        &serialize_to_bincode(&payload).unwrap(),
+    )
+    .unwrap();
 
     let parameter = SyncPartialKey { signature, payload };
 

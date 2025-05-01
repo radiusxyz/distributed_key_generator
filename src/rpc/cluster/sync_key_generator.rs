@@ -8,7 +8,7 @@ use tracing::info;
 use crate::{
     state::AppState,
     types::{KeyGenerator, KeyGeneratorList},
-    utils::log_prefix_role_and_address,
+    utils::log::log_prefix_role_and_address,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -32,7 +32,7 @@ impl RpcParameter<AppState> for SyncKeyGenerator {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        let prefix = log_prefix_role_and_address(&context.config());
+        let prefix = log_prefix_role_and_address(context.config());
         info!(
             "{} Sync key generator - address: {:?} / cluster_rpc_url: {:?} / external_rpc_url: {:?}",
             prefix,

@@ -1,9 +1,8 @@
 use radius_sdk::{
     json_rpc::server::{RpcError, RpcParameter},
-    signature::{Address, Signature},
+    signature::Signature,
 };
 use serde::{Deserialize, Serialize};
-use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::{error, info, warn};
 
 use super::submit_decryption_key::{
@@ -11,35 +10,24 @@ use super::submit_decryption_key::{
 };
 use crate::{
     get_current_timestamp,
-    rpc::prelude::*,
+    rpc::{
+        common::{PartialKeyPayload, SyncFinalizedPartialKeysPayload},
+        prelude::*,
+    },
     utils::{
-        calculate_decryption_key, create_signature, log_prefix_role_and_address,
-        perform_randomized_aggregation,
+        key::{calculate_decryption_key, perform_randomized_aggregation},
+        log::log_prefix_role_and_address,
+        signature::{create_signature, verify_signature},
     },
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct PartialKeyPayload {
-    pub sender: Address,
-    pub partial_key: SkdePartialKey,
-    pub submit_timestamp: u64,
-    pub session_id: SessionId,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SyncFinalizedPartialKeys {
+pub struct SolverSyncFinalizedPartialKeys {
     pub signature: Signature,
     pub payload: SyncFinalizedPartialKeysPayload,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SyncFinalizedPartialKeysPayload {
-    pub partial_key_submissions: Vec<PartialKeySubmission>,
-    pub session_id: SessionId,
-    pub ack_timestamp: u64,
-}
-
-impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
+impl RpcParameter<AppState> for SolverSyncFinalizedPartialKeys {
     type Response = ();
 
     fn method() -> &'static str {
@@ -47,31 +35,40 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        let prefix = log_prefix_role_and_address(&context.config());
-        // let sender_address = verify_signature(&self.signature, &self.payload)?;
+        let sender_address = verify_signature(&self.signature, &self.payload)?;
+        if sender_address != self.payload.sender {
+            return Err(RpcError::from(KeyGenerationError::InternalError(
+                "Signature does not match sender address".into(),
+            )));
+        }
+
+        let prefix = log_prefix_role_and_address(context.config());
 
         let payload = self.payload.clone();
 
         info!(
             "{} Received finalized partial keys ACK - partial_key_submissions.len(): {:?}, session_id: {:?
             }, timestamp: {}",
-            prefix,
-            payload.partial_key_submissions.len(),
-            payload.session_id,
-            payload.ack_timestamp
+            prefix, payload.partial_key_senders, payload.session_id, payload.ack_timestamp
         );
 
-        // TODO: Signature verification
-        // for (sig, sender) in signatures.iter().zip(partial_key_senders) {
-        //     let signer = verify_signature(sig, &self.payload)?;
+        if payload.partial_key_senders.len() != payload.partial_keys.len()
+            || payload.partial_keys.len() != payload.submit_timestamps.len()
+        {
+            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+                "Mismatched vector lengths in partial key ACK payload".into(),
+            )));
+        }
 
-        //     if &signer != sender {
-        //         return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-        //             "Signature does not match sender".into(),
-        //         )));
-        //     }
-        // }
         PartialKeyAddressList::initialize(payload.session_id)?;
+
+        if payload.partial_key_senders.len() != payload.partial_keys.len()
+            || payload.partial_keys.len() != payload.signatures.len()
+        {
+            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+                "Mismatched vector lengths in partial key ACK payload".into(),
+            )));
+        }
 
         for (_, partial_key_submission) in payload.partial_key_submissions.iter().enumerate() {
             let sender = partial_key_submission.payload.sender.clone();
@@ -86,7 +83,7 @@ impl RpcParameter<AppState> for SyncFinalizedPartialKeys {
             // if &signer != sender {
             //     return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
             //         format!(
-            //             "Signature mismatch at index {:?}: expected {:?}, got {:?}",
+            //             "[Solver] Signature mismatch at index {}: expected {:?}, got {:?}",
             //             i, sender, signer
             //         ),
             //     )));
@@ -142,18 +139,18 @@ async fn derive_and_submit_decryption_key(
     DecryptionKey::new(decryption_key.clone()).put(session_id)?;
 
     // Submit to leader
-    let sender = context.config().signer().address();
+    let node = context.config().signer();
     let leader_rpc_url = context.config().leader_solver_rpc_url().clone().unwrap();
 
     let payload = SubmitDecryptionKeyPayload {
-        sender: sender.clone(),
+        sender: node.address().clone(),
         decryption_key: decryption_key.clone(),
         session_id,
         timestamp: get_current_timestamp(),
     };
 
     let timestamp = payload.timestamp;
-    let signature = create_signature(&bincode::serialize(&payload).unwrap());
+    let signature = create_signature(node, &payload).unwrap();
     let request = SubmitDecryptionKey { signature, payload };
 
     let rpc_client = RpcClient::new()?;

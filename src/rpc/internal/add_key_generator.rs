@@ -1,7 +1,10 @@
 use radius_sdk::signature::Address;
 use tracing::{info, warn};
 
-use crate::rpc::{cluster::SyncKeyGenerator, prelude::*};
+use crate::{
+    rpc::{cluster::SyncKeyGenerator, prelude::*},
+    utils::log::log_prefix_role_and_address,
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AddKeyGenerator {
@@ -25,14 +28,17 @@ impl RpcParameter<AppState> for AddKeyGenerator {
         "add_key_generator"
     }
 
-    async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
+    async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let prefix = log_prefix_role_and_address(context.config());
+
         let key_generator_list = KeyGeneratorList::get()?;
         if key_generator_list
             .iter()
             .any(|kg| kg.address() == &self.message.address)
         {
             warn!(
-                "Duplicate key generator registration - address: {:?} / cluster_rpc_url: {:?} / external_rpc_url: {:?}",
+                "[{}] Duplicate key generator registration - address: {:?} / cluster_rpc_url: {:?} / external_rpc_url: {:?}",
+                prefix,
                 self.message.address.as_hex_string(),
                 self.message.cluster_rpc_url,
                 self.message.external_rpc_url
@@ -41,7 +47,8 @@ impl RpcParameter<AppState> for AddKeyGenerator {
         }
 
         info!(
-            "Add distributed key generation - address: {:?} / cluster_rpc_url: {:?} / external_rpc_url: {:?}",
+            "[{}] Add distributed key generation - address: {:?} / cluster_rpc_url: {:?} / external_rpc_url: {:?}",
+            prefix,
             self.message.address.as_hex_string(),
             self.message.cluster_rpc_url,
             self.message.external_rpc_url
@@ -57,20 +64,22 @@ impl RpcParameter<AppState> for AddKeyGenerator {
             key_generator_list.insert(key_generator);
         })?;
 
-        sync_key_generator(self);
+        sync_key_generator(context, self);
 
         Ok(())
     }
 }
 
-pub fn sync_key_generator(add_key_generator: AddKeyGenerator) {
+pub fn sync_key_generator(context: AppState, add_key_generator: AddKeyGenerator) {
+    let prefix = log_prefix_role_and_address(context.config());
     let key_generator_rpc_url_list = KeyGeneratorList::get()
         .unwrap()
         .get_all_key_generator_rpc_url_list();
 
     tokio::spawn(async move {
         info!(
-            "Sync distributed key generation - address: {:?} / cluster_rpc_url: {:?} / rpc_client_count: {:?}",
+            "[{}] Sync distributed key generation - address: {:?} / cluster_rpc_url: {:?} / rpc_client_count: {:?}",
+            prefix,
             add_key_generator.message.address.as_hex_string(),
             add_key_generator.message.cluster_rpc_url,
             key_generator_rpc_url_list.len()

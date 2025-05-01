@@ -5,7 +5,7 @@ use radius_sdk::json_rpc::client::{Id, RpcClient};
 use crate::{
     rpc::{
         authority::GetAuthorizedSkdeParams,
-        cluster::{GetSkdeParams, GetSkdeParamsResponse},
+        common::{GetSkdeParams, GetSkdeParamsResponse},
     },
     tests::utils::{cleanup_existing_processes, init_test_environment, start_node},
     Role,
