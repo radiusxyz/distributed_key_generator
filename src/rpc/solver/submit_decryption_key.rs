@@ -52,6 +52,11 @@ impl RpcParameter<AppState> for SubmitDecryptionKey {
             prefix, self.payload.session_id, self.payload.timestamp
         );
 
+        // TODO: Before storing the decryption key,
+        // - Retrieve the previously stored encryption key for the session
+        // - Verify that the decryption key is correctly derived from the encryption key
+        // Only after successful verification, store the decryption key with put.
+
         broadcast_decryption_key_ack(
             self.payload.session_id,
             self.payload.decryption_key.clone(),

@@ -27,6 +27,7 @@ pub struct SyncPartialKey {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncPartialKeyPayload {
+    pub sender: Address,
     pub partial_key_submission: PartialKeySubmission,
     pub session_id: SessionId,
     pub ack_timestamp: u64,
@@ -40,6 +41,8 @@ impl RpcParameter<AppState> for SyncPartialKey {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let prefix = log_prefix_role_and_address(context.config());
+
         let sender_address = verify_signature(&self.signature, &self.payload)?;
         if sender_address != self.payload.sender {
             return Err(RpcError::from(KeyGenerationError::InternalError(
@@ -47,7 +50,10 @@ impl RpcParameter<AppState> for SyncPartialKey {
             )));
         }
 
-        let prefix = log_prefix_role_and_address(context.config());
+        // If sender is me, ignore
+        if self.payload.sender == context.config().address() {
+            return Ok(());
+        }
 
         info!(
             "{} Received partial key ACK - sender:{:?}, session_id: {:?
@@ -62,12 +68,7 @@ impl RpcParameter<AppState> for SyncPartialKey {
             self.payload.ack_timestamp
         );
 
-        // TODO: Leader verification (only leader can send ACK)
-
-        // If sender is me, ignore
-        if self.payload.partial_key_submission.payload.sender == context.config().address() {
-            return Ok(());
-        }
+        // TODO: Check partial key submission is valid
 
         PartialKeyAddressList::initialize(self.payload.session_id)?;
         PartialKeyAddressList::apply(self.payload.session_id, |list| {
@@ -75,7 +76,7 @@ impl RpcParameter<AppState> for SyncPartialKey {
         })?;
 
         let partial_key_submission =
-            PartialKeySubmission::clone_from(&self.payload.partial_key_submission);
+            PartialKeySubmission::new(&self.payload.partial_key_submission);
         partial_key_submission.put(
             self.payload.session_id,
             &self.payload.partial_key_submission.payload.sender,
@@ -106,6 +107,7 @@ pub fn broadcast_partial_key_ack(
     let ack_timestamp = get_current_timestamp();
 
     let payload = SyncPartialKeyPayload {
+        sender: context.config().address().clone(),
         partial_key_submission: partial_key_submission.clone(),
         session_id: partial_key_submission.payload.session_id,
         ack_timestamp,

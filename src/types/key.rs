@@ -7,7 +7,7 @@ use radius_sdk::{
 use serde::{Deserialize, Serialize};
 use skde::key_aggregation::AggregatedKey as SkdeAggregatedKey;
 
-use crate::rpc::cluster::{PartialKeyPayload, SubmitPartialKey};
+use crate::rpc::{cluster::SubmitPartialKey, common::PartialKeyPayload};
 
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
 #[kvstore(key(session_id: SessionId, address: &Address))]
@@ -17,17 +17,17 @@ pub struct PartialKeySubmission {
 }
 
 impl PartialKeySubmission {
+    pub fn new(partial_key_submission: &PartialKeySubmission) -> Self {
+        Self {
+            signature: partial_key_submission.signature.clone(),
+            payload: partial_key_submission.payload.clone(),
+        }
+    }
+
     pub fn from_submit_partial_key(submit_partial_key: &SubmitPartialKey) -> Self {
         Self {
             signature: submit_partial_key.signature.clone(),
             payload: submit_partial_key.payload.clone(),
-        }
-    }
-
-    pub fn clone_from(partial_key_submission: &PartialKeySubmission) -> Self {
-        Self {
-            signature: partial_key_submission.signature.clone(),
-            payload: partial_key_submission.payload.clone(),
         }
     }
 }

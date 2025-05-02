@@ -11,13 +11,13 @@ use crate::{
     get_current_timestamp,
     rpc::{
         cluster::{ClusterSyncFinalizedPartialKeys, RequestSubmitPartialKey},
-        common::{PartialKeyPayload, SyncFinalizedPartialKeysPayload},
+        common::SyncFinalizedPartialKeysPayload,
         solver::SolverSyncFinalizedPartialKeys,
     },
     state::AppState,
     types::*,
     utils::{
-        initialize_next_session_from_current,
+        key::initialize_next_session_from_current,
         log::{log_prefix_role_and_address, log_prefix_with_session_id},
         signature::create_signature,
     },
@@ -190,15 +190,18 @@ pub async fn broadcast_finalized_partial_keys(
     //     })
     //     .collect();
 
-    let payload: cluster::SyncFinalizedPartialKeysPayload =
-        cluster::SyncFinalizedPartialKeysPayload {
-            partial_key_submissions,
-            session_id,
-            ack_timestamp: get_current_timestamp(),
-        };
+    let payload: SyncFinalizedPartialKeysPayload = SyncFinalizedPartialKeysPayload {
+        sender: context.config().address().clone(),
+        partial_key_submissions,
+        session_id,
+        ack_timestamp: get_current_timestamp(),
+    };
 
     let signature = create_signature(context.config().signer(), &payload).unwrap();
-    let message = cluster::SyncFinalizedPartialKeys { signature, payload };
+    let message = ClusterSyncFinalizedPartialKeys {
+        signature: signature.clone(),
+        payload: payload.clone(),
+    };
 
     let peers = KeyGeneratorList::get()?.get_all_key_generator_rpc_url_list();
     let rpc_client = RpcClient::new()?;
