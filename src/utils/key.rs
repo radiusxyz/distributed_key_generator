@@ -11,8 +11,15 @@ use tracing::info;
 
 use crate::{
     error::KeyGenerationError, utils::log::log_prefix_role_and_address, AggregatedKey, AppState,
-    DecryptionKey, SessionId,
+    DecryptionKey, PartialKeyAddressList, SessionId,
 };
+
+pub fn initialize_next_session_from_current(current_session_id: &SessionId) {
+    let mut next_session_id = current_session_id.clone();
+    next_session_id.increase_session_id();
+
+    PartialKeyAddressList::initialize(next_session_id).unwrap();
+}
 
 // TODO: A more robust mechanism to handle delayed or missing solve operations should be designed.
 pub fn perform_randomized_aggregation(

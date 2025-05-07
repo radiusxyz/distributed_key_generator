@@ -11,12 +11,13 @@ use crate::{
     get_current_timestamp,
     rpc::{
         cluster::{ClusterSyncFinalizedPartialKeys, RequestSubmitPartialKey},
-        common::{PartialKeyPayload, SyncFinalizedPartialKeysPayload},
+        common::SyncFinalizedPartialKeysPayload,
         solver::SolverSyncFinalizedPartialKeys,
     },
     state::AppState,
     types::*,
     utils::{
+        key::initialize_next_session_from_current,
         log::{log_prefix_role_and_address, log_prefix_with_session_id},
         signature::create_signature,
     },
@@ -29,6 +30,7 @@ pub fn run_single_key_generator(context: AppState) {
     tokio::spawn(async move {
         let partial_key_generation_cycle_ms = context.config().partial_key_generation_cycle_ms();
         let partial_key_aggregation_cycle_ms = context.config().partial_key_aggregation_cycle_ms();
+        PartialKeyAddressList::initialize(SessionId::from(0)).unwrap();
 
         info!(
             "{} Partial key generation cycle: {} ms, aggregation cycle: {} ms",
@@ -41,9 +43,11 @@ pub fn run_single_key_generator(context: AppState) {
 
             let mut session_id = SessionId::get_mut().unwrap();
             let current_session_id = session_id.clone();
+            initialize_next_session_from_current(&current_session_id);
+
             let prefix: String = log_prefix_with_session_id(context.config(), &current_session_id);
 
-            info!("{} Waiting to start session", prefix,);
+            info!("{} 🔑🗝️🔑 Waiting to start session 🔑🗝️🔑", prefix,);
 
             tokio::spawn(async move {
                 let key_generator_rpc_url_list = KeyGeneratorList::get()
@@ -60,14 +64,14 @@ pub fn run_single_key_generator(context: AppState) {
                 )
                 .unwrap();
 
-                let partial_key_list = partial_key_address_list
+                let partial_key_submissions = partial_key_address_list
                     .get_partial_key_list(current_session_id)
-                    .unwrap();
+                    .unwrap_or_default();
 
                 info!(
                     "{} Partial key list length: {}",
                     prefix,
-                    partial_key_list.len()
+                    partial_key_submissions.len()
                 );
 
                 if partial_key_address_list.is_empty() {
@@ -166,37 +170,31 @@ pub async fn broadcast_finalized_partial_keys(
         sleep(Duration::from_millis(100)).await;
     };
 
-    let partial_keys = list.get_partial_key_list(session_id).unwrap();
-    let partial_senders = list.to_vec();
-
-    // TODO: Add to make actual signature from storage
+    // TODO: Add to make actual signature
     // TODO: Timestampes, signatures, etc. should be collected assigned to each partial key
+    let partial_key_submissions = list.get_partial_key_list(session_id).unwrap();
 
-    let submit_timestamps = vec![get_current_timestamp(); partial_keys.len()];
-    let ack_timestamp = get_current_timestamp();
+    // TODO: Replace actual PartialKeySubmissions
+    // let partial_key_submissions = partial_keys
+    //     .iter()
+    //     .zip(&partial_senders)
+    //     .zip(&signatures)
+    //     .map(|((key, sender), signature)| SubmitPartialKey {
+    //         signature: signature.clone(),
+    //         payload: PartialKeyPayload {
+    //             partial_key: key.clone(),
+    //             sender: sender.clone(),
+    //             submit_timestamp: submit_timestamps[i],
+    //             session_id,
+    //         },
+    //     })
+    //     .collect();
 
-    let signatures: Vec<radius_sdk::signature::Signature> = partial_keys
-        .iter()
-        .zip(&partial_senders)
-        .zip(&submit_timestamps)
-        .map(|((key, sender), timestamp)| {
-            let message = PartialKeyPayload {
-                sender: sender.clone(),
-                partial_key: key.clone(),
-                submit_timestamp: *timestamp,
-                session_id,
-            };
-            create_signature(context.config().signer(), &message).unwrap()
-        })
-        .collect();
-    let payload = SyncFinalizedPartialKeysPayload {
+    let payload: SyncFinalizedPartialKeysPayload = SyncFinalizedPartialKeysPayload {
         sender: context.config().address().clone(),
-        partial_key_senders: partial_senders.clone(),
-        partial_keys: partial_keys.clone(),
+        partial_key_submissions,
         session_id,
-        submit_timestamps: submit_timestamps.clone(),
-        signatures: signatures.clone(),
-        ack_timestamp: ack_timestamp,
+        ack_timestamp: get_current_timestamp(),
     };
 
     let signature = create_signature(context.config().signer(), &payload).unwrap();

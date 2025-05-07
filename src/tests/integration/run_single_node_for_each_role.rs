@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[tokio::test]
-async fn test_single_node_for_each_role() {
+async fn test_run_single_node_for_each_role() {
     // Initialize test environment
     init_test_environment("submit partial key and ack test");
 

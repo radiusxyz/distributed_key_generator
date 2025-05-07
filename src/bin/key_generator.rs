@@ -282,8 +282,7 @@ async fn initialize_solve_rpc_server(app_state: &AppState) -> Result<JoinHandle<
             .register_rpc_method::<common::GetSkdeParams>()?
             .register_rpc_method::<solver::SubmitDecryptionKey>()?
     } else {
-        rpc_server_builder
-            .register_rpc_method::<solver::SolverSyncFinalizedPartialKeys>()?
+        rpc_server_builder.register_rpc_method::<solver::SolverSyncFinalizedPartialKeys>()?
     };
 
     let rpc_server = rpc_server
@@ -299,4 +298,3 @@ async fn initialize_solve_rpc_server(app_state: &AppState) -> Result<JoinHandle<
 
     Ok(handle)
 }
-

@@ -54,26 +54,14 @@ impl RpcParameter<AppState> for SubmitPartialKey {
             )));
         }
 
-        PartialKeyAddressList::initialize(self.payload.session_id)?;
-
-        // if the sender is incluided in
         PartialKeyAddressList::apply(self.payload.session_id, |list| {
-            // TODO: Should fix RACE condition
-            info!("{} Inserted partial key into list: {:?} ", prefix, list);
-            list.insert(self.payload.sender.clone());
+            list.insert(sender_address.clone());
         })?;
 
-        let partial_key = PartialKey::new(self.payload.partial_key.clone());
-        partial_key.put(self.payload.session_id, &self.payload.sender)?;
+        let partial_key_submission = PartialKeySubmission::from_submit_partial_key(&self);
+        partial_key_submission.put(self.payload.session_id, &self.payload.sender)?;
 
-        let _ = broadcast_partial_key_ack(
-            self.payload.sender,
-            self.payload.session_id,
-            self.payload.partial_key,
-            self.payload.submit_timestamp,
-            0,
-            &context,
-        );
+        let _ = broadcast_partial_key_ack(sender_address, partial_key_submission, &context);
 
         Ok(())
     }

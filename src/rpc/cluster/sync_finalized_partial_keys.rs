@@ -3,14 +3,12 @@ use radius_sdk::{
     signature::Signature,
 };
 use serde::{Deserialize, Serialize};
+use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::info;
 
 use crate::{
     error::KeyGenerationError,
-    rpc::{
-        common::{PartialKeyPayload, SyncFinalizedPartialKeysPayload},
-        prelude::*,
-    },
+    rpc::{common::SyncFinalizedPartialKeysPayload, prelude::*},
     utils::{
         key::perform_randomized_aggregation, log::log_prefix_role_and_address,
         signature::verify_signature,
@@ -41,47 +39,34 @@ impl RpcParameter<AppState> for ClusterSyncFinalizedPartialKeys {
         let prefix = log_prefix_role_and_address(context.config());
 
         let SyncFinalizedPartialKeysPayload {
-            partial_key_senders,
-            partial_keys,
+            sender,
+            partial_key_submissions,
             session_id,
             ack_timestamp,
-            signatures,
-            ..
         } = &self.payload;
 
         info!(
-            "{} Received finalized partial keys ACK - senders:{:?}, session_id: {:?
+            "{} Received finalized partial keys ACK - partial_key_submissions.len(): {:?}, session_id: {:?
             }, timestamp: {}",
-            prefix, partial_key_senders, session_id, ack_timestamp
+            prefix,
+            partial_key_submissions.len(),
+            session_id,
+            ack_timestamp
         );
 
-        // TODO: timestampes also should be collected assigned to each partial key
-        if partial_key_senders.len() != partial_keys.len() || partial_keys.len() != signatures.len()
-        {
-            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-                "Mismatched vector lengths in partial key ACK payload".into(),
-            )));
-        }
-
-        for (i, (((sender, key), timestamp), sig)) in self
-            .payload
-            .partial_key_senders
+        // Put aggregated key for a Cluster member
+        let partial_key_submissions =
+            PartialKeyAddressList::get(*session_id)?.get_partial_key_list(*session_id)?;
+        let partial_keys: Vec<SkdePartialKey> = partial_key_submissions
             .iter()
-            .zip(self.payload.partial_keys.iter())
-            .zip(self.payload.submit_timestamps.iter())
-            .zip(self.payload.signatures.iter())
-            .enumerate()
-        {
-            let signable_message = PartialKeyPayload {
-                sender: sender.clone(),
-                partial_key: key.clone(),
-                submit_timestamp: *timestamp,
-                session_id: self.payload.session_id,
-            };
+            .map(|partial_key_submission| partial_key_submission.payload.partial_key.clone())
+            .collect();
+        for (i, pk_submission) in self.payload.partial_key_submissions.iter().enumerate() {
+            let signable_message = pk_submission.payload.clone();
 
-            let signer = verify_signature(sig, &signable_message)?;
+            let signer = verify_signature(&pk_submission.signature, &signable_message)?;
 
-            if &signer != sender {
+            if signer != pk_submission.payload.sender {
                 return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
                     format!(
                         "[Cluster] Signature mismatch at index {}: expected {:?}, got {:?}",
@@ -94,7 +79,7 @@ impl RpcParameter<AppState> for ClusterSyncFinalizedPartialKeys {
                 list.insert(sender.clone());
             })?;
 
-            PartialKey::new(key.clone()).put(self.payload.session_id, sender)?;
+            PartialKeySubmission::new(pk_submission).put(self.payload.session_id, sender)?;
         }
 
         // TODO: Store this encryption key if signatures are valid and use for decryption key verification

@@ -11,10 +11,7 @@ use super::submit_decryption_key::{
 use crate::{
     error::KeyGenerationError,
     get_current_timestamp,
-    rpc::{
-        common::{PartialKeyPayload, SyncFinalizedPartialKeysPayload},
-        prelude::*,
-    },
+    rpc::{common::SyncFinalizedPartialKeysPayload, prelude::*},
     utils::{
         key::{calculate_decryption_key, perform_randomized_aggregation},
         log::log_prefix_role_and_address,
@@ -36,8 +33,14 @@ impl RpcParameter<AppState> for SolverSyncFinalizedPartialKeys {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let SyncFinalizedPartialKeysPayload {
+            sender,
+            partial_key_submissions,
+            session_id,
+            ..
+        } = &self.payload;
         let sender_address = verify_signature(&self.signature, &self.payload)?;
-        if sender_address != self.payload.sender {
+        if sender_address != sender {
             return Err(RpcError::from(KeyGenerationError::InternalError(
                 "Signature does not match sender address".into(),
             )));
@@ -48,61 +51,34 @@ impl RpcParameter<AppState> for SolverSyncFinalizedPartialKeys {
         let payload = self.payload.clone();
 
         info!(
-            "{} Received finalized partial keys ACK - senders:{:?}, session_id: {:?
+            "{} Received finalized partial keys ACK - partial_key_submissions.len(): {:?}, session_id: {:?
             }, timestamp: {}",
-            prefix, payload.partial_key_senders, payload.session_id, payload.ack_timestamp
+            prefix,
+            payload.partial_key_submissions.len(),
+            session_id,
+            payload.ack_timestamp
         );
 
-        if payload.partial_key_senders.len() != payload.partial_keys.len()
-            || payload.partial_keys.len() != payload.submit_timestamps.len()
-        {
-            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-                "Mismatched vector lengths in partial key ACK payload".into(),
-            )));
-        }
+        PartialKeyAddressList::initialize(*session_id)?;
 
-        PartialKeyAddressList::initialize(payload.session_id)?;
+        for (i, pk_submission) in partial_key_submissions.iter().enumerate() {
+            let sender = pk_submission.payload.sender.clone();
+            let signable_message = pk_submission.payload.clone();
 
-        if payload.partial_key_senders.len() != payload.partial_keys.len()
-            || payload.partial_keys.len() != payload.signatures.len()
-        {
-            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-                "Mismatched vector lengths in partial key ACK payload".into(),
-            )));
-        }
-
-        for (_i, (((sender, key), timestamp), sig)) in self
-            .payload
-            .partial_key_senders
-            .iter()
-            .zip(self.payload.partial_keys.iter())
-            .zip(self.payload.submit_timestamps.iter())
-            .zip(self.payload.signatures.iter())
-            .enumerate()
-        {
-            let signable_message = PartialKeyPayload {
-                sender: sender.clone(),
-                partial_key: key.clone(),
-                submit_timestamp: *timestamp,
-                session_id: self.payload.session_id,
-            };
-
-            let _signer = verify_signature(sig, &signable_message)?;
-            // TODO: After store the exact values
-            // if &signer != sender {
-            //     return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-            //         format!(
-            //             "[Solver] Signature mismatch at index {}: expected {:?}, got {:?}",
-            //             i, sender, signer
-            //         ),
-            //     )));
-            // }
-
+            let signer = verify_signature(&pk_submission.signature, &signable_message)?;
+            if signer != sender {
+                return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
+                    format!(
+                        "[Cluster] Signature mismatch at index {}: expected {:?}, got {:?}",
+                        i, sender, signer
+                    ),
+                )));
+            }
             PartialKeyAddressList::apply(self.payload.session_id, |list| {
                 list.insert(sender.clone());
             })?;
 
-            PartialKey::new(key.clone()).put(self.payload.session_id, sender)?;
+            PartialKeySubmission::new(pk_submission).put(self.payload.session_id, &sender)?;
         }
 
         tokio::spawn(async move {
@@ -130,7 +106,13 @@ async fn derive_and_submit_decryption_key(
     session_id: SessionId,
 ) -> Result<(), Error> {
     let prefix = log_prefix_role_and_address(context.config());
-    let partial_keys = PartialKeyAddressList::get(session_id)?.get_partial_key_list(session_id)?;
+    let partial_key_submissions =
+        PartialKeyAddressList::get(session_id)?.get_partial_key_list(session_id)?;
+
+    let partial_keys: Vec<_> = partial_key_submissions
+        .iter()
+        .map(|partial_key_submission| partial_key_submission.payload.partial_key.clone())
+        .collect();
 
     // Put aggregated key for a Solver
     let aggregated_key = perform_randomized_aggregation(context, session_id, &partial_keys);

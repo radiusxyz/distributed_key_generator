@@ -1,4 +1,3 @@
-use bincode::serialize as serialize_to_bincode;
 use radius_sdk::{
     json_rpc::{
         client::{Id, RpcClient},
@@ -8,7 +7,7 @@ use radius_sdk::{
 };
 use serde::{Deserialize, Serialize};
 use skde::key_generation::generate_partial_key;
-use tracing::info;
+use tracing::{error, info};
 
 use crate::{
     error::KeyGenerationError,
@@ -42,14 +41,24 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        let sender_address = verify_signature(&self.signature, &self.payload)?;
+        let prefix = log_prefix_role_and_address(context.config());
+
+        let sender_address = match verify_signature(&self.signature, &self.payload) {
+            Ok(address) => address,
+            Err(err) => {
+                error!("{} Signature verification failed: {}", prefix, err);
+                return Err(RpcError::from(err));
+            }
+        };
+
         if sender_address != self.payload.sender {
+            let err_msg = "Signature does not match sender address";
+            error!("{} {}", prefix, err_msg);
             return Err(RpcError::from(KeyGenerationError::InternalError(
-                "Signature does not match sender address".into(),
+                err_msg.into(),
             )));
         }
 
-        let prefix = log_prefix_role_and_address(context.config());
         let mut session_id = self.payload.session_id;
 
         // TODO: Before storing the decryption key,
@@ -110,11 +119,7 @@ pub fn broadcast_decryption_key_ack(
         ack_solve_timestamp,
     };
 
-    let signature = context
-        .config()
-        .signer()
-        .sign_message(serialize_to_bincode(&payload).unwrap())
-        .unwrap();
+    let signature = context.config().signer().sign_message(&payload).unwrap();
 
     let parameter = SyncDecryptionKey { signature, payload };
 
