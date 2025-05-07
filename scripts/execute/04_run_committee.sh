@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Build project in release mode
+cargo b -r
+
 # Get project paths
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT_PATH="$(dirname "$(dirname "$SCRIPT_DIR")")"
@@ -29,6 +32,7 @@ cat > "$NODE2_DATA_DIR/Config.toml" << EOL
 external_rpc_url = "http://127.0.0.1:7101"
 internal_rpc_url = "http://127.0.0.1:7201"
 cluster_rpc_url = "http://127.0.0.1:7301"
+# The endpoint of the leader rpc server for the committee: Committee -> Leader
 leader_cluster_rpc_url = "http://127.0.0.1:7300"
 
 role = "committee"

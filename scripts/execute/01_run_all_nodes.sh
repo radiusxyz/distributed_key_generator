@@ -31,7 +31,7 @@ sleep 1.5
 
 # 5. Start solver
 echo "[5/5] Starting solver node..."
-"$PROJECT_ROOT_PATH/scripts/execute/06_run_solver.sh" &
+"$PROJECT_ROOT_PATH/scripts/execute/05_run_solver.sh" &
 sleep 1.5
 
 echo "All nodes started: authority, leader, committee and solver."

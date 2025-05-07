@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Build project in release mode
+cargo b -r
+
 # Get project paths
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT_PATH="$(dirname "$(dirname "$SCRIPT_DIR")")"
