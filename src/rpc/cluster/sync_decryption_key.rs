@@ -1,4 +1,3 @@
-use bincode::serialize as serialize_to_bincode;
 use radius_sdk::{
     json_rpc::{
         client::{Id, RpcClient},
@@ -11,6 +10,7 @@ use skde::key_generation::generate_partial_key;
 use tracing::{error, info};
 
 use crate::{
+    error::KeyGenerationError,
     rpc::{cluster::request_submit_partial_key::submit_partial_key_to_leader, prelude::*},
     utils::{
         log::log_prefix_role_and_address, signature::verify_signature, time::get_current_timestamp,
@@ -43,7 +43,7 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let prefix = log_prefix_role_and_address(context.config());
 
-        let _sender_address = match verify_signature(&self.signature, &self.payload) {
+        let sender_address = match verify_signature(&self.signature, &self.payload) {
             Ok(address) => address,
             Err(err) => {
                 error!("{} Signature verification failed: {}", prefix, err);
@@ -51,14 +51,13 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
             }
         };
 
-        // TODO: Should fix it. Currently it fails because of the signature verification.
-        // if sender_address != self.payload.sender {
-        //     let err_msg = "Signature does not match sender address";
-        //     error!("{} {}", prefix, err_msg);
-        //     return Err(RpcError::from(KeyGenerationError::InternalError(
-        //         err_msg.into(),
-        //     )));
-        // }
+        if sender_address != self.payload.sender {
+            let err_msg = "Signature does not match sender address";
+            error!("{} {}", prefix, err_msg);
+            return Err(RpcError::from(KeyGenerationError::InternalError(
+                err_msg.into(),
+            )));
+        }
 
         let mut session_id = self.payload.session_id;
 
@@ -120,11 +119,7 @@ pub fn broadcast_decryption_key_ack(
         ack_solve_timestamp,
     };
 
-    let signature = context
-        .config()
-        .signer()
-        .sign_message(serialize_to_bincode(&payload).unwrap())
-        .unwrap();
+    let signature = context.config().signer().sign_message(&payload).unwrap();
 
     let parameter = SyncDecryptionKey { signature, payload };
 

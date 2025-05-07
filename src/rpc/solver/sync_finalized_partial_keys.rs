@@ -65,7 +65,6 @@ impl RpcParameter<AppState> for SolverSyncFinalizedPartialKeys {
             let sender = pk_submission.payload.sender.clone();
             let signable_message = pk_submission.payload.clone();
 
-            // TODO: Signature verification
             let signer = verify_signature(&pk_submission.signature, &signable_message)?;
             if signer != sender {
                 return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
@@ -106,7 +105,7 @@ async fn derive_and_submit_decryption_key(
     context: &AppState,
     session_id: SessionId,
 ) -> Result<(), Error> {
-    let prefix = log_prefix_role_and_address(&context.config());
+    let prefix = log_prefix_role_and_address(context.config());
     let partial_key_submissions =
         PartialKeyAddressList::get(session_id)?.get_partial_key_list(session_id)?;
 

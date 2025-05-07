@@ -45,7 +45,7 @@ pub fn run_single_key_generator(context: AppState) {
             let current_session_id = session_id.clone();
             initialize_next_session_from_current(&current_session_id);
 
-            let prefix: String = log_prefix_with_session_id(&context.config(), &current_session_id);
+            let prefix: String = log_prefix_with_session_id(context.config(), &current_session_id);
 
             info!("{} 🔑🗝️🔑 Waiting to start session 🔑🗝️🔑", prefix,);
 
@@ -66,7 +66,7 @@ pub fn run_single_key_generator(context: AppState) {
 
                 let partial_key_submissions = partial_key_address_list
                     .get_partial_key_list(current_session_id)
-                    .unwrap_or(Vec::new());
+                    .unwrap_or_default();
 
                 info!(
                     "{} Partial key list length: {}",

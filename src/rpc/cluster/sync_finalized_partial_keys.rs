@@ -85,19 +85,6 @@ impl RpcParameter<AppState> for ClusterSyncFinalizedPartialKeys {
         // TODO: Store this encryption key if signatures are valid and use for decryption key verification
         perform_randomized_aggregation(&context, *session_id, &partial_keys);
 
-        // TODO: Signature verification
-        // for (sig, sender) in signatures.iter().zip(partial_key_senders) {
-        //     let signer = verify_signature(sig, &self.payload)?;
-
-        //     if &signer != sender {
-        //         return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-        //             "Signature does not match sender".into(),
-        //         )));
-        //     }
-        // }
-
-        // TODO: Calculate and store encryption key if signatures are valid
-
         Ok(())
     }
 }

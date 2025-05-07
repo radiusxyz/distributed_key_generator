@@ -3,7 +3,7 @@ use radius_sdk::{
     signature::{Address, Signature},
 };
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{error, info};
 
 use crate::{
     error::KeyGenerationError,
@@ -38,10 +38,14 @@ impl RpcParameter<AppState> for SubmitDecryptionKey {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let prefix = log_prefix_role_and_address(context.config());
+
         let sender_address = verify_signature(&self.signature, &self.payload)?;
         if sender_address != self.payload.sender {
+            let err_msg = "Signature does not match sender address";
+            error!("{} {}", prefix, err_msg);
             return Err(RpcError::from(KeyGenerationError::InternalError(
-                "Signature does not match sender address".into(),
+                err_msg.into(),
             )));
         }
 
