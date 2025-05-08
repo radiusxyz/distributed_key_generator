@@ -23,13 +23,13 @@ pub struct SyncFinalizedPartialKeysPayload {
     pub sender: Address,
     pub partial_key_submissions: Vec<PartialKeySubmission>,
     pub session_id: SessionId,
-    pub ack_timestamp: u64,
+    pub ack_timestamp: u128,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PartialKeyPayload {
     pub sender: Address,
     pub partial_key: SkdePartialKey,
-    pub submit_timestamp: u64,
+    pub submit_timestamp: u128,
     pub session_id: SessionId,
 }

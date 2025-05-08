@@ -14,7 +14,7 @@ use crate::{
 #[tokio::test]
 async fn test_register_nodes() {
     // Initialize test environment
-    init_test_environment("submit partial key and ack test");
+    init_test_environment("test_register_nodes");
 
     // Vector to manage temporary directories
     let mut temp_dirs = Vec::new();

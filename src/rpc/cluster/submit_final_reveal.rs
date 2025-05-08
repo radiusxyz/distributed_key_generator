@@ -1,4 +1,3 @@
-use bincode::serialize as serialize_to_bincode;
 use radius_sdk::{
     json_rpc::{
         client::{Id, RpcClient},
@@ -72,11 +71,7 @@ pub fn broadcast_final_reveal(
         sync_decryption_key,
     };
 
-    let signature = create_signature(
-        context.config().signer(),
-        &serialize_to_bincode(&payload).unwrap(),
-    )
-    .unwrap();
+    let signature = create_signature(context.config().signer(), &payload).unwrap();
 
     let parameter = SubmitFinalReveal { signature, payload };
 

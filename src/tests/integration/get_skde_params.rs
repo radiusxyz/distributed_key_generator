@@ -14,7 +14,7 @@ use crate::{
 #[tokio::test]
 async fn test_get_skde_params() {
     // Initialize test environment
-    init_test_environment("node registration test");
+    init_test_environment("test_get_skde_params");
 
     // Vector to manage temporary directories
     let mut temp_dirs = Vec::new();

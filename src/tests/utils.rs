@@ -6,7 +6,6 @@ use std::{
     time::Duration,
 };
 
-use bincode::serialize as serialize_to_bincode;
 use radius_sdk::{
     json_rpc::client::{Id, RpcClient},
     signature::{Address, ChainType},
@@ -440,11 +439,7 @@ pub async fn submit_partial_key_to_leader(
     };
 
     // Generate signature
-    let signature = create_signature(
-        context.config().signer(),
-        &serialize_to_bincode(&payload).unwrap(),
-    )
-    .unwrap();
+    let signature = create_signature(context.config().signer(), &payload).unwrap();
 
     // Create JSON parameter
     let parameter = serde_json::json!({
