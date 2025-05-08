@@ -19,7 +19,6 @@ pub struct SignedSkdeParams {
     pub signature: Signature,
 }
 
-// TODO: Add error handling
 pub fn run_setup_skde_params(path: &ConfigPath) {
     let config_dir: PathBuf = path.as_ref().into();
     let skde_path = config_dir.join("skde_params.json");

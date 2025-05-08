@@ -48,6 +48,7 @@ const MOD_N: &str = "26737688233630987849749538623559587294088037102809480632570
 const GENERATOR: &str = "4";
 const TIME_PARAM_T: u32 = 2;
 const MAX_KEY_GENERATOR_NUMBER: u32 = 2;
+const TEST_SESSION_CYCLE_MS: u32 = 2000;
 
 /// Creates SKDE parameters for testing purposes
 pub fn create_skde_params() -> SkdeParams {
@@ -134,8 +135,7 @@ pub fn create_config_from_dir(temp_path: &PathBuf) -> Config {
         role: None,
         radius_foundation_address: None,
         chain_type: None,
-        partial_key_generation_cycle_ms: None,
-        partial_key_aggregation_cycle_ms: None,
+        session_cycle: None,
     };
 
     // Load Config (automatically reads from Config.toml)
@@ -214,8 +214,7 @@ pub fn spawn_node_process(
         format!(r#"role="{}""#, role.to_string().to_lowercase()),
         r#"radius_foundation_address="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266""#.to_string(),
         r#"chain_type="ethereum""#.to_string(),
-        r#"partial_key_generation_cycle_ms=500"#.to_string(),
-        r#"partial_key_aggregation_cycle_ms=500"#.to_string(),
+        format!(r#"session_cycle={}"#, TEST_SESSION_CYCLE_MS),
         leader_url.to_string(),
         authority_rpc_url.to_string(),
         leader_solver_rpc_url.to_string(),
