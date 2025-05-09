@@ -3,7 +3,7 @@ use crate::rpc::prelude::*;
 /// 09/05
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetEncryptionKey {
-    session_id: SessionId,
+    pub session_id: SessionId,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

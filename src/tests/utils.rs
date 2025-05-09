@@ -24,10 +24,15 @@ use crate::{
     rpc::{
         cluster::GetKeyGeneratorList,
         common::{GetSkdeParams, GetSkdeParamsResponse, PartialKeyPayload},
+        external::{
+            GetDecryptionKey, GetDecryptionKeyResponse, GetEncryptionKey, GetEncryptionKeyResponse,
+            GetFinalizedPartialKeys, GetFinalizedPartialKeysResponse, GetLatestSessionId,
+            GetLatestSessionIdResponse,
+        },
     },
     types::{Config, ConfigOption},
     utils::{signature::create_signature, time::get_current_timestamp},
-    AppState, SessionId,
+    AppState, PartialKeySubmission, SessionId,
 };
 
 const TEST_PRIVATE_KEYS: [&str; 10] = [
@@ -48,7 +53,7 @@ const MOD_N: &str = "26737688233630987849749538623559587294088037102809480632570
 const GENERATOR: &str = "4";
 const TIME_PARAM_T: u32 = 2;
 const MAX_KEY_GENERATOR_NUMBER: u32 = 2;
-const TEST_SESSION_CYCLE_MS: u32 = 2000;
+pub const TEST_SESSION_CYCLE_MS: u32 = 500;
 
 /// Creates SKDE parameters for testing purposes
 pub fn create_skde_params() -> SkdeParams {
@@ -558,4 +563,83 @@ pub async fn verify_mutual_registration(
         verify_node_registration(committee_ports.cluster, leader_ports.cluster).await;
 
     (leader_found, committee_found)
+}
+
+pub async fn get_latest_session_id(leader_external_rpc_url: &str) -> Result<u64, anyhow::Error> {
+    let rpc_client = RpcClient::new().unwrap();
+
+    let response: GetLatestSessionIdResponse = rpc_client
+        .request(
+            leader_external_rpc_url,
+            "get_latest_session_id",
+            &GetLatestSessionId {},
+            Id::Null,
+        )
+        .await
+        .unwrap();
+
+    Ok(response.latest_session_id.as_u64())
+}
+
+pub async fn get_encryption_key(
+    leader_external_rpc_url: &str,
+    session_id: u64,
+) -> Result<String, anyhow::Error> {
+    let rpc_client = RpcClient::new().unwrap();
+
+    let response: GetEncryptionKeyResponse = rpc_client
+        .request(
+            leader_external_rpc_url,
+            "get_encryption_key",
+            &GetEncryptionKey {
+                session_id: session_id.into(),
+            },
+            Id::Null,
+        )
+        .await
+        .unwrap();
+
+    Ok(response.encryption_key)
+}
+
+pub async fn get_decryption_key(
+    leader_external_rpc_url: &str,
+    session_id: u64,
+) -> Result<String, anyhow::Error> {
+    let rpc_client = RpcClient::new().unwrap();
+
+    let response: GetDecryptionKeyResponse = rpc_client
+        .request(
+            leader_external_rpc_url,
+            "get_decryption_key",
+            &GetDecryptionKey {
+                session_id: session_id.into(),
+            },
+            Id::Null,
+        )
+        .await
+        .unwrap();
+
+    Ok(response.decryption_key)
+}
+
+pub async fn get_finalized_partial_keys(
+    leader_external_rpc_url: &str,
+    session_id: u64,
+) -> Result<Vec<PartialKeySubmission>, anyhow::Error> {
+    let rpc_client = RpcClient::new().unwrap();
+
+    let response: GetFinalizedPartialKeysResponse = rpc_client
+        .request(
+            leader_external_rpc_url,
+            "get_finalized_partial_keys",
+            &GetFinalizedPartialKeys {
+                session_id: session_id.into(),
+            },
+            Id::Null,
+        )
+        .await
+        .unwrap();
+
+    Ok(response.partial_key_submissions)
 }
