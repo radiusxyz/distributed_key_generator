@@ -37,11 +37,12 @@ solver_rpc_url = "http://127.0.0.1:8400"
 # The endpoint of the solver rpc server: Leader -> Solver
 solver_solver_rpc_url = "http://127.0.0.1:8500"
 
+session_cycle = 3000
+authority_rpc_url = "http://127.0.0.1:6000"
+
 role = "leader"
 radius_foundation_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-authority_rpc_url = "http://127.0.0.1:6000"
 chain_type = "ethereum"
-session_cycle = 1500
 EOL
 
 # Set private key (Account 0)

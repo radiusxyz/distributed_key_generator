@@ -43,7 +43,7 @@ pub fn process_partial_key_submissions(
 
     let mut partial_keys = Vec::new();
 
-    // TODO: Should fix it. Just test logic for fixed order of partial keys
+    // TODO: Should use the proper index to order the partial keys
     let mut sorted_submissions = partial_key_submissions.clone();
     sorted_submissions.sort_by(|a, b| a.payload.partial_key.u.cmp(&b.payload.partial_key.u));
 

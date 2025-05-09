@@ -8,7 +8,6 @@ use tracing::{info, warn};
 use crate::ConfigPath;
 
 // Constants for SKDE setup parameters
-// TODO: Getting constants in a form of json file(?)
 const DEFAULT_TIME_PARAM_T: u32 = 4;
 const DEFAULT_GENERATOR: u32 = 4;
 const DEFAULT_MAX_SEQUENCER_NUMBER: u32 = 2;

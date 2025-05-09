@@ -28,19 +28,23 @@ chmod -R 755 "$DATA_DIR" "$NODE_DATA_DIR" 2>/dev/null
 # Create Solver's config file (Solver)
 cat > "$NODE_DATA_DIR/Config.toml" << EOL
 # NODE CONFIG: Solver Node
+# Change the following values as needed:
 external_rpc_url = "http://127.0.0.1:8100"
 internal_rpc_url = "http://127.0.0.1:8200"
 cluster_rpc_url = "http://127.0.0.1:8300"
+
 # The endpoint of the leader rpc server for the solver: Solver -> Leader
 solver_rpc_url = "http://127.0.0.1:8500"
+
 # The endpoint of the leader rpc server for the solver: Leader -> Solver
 leader_solver_rpc_url = "http://127.0.0.1:8400"
 
+authority_rpc_url = "http://127.0.0.1:6000"
+
 role = "solver"
 radius_foundation_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-authority_rpc_url = "http://127.0.0.1:6000"
 chain_type = "ethereum"
-session_cycle = 1500
+session_cycle = 0
 EOL
 
 # Set private key

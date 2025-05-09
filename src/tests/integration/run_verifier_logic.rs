@@ -34,7 +34,7 @@ fn compare_partial_key_submissions(
         );
     }
 
-    // TODO: Should fix it. Just test logic for fixed order of partial keys
+    // Should fix it. Just test logic for fixed order of partial keys
     let mut sorted_submissions1 = submissions1.clone();
     sorted_submissions1.sort_by(|a, b| a.payload.partial_key.u.cmp(&b.payload.partial_key.u));
 

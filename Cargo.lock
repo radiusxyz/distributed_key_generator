@@ -2391,7 +2391,6 @@ dependencies = [
  "clap",
  "const-hex",
  "ethers",
- "once_cell",
  "radius-sdk",
  "serde",
  "serde_json",

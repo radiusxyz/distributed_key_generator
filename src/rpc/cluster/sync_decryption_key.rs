@@ -81,11 +81,7 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
         // session_id is increased by 1
         submit_partial_key_to_leader(session_id, partial_key, &context.clone()).await?;
 
-        info!(
-            "{} Completed submitting partial key - session_id: {:?}",
-            prefix,
-            self.payload.session_id.as_u64()
-        );
+        info!("{} Completed submitting partial key", prefix,);
 
         Ok(())
     }
