@@ -43,8 +43,9 @@ pub fn process_partial_key_submissions(
 
     let mut partial_keys = Vec::new();
 
+    // TODO: Should fix it. Just test logic for fixed order of partial keys
     let mut sorted_submissions = partial_key_submissions.clone();
-    sorted_submissions.sort_by(|a, b| a.payload.submit_timestamp.cmp(&b.payload.submit_timestamp));
+    sorted_submissions.sort_by(|a, b| a.payload.partial_key.u.cmp(&b.payload.partial_key.u));
 
     for (i, pk_submission) in sorted_submissions.iter().enumerate() {
         let signable_message = pk_submission.payload.clone();

@@ -1,4 +1,8 @@
 use radius_sdk::json_rpc::client::{Id, RpcClient};
+use skde::{
+    key_aggregation::{aggregate_key, AggregatedKey},
+    key_generation::PartialKey,
+};
 use tokio::time::{sleep, Duration};
 use tracing::info;
 
@@ -6,8 +10,12 @@ use crate::{
     rpc::common::{GetSkdeParams, GetSkdeParamsResponse},
     tests::utils::{
         cleanup_existing_processes, get_decryption_key, get_encryption_key,
-        get_finalized_partial_keys, get_latest_session_id, init_test_environment, register_nodes,
-        start_node, TEST_SESSION_CYCLE_MS,
+        get_finalized_partial_keys, get_latest_session_id, init_test_environment,
+        mock_get_randomness, register_nodes, start_node, TEST_SESSION_CYCLE_MS,
+    },
+    utils::{
+        key::{derive_partial_key, select_random_partial_keys},
+        signature::verify_signature,
     },
     PartialKeySubmission, Role,
 };
@@ -16,38 +24,22 @@ use crate::{
 fn compare_partial_key_submissions(
     submissions1: &Vec<PartialKeySubmission>,
     submissions2: &Vec<PartialKeySubmission>,
-) -> bool {
+) -> Vec<PartialKeySubmission> {
     // Different lengths means different lists
     if submissions1.len() != submissions2.len() {
-        info!(
+        panic!(
             "Partial key list lengths differ: {} vs {}",
             submissions1.len(),
             submissions2.len()
         );
-        return false;
     }
 
-    // TODO: Should fix it. Just test for ordering of partial keys
+    // TODO: Should fix it. Just test logic for fixed order of partial keys
     let mut sorted_submissions1 = submissions1.clone();
     sorted_submissions1.sort_by(|a, b| a.payload.partial_key.u.cmp(&b.payload.partial_key.u));
 
     let mut sorted_submissions2 = submissions2.clone();
     sorted_submissions2.sort_by(|a, b| a.payload.partial_key.u.cmp(&b.payload.partial_key.u));
-
-    info!(
-        "Sorted submissions1: {:?}",
-        sorted_submissions1
-            .iter()
-            .map(|s| s.payload.submit_timestamp)
-            .collect::<Vec<_>>()
-    );
-    info!(
-        "Sorted submissions2: {:?}",
-        sorted_submissions2
-            .iter()
-            .map(|s| s.payload.submit_timestamp)
-            .collect::<Vec<_>>()
-    );
 
     // Compare important fields of each element
     for (i, (sub1, sub2)) in sorted_submissions1
@@ -55,24 +47,6 @@ fn compare_partial_key_submissions(
         .zip(sorted_submissions2.iter())
         .enumerate()
     {
-        // Compare sender addresses
-        if sub1.payload.sender != sub2.payload.sender {
-            info!(
-                "Sender at index {} differs: {:?} vs {:?}",
-                i, sub1.payload.sender, sub2.payload.sender
-            );
-            return false;
-        }
-
-        // Compare session IDs
-        if sub1.payload.session_id != sub2.payload.session_id {
-            info!(
-                "Session ID at index {} differs: {:?} vs {:?}",
-                i, sub1.payload.session_id, sub2.payload.session_id
-            );
-            return false;
-        }
-
         // Compare partial keys (u, v, y, w values)
         let pk1 = &sub1.payload.partial_key;
         let pk2 = &sub2.payload.partial_key;
@@ -81,17 +55,43 @@ fn compare_partial_key_submissions(
         }
     }
 
-    true
+    sorted_submissions2
 }
 
-// Verify encryption and decryption keys
-async fn verify_key_pair(
+async fn mock_aggregate_key(
     leader_url: &str,
     session_id: u64,
     skde_params: &skde::delay_encryption::SkdeParams,
-    cycle_num: usize,
+    partial_key_list: &Vec<PartialKey>,
+) -> AggregatedKey {
+    let randomness = mock_get_randomness(leader_url, session_id).await;
+    let mut selected_keys = select_random_partial_keys(partial_key_list, &randomness);
+    let derived_key = derive_partial_key(&selected_keys, &skde_params);
+    selected_keys.push(derived_key);
+    aggregate_key(&skde_params, &selected_keys)
+}
+
+// Verify encryption and decryption keys
+async fn verify_all_keys_in_session(
+    leader_url: &str,
+    session_id: u64,
+    skde_params: &skde::delay_encryption::SkdeParams,
+    finalized_partial_keys: Vec<PartialKeySubmission>,
 ) -> bool {
-    info!("Verifying key pair for session {}", session_id);
+    info!("Verifying all keys in session {}", session_id);
+
+    // Verify all signatures of partial keys
+    for partial_key in finalized_partial_keys.iter() {
+        let signable_message = partial_key.payload.clone();
+        let signer = verify_signature(&partial_key.signature, &signable_message).unwrap();
+        assert_eq!(signer, partial_key.payload.sender);
+    }
+
+    // Aggreagted partial keys
+    let partial_key_list = finalized_partial_keys
+        .iter()
+        .map(|s| s.payload.partial_key.clone())
+        .collect::<Vec<_>>();
 
     // Get encryption key
     let encryption_key = match get_encryption_key(leader_url, session_id).await {
@@ -99,14 +99,19 @@ async fn verify_key_pair(
         Err(e) => panic!("Failed to get encryption key: {:?}", e),
     };
 
+    // Verify aggregated key from partial keys
+    let aggregated_key =
+        mock_aggregate_key(leader_url, session_id, skde_params, &partial_key_list).await;
+    assert_eq!(aggregated_key.u, encryption_key);
+
     // Get decryption key
     let decryption_key = match get_decryption_key(leader_url, session_id).await {
         Ok(key) => key,
         Err(e) => panic!("Failed to get decryption key: {:?}", e),
     };
 
-    // Verify key pair
-    let prefix = format!("[Test Verifier {}]", cycle_num);
+    // Verify encryption and decryption key pair
+    let prefix = format!("[Test Verifier]");
     match crate::utils::key::verify_encryption_decryption_key_pair(
         skde_params,
         &encryption_key,
@@ -114,15 +119,11 @@ async fn verify_key_pair(
         &prefix,
     ) {
         Ok(_) => {
-            info!("Cycle {}/3: Key pair verification successful ✅", cycle_num);
+            info!("Key pair verification successful ✅");
             true
         }
         Err(e) => {
-            info!(
-                "Cycle {}/3: Key pair verification failed ❌ - {:?}",
-                cycle_num, e
-            );
-            false
+            panic!("Key pair verification failed ❌ - {:?}", e);
         }
     }
 }
@@ -132,8 +133,7 @@ async fn compare_node_partial_keys(
     leader_url: &str,
     committee_url: &str,
     session_id: u64,
-    cycle_num: usize,
-) {
+) -> Vec<PartialKeySubmission> {
     info!("Comparing partial keys for session {}", session_id);
 
     // Get partial key submissions from leader
@@ -150,11 +150,7 @@ async fn compare_node_partial_keys(
         };
 
     // Compare submissions
-    if compare_partial_key_submissions(&submissions_from_leader, &submissions_from_committee) {
-        info!("Cycle {}/3: Partial key lists match ✅", cycle_num);
-    } else {
-        panic!("Cycle {}/3: Partial key lists do not match ❌", cycle_num);
-    }
+    compare_partial_key_submissions(&submissions_from_leader, &submissions_from_committee)
 }
 
 #[tokio::test]
@@ -200,17 +196,17 @@ async fn test_run_verifier_logic() {
         .unwrap();
     let skde_params = response.into_skde_params();
 
-    // 4. Set up URLs for testing
+    // 4. Get external URLs for testing
     let leader_external_rpc_url = format!("http://127.0.0.1:{}", leader_ports.external);
     let committee_external_rpc_url = format!("http://127.0.0.1:{}", committee_ports.external);
 
-    // Wait for 2 session cycles to ensure key generation has started
-    info!("Waiting for key generation to start (2 session cycles)");
+    info!("Waiting for session_id = 2 at least");
     sleep(Duration::from_millis(2000)).await;
 
     // 5. Run verification cycles
-    for i in 0..3 {
-        info!("Starting verification cycle {}/3", i + 1);
+    let iter_num = 3;
+    for i in 0..iter_num {
+        info!("Starting verification cycle {}/{}", i + 1, iter_num);
 
         // Get latest session ID
         let session_id = match get_latest_session_id(&leader_external_rpc_url).await {
@@ -223,24 +219,26 @@ async fn test_run_verifier_logic() {
         // Use previous session for verification (current might not be complete)
         let prev_session_id = session_id - 1;
 
-        // Verify key pair
-        verify_key_pair(
-            &leader_external_rpc_url,
-            prev_session_id,
-            &skde_params,
-            i + 1,
-        )
-        .await;
-
         // Compare partial key submissions between nodes
-        compare_node_partial_keys(
+        let finalized_partial_keys = compare_node_partial_keys(
             &leader_external_rpc_url,
             &committee_external_rpc_url,
             prev_session_id,
-            i + 1,
         )
         .await;
 
+        // Verify key pair
+        verify_all_keys_in_session(
+            &leader_external_rpc_url,
+            prev_session_id,
+            &skde_params,
+            finalized_partial_keys,
+        )
+        .await;
+
+        // TODO: Add verifications
+        // 1) Timestamp of Partial key, AggregatedKey, Decryption key
+        // 2) Check if Partial key is valid(secret key, range proof)
         sleep(Duration::from_millis(TEST_SESSION_CYCLE_MS as u64)).await;
     }
 

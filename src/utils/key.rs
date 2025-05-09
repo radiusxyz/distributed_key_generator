@@ -21,6 +21,18 @@ pub fn initialize_next_session_from_current(current_session_id: &SessionId) {
     PartialKeyAddressList::initialize(next_session_id).unwrap();
 }
 
+pub fn aggregate_partial_keys_from_partial_key_list(
+    skde_params: &SkdeParams,
+    session_id: SessionId,
+    partial_key_list: &[SkdePartialKey],
+) -> SkdeAggregatedKey {
+    let randomness = get_randomness(session_id);
+    let mut selected_keys = select_random_partial_keys(partial_key_list, &randomness);
+    let derived_key = derive_partial_key(&selected_keys, &skde_params);
+    selected_keys.push(derived_key);
+    aggregate_key(&skde_params, &selected_keys)
+}
+
 // TODO: A more robust mechanism to handle delayed or missing solve operations should be designed.
 pub fn perform_randomized_aggregation(
     context: &AppState,
@@ -30,12 +42,9 @@ pub fn perform_randomized_aggregation(
     let prefix = log_prefix_role_and_address(context.config());
     let skde_params = context.skde_params().clone();
 
-    let randomness = get_randomness(context, session_id);
-    let mut selected_keys = select_random_partial_keys(partial_key_list, &randomness);
-    let derived_key = derive_partial_key(&selected_keys, &skde_params);
-    selected_keys.push(derived_key);
+    let skde_aggregated_key =
+        aggregate_partial_keys_from_partial_key_list(&skde_params, session_id, partial_key_list);
 
-    let skde_aggregated_key = aggregate_key(&skde_params, &selected_keys);
     AggregatedKey::new(skde_aggregated_key.clone())
         .put(session_id)
         .unwrap();
@@ -162,8 +171,7 @@ pub fn select_ordered_indices(n: usize, randomness: &[u8]) -> Vec<usize> {
     indices[..k].to_vec()
 }
 
-pub fn get_randomness(context: &AppState, current_session_id: SessionId) -> Vec<u8> {
-    let prefix = log_prefix_role_and_address(context.config());
+pub fn get_randomness(current_session_id: SessionId) -> Vec<u8> {
     if current_session_id.as_u64() == 0 {
         return b"initial-randomness".to_vec();
     }
@@ -173,8 +181,8 @@ pub fn get_randomness(context: &AppState, current_session_id: SessionId) -> Vec<
         Ok(key) => key.as_string().into_bytes(),
         Err(_) => {
             error!(
-                "{} Failed to get previous session id: {:?}",
-                prefix, previous_session_id
+                "Failed to get previous session id: {:?}",
+                previous_session_id
             );
             b"default-randomness".to_vec()
         }

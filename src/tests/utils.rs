@@ -643,3 +643,18 @@ pub async fn get_finalized_partial_keys(
 
     Ok(response.partial_key_submissions)
 }
+
+pub async fn mock_get_randomness(
+    leader_external_rpc_url: &str,
+    current_session_id: u64,
+) -> Vec<u8> {
+    if current_session_id == 0 {
+        return b"initial-randomness".to_vec();
+    } else {
+        let previous_session_id = current_session_id - 1;
+        let decryption_key = get_decryption_key(leader_external_rpc_url, previous_session_id)
+            .await
+            .unwrap();
+        decryption_key.as_bytes().to_vec()
+    }
+}
