@@ -11,7 +11,7 @@ use crate::{
 #[tokio::test]
 async fn test_run_multiple_committees_one_leader() {
     // Initialize test environment
-    init_test_environment("multiple committees with staggered peering test");
+    init_test_environment("test_run_multiple_committees_one_leader");
 
     // Vector to manage temporary directories
     let mut temp_dirs = Vec::new();

@@ -1,4 +1,3 @@
-use bincode::serialize as serialize_to_bincode;
 use radius_sdk::{
     json_rpc::{
         client::{Id, RpcClient},
@@ -30,7 +29,7 @@ pub struct SyncPartialKeyPayload {
     pub sender: Address,
     pub partial_key_submission: PartialKeySubmission,
     pub session_id: SessionId,
-    pub ack_timestamp: u64,
+    pub ack_timestamp: u128,
 }
 
 impl RpcParameter<AppState> for SyncPartialKey {
@@ -43,16 +42,17 @@ impl RpcParameter<AppState> for SyncPartialKey {
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
         let prefix = log_prefix_role_and_address(context.config());
 
+        // If partial_key_sender is me, ignore
+        let partial_key_sender = &self.payload.partial_key_submission.payload.sender;
+        if partial_key_sender == context.config().address() {
+            return Ok(());
+        }
+
         let sender_address = verify_signature(&self.signature, &self.payload)?;
         if sender_address != self.payload.sender {
             return Err(RpcError::from(KeyGenerationError::InternalError(
                 "Signature does not match sender address".into(),
             )));
-        }
-
-        // If sender is me, ignore
-        if self.payload.sender == context.config().address() {
-            return Ok(());
         }
 
         info!(
@@ -67,8 +67,6 @@ impl RpcParameter<AppState> for SyncPartialKey {
             self.payload.session_id.as_u64(),
             self.payload.ack_timestamp
         );
-
-        // TODO: Check partial key submission is valid
 
         PartialKeyAddressList::initialize(self.payload.session_id)?;
         PartialKeyAddressList::apply(self.payload.session_id, |list| {
@@ -88,18 +86,18 @@ impl RpcParameter<AppState> for SyncPartialKey {
 
 // Broadcast partial key acknowledgment from leader to the entire network
 pub fn broadcast_partial_key_ack(
-    sender_address: Address,
     partial_key_submission: PartialKeySubmission,
     context: &AppState,
 ) -> Result<(), Error> {
     let prefix = log_prefix_role_and_address(context.config());
     let key_generator_rpc_url_list =
         KeyGeneratorList::get()?.get_other_key_generator_rpc_url_list(context.config().address());
+    // let key_generator_rpc_url_list = KeyGeneratorList::get()?.get_all_key_generator_rpc_url_list();
 
     info!(
         "{} Broadcasting partial key acknowledgment - sender: {}, session_id: {:?}, timestamp: {}",
         prefix,
-        sender_address.to_short(),
+        partial_key_submission.payload.sender.to_short(),
         partial_key_submission.payload.session_id,
         partial_key_submission.payload.submit_timestamp
     );
@@ -113,11 +111,7 @@ pub fn broadcast_partial_key_ack(
         ack_timestamp,
     };
 
-    let signature = create_signature(
-        context.config().signer(),
-        &serialize_to_bincode(&payload).unwrap(),
-    )
-    .unwrap();
+    let signature = create_signature(context.config().signer(), &payload).unwrap();
 
     let parameter = SyncPartialKey { signature, payload };
 

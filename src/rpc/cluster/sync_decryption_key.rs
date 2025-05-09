@@ -13,7 +13,8 @@ use crate::{
     error::KeyGenerationError,
     rpc::{cluster::request_submit_partial_key::submit_partial_key_to_leader, prelude::*},
     utils::{
-        log::log_prefix_role_and_address, signature::verify_signature, time::get_current_timestamp,
+        key::verify_encryption_decryption_key_pair, log::log_prefix_role_and_address,
+        signature::verify_signature, time::get_current_timestamp,
     },
 };
 
@@ -28,8 +29,8 @@ pub struct SyncDecryptionKeyPayload {
     pub sender: Address,
     pub decryption_key: String,
     pub session_id: SessionId,
-    pub solve_timestamp: u64,
-    pub ack_solve_timestamp: u64,
+    pub solve_timestamp: u128,
+    pub ack_solve_timestamp: u128,
 }
 
 // TODO (Post-PoC): Decouple session start trigger from decryption key sync to improve robustness.
@@ -61,21 +62,17 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
 
         let mut session_id = self.payload.session_id;
 
-        // TODO: Before storing the decryption key,
-        // - Retrieve the previously stored encryption key for the session
-        // - Verify that the decryption key is correctly derived from the encryption key
-        // Only after successful verification, store the decryption key with put.
+        let encryption_key = AggregatedKey::get(session_id)?.encryption_key();
         let decryption_key = DecryptionKey::new(self.payload.decryption_key.clone());
+
+        verify_encryption_decryption_key_pair(
+            context.skde_params(),
+            &encryption_key,
+            decryption_key.clone().as_string().as_str(),
+            &prefix,
+        )?;
+
         decryption_key.put(session_id)?;
-
-        info!(
-            "{} Completed putting aggregated key - current_session_id: {:?}",
-            prefix,
-            self.payload.session_id.as_u64(),
-        );
-
-        // TODO: Change it to Random Delay? for not deterministic behavior
-        // sleep(Duration::from_millis(1000)).await;
 
         let skde_params = context.skde_params();
         let (_, partial_key) = generate_partial_key(skde_params).unwrap();
@@ -84,11 +81,7 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
         // session_id is increased by 1
         submit_partial_key_to_leader(session_id, partial_key, &context.clone()).await?;
 
-        info!(
-            "{} Completed submitting partial key - session_id: {:?}",
-            prefix,
-            self.payload.session_id.as_u64()
-        );
+        info!("{} Completed submitting partial key", prefix,);
 
         Ok(())
     }
@@ -98,7 +91,7 @@ impl RpcParameter<AppState> for SyncDecryptionKey {
 pub fn broadcast_decryption_key_ack(
     session_id: SessionId,
     decryption_key: String,
-    solve_timestamp: u64,
+    solve_timestamp: u128,
     context: &AppState,
 ) -> Result<(), Error> {
     let prefix = log_prefix_role_and_address(context.config());

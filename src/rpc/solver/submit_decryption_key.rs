@@ -22,7 +22,7 @@ pub struct SubmitDecryptionKeyPayload {
     pub sender: Address,
     pub decryption_key: String,
     pub session_id: SessionId,
-    pub timestamp: u64,
+    pub timestamp: u128,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -55,11 +55,6 @@ impl RpcParameter<AppState> for SubmitDecryptionKey {
             "{} Received decryption key - session_id: {:?}, timestamp: {}",
             prefix, self.payload.session_id, self.payload.timestamp
         );
-
-        // TODO: Before storing the decryption key,
-        // - Retrieve the previously stored encryption key for the session
-        // - Verify that the decryption key is correctly derived from the encryption key
-        // Only after successful verification, store the decryption key with put.
 
         broadcast_decryption_key_ack(
             self.payload.session_id,

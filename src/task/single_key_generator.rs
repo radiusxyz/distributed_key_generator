@@ -28,17 +28,13 @@ pub const THRESHOLD: usize = 1;
 pub fn run_single_key_generator(context: AppState) {
     let prefix = log_prefix_role_and_address(context.config());
     tokio::spawn(async move {
-        let partial_key_generation_cycle_ms = context.config().partial_key_generation_cycle_ms();
-        let partial_key_aggregation_cycle_ms = context.config().partial_key_aggregation_cycle_ms();
+        let session_cycle = context.config().session_cycle();
         PartialKeyAddressList::initialize(SessionId::from(0)).unwrap();
 
-        info!(
-            "{} Partial key generation cycle: {} ms, aggregation cycle: {} ms",
-            prefix, partial_key_generation_cycle_ms, partial_key_aggregation_cycle_ms
-        );
+        info!("{} Session cycle: {} ms", prefix, session_cycle);
 
         loop {
-            sleep(Duration::from_millis(partial_key_generation_cycle_ms)).await;
+            sleep(Duration::from_millis(session_cycle)).await;
             let context = context.clone();
 
             let mut session_id = SessionId::get_mut().unwrap();
@@ -170,25 +166,7 @@ pub async fn broadcast_finalized_partial_keys(
         sleep(Duration::from_millis(100)).await;
     };
 
-    // TODO: Add to make actual signature
-    // TODO: Timestampes, signatures, etc. should be collected assigned to each partial key
     let partial_key_submissions = list.get_partial_key_list(session_id).unwrap();
-
-    // TODO: Replace actual PartialKeySubmissions
-    // let partial_key_submissions = partial_keys
-    //     .iter()
-    //     .zip(&partial_senders)
-    //     .zip(&signatures)
-    //     .map(|((key, sender), signature)| SubmitPartialKey {
-    //         signature: signature.clone(),
-    //         payload: PartialKeyPayload {
-    //             partial_key: key.clone(),
-    //             sender: sender.clone(),
-    //             submit_timestamp: submit_timestamps[i],
-    //             session_id,
-    //         },
-    //     })
-    //     .collect();
 
     let payload: SyncFinalizedPartialKeysPayload = SyncFinalizedPartialKeysPayload {
         sender: context.config().address().clone(),

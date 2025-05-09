@@ -11,7 +11,7 @@ use crate::{
 #[tokio::test]
 async fn test_run_single_node_for_each_role() {
     // Initialize test environment
-    init_test_environment("submit partial key and ack test");
+    init_test_environment("test_run_single_node_for_each_role");
 
     // Vector to manage temporary directories
     let mut temp_dirs = Vec::new();

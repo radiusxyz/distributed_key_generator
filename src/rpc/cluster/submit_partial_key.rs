@@ -28,6 +28,7 @@ impl RpcParameter<AppState> for SubmitPartialKey {
     }
 
     async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+        let prefix = log_prefix_with_session_id(context.config(), &self.payload.session_id);
         let sender_address = verify_signature(&self.signature, &self.payload)?;
 
         if sender_address != self.payload.sender {
@@ -35,8 +36,6 @@ impl RpcParameter<AppState> for SubmitPartialKey {
                 "Signature does not match sender address".into(),
             )));
         }
-
-        let prefix = log_prefix_with_session_id(context.config(), &self.payload.session_id);
 
         info!(
             "{} Received partial key - session_id: {:?}, sender: {}, timestamp: {}",
@@ -61,7 +60,7 @@ impl RpcParameter<AppState> for SubmitPartialKey {
         let partial_key_submission = PartialKeySubmission::from_submit_partial_key(&self);
         partial_key_submission.put(self.payload.session_id, &self.payload.sender)?;
 
-        let _ = broadcast_partial_key_ack(sender_address, partial_key_submission, &context);
+        let _ = broadcast_partial_key_ack(partial_key_submission, &context);
 
         Ok(())
     }

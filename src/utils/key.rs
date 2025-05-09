@@ -2,16 +2,16 @@ use sha2::{Digest, Sha256}; // SHA-256
 use sha3::digest::{ExtendableOutput, Update, XofReader}; // Shake256
 use sha3::Shake256;
 use skde::{
-    delay_encryption::{solve_time_lock_puzzle, SkdeParams},
+    delay_encryption::{decrypt, encrypt, solve_time_lock_puzzle, SkdeParams},
     key_aggregation::{aggregate_key, AggregatedKey as SkdeAggregatedKey},
     key_generation::{generate_uv_pair, PartialKey as SkdePartialKey},
     BigUint,
 };
-use tracing::info;
+use tracing::{error, info};
 
 use crate::{
-    error::KeyGenerationError, utils::log::log_prefix_role_and_address, AggregatedKey, AppState,
-    DecryptionKey, PartialKeyAddressList, SessionId,
+    error::KeyGenerationError, task::TraceExt, utils::log::log_prefix_role_and_address,
+    AggregatedKey, AppState, DecryptionKey, PartialKeyAddressList, SessionId,
 };
 
 pub fn initialize_next_session_from_current(current_session_id: &SessionId) {
@@ -19,6 +19,18 @@ pub fn initialize_next_session_from_current(current_session_id: &SessionId) {
     next_session_id.increase_session_id();
 
     PartialKeyAddressList::initialize(next_session_id).unwrap();
+}
+
+pub fn aggregate_partial_keys_from_partial_key_list(
+    skde_params: &SkdeParams,
+    session_id: SessionId,
+    partial_key_list: &[SkdePartialKey],
+) -> SkdeAggregatedKey {
+    let randomness = get_randomness(session_id);
+    let mut selected_keys = select_random_partial_keys(partial_key_list, &randomness);
+    let derived_key = derive_partial_key(&selected_keys, &skde_params);
+    selected_keys.push(derived_key);
+    aggregate_key(&skde_params, &selected_keys)
 }
 
 // TODO: A more robust mechanism to handle delayed or missing solve operations should be designed.
@@ -30,12 +42,9 @@ pub fn perform_randomized_aggregation(
     let prefix = log_prefix_role_and_address(context.config());
     let skde_params = context.skde_params().clone();
 
-    let randomness = get_randomness(session_id);
-    let mut selected_keys = select_random_partial_keys(partial_key_list, &randomness);
-    let derived_key = derive_partial_key(&selected_keys, &skde_params);
-    selected_keys.push(derived_key);
+    let skde_aggregated_key =
+        aggregate_partial_keys_from_partial_key_list(&skde_params, session_id, partial_key_list);
 
-    let skde_aggregated_key = aggregate_key(&skde_params, &selected_keys);
     AggregatedKey::new(skde_aggregated_key.clone())
         .put(session_id)
         .unwrap();
@@ -44,6 +53,7 @@ pub fn perform_randomized_aggregation(
         "{} Completed to generate encryption key - session id: {:?}",
         prefix, session_id,
     );
+
     skde_aggregated_key
 }
 
@@ -169,6 +179,43 @@ pub fn get_randomness(current_session_id: SessionId) -> Vec<u8> {
     let previous_session_id = SessionId::from(current_session_id.as_u64() - 1);
     match DecryptionKey::get(previous_session_id) {
         Ok(key) => key.as_string().into_bytes(),
-        Err(_) => b"default-randomness".to_vec(),
+        Err(_) => {
+            error!(
+                "Failed to get previous session id: {:?}",
+                previous_session_id
+            );
+            b"default-randomness".to_vec()
+        }
     }
+}
+
+pub fn verify_encryption_decryption_key_pair(
+    skde_params: &SkdeParams,
+    encryption_key: &str,
+    decryption_key: &str,
+    prefix: &str,
+) -> Result<(), KeyGenerationError> {
+    let sample_message = "sample_message";
+
+    let ciphertext = encrypt(skde_params, sample_message, encryption_key, true)
+        .ok_or_trace()
+        .ok_or_else(|| KeyGenerationError::InternalError("Encryption failed".into()))?;
+
+    let decrypted_message = match decrypt(skde_params, &ciphertext, decryption_key) {
+        Ok(message) => message,
+        Err(err) => {
+            tracing::error!("{} Decryption failed: {}", prefix, err);
+            return Err(KeyGenerationError::InternalError(
+                format!("Decryption failed: {}", err).into(),
+            ));
+        }
+    };
+
+    if decrypted_message.as_str() != sample_message {
+        return Err(KeyGenerationError::InternalError(
+            "Decryption failed: message mismatch".into(),
+        ));
+    }
+
+    Ok(())
 }

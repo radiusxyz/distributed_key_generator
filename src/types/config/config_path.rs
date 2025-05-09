@@ -108,8 +108,6 @@ impl ConfigPath {
     }
     /// Initialize SKDE parameter file with default values if it doesn't exist.
     /// This is only used in authority nodes.
-    ///
-    /// TODO: Add proper error handling instead of unwrap().
     pub fn init_skde_params_if_missing(&self) {
         let skde_path = self.as_ref().join("skde_params.json");
 
@@ -122,10 +120,10 @@ impl ConfigPath {
         let default_params = default_skde_params();
 
         // Serialize to JSON (POC: unwrap used)
-        let serialized = serde_json::to_string_pretty(&default_params).unwrap(); // TODO: Add proper error handling
+        let serialized = serde_json::to_string_pretty(&default_params).unwrap();
 
         // Write to file (POC: unwrap used)
-        fs::write(&skde_path, serialized).unwrap(); // TODO
+        fs::write(&skde_path, serialized).unwrap();
 
         info!("Default SKDE params written to {:?}", skde_path);
     }
