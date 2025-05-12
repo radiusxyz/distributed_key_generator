@@ -37,7 +37,7 @@ solver_rpc_url = "http://127.0.0.1:8400"
 # The endpoint of the solver rpc server: Leader -> Solver
 solver_solver_rpc_url = "http://127.0.0.1:8500"
 
-session_cycle = 3000
+session_cycle = 1500
 authority_rpc_url = "http://127.0.0.1:6000"
 
 role = "leader"

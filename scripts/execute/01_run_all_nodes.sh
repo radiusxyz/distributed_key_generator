@@ -17,7 +17,7 @@ echo "[1/5] Cleaning up old data and processes..."
 # 2. Start authority
 echo "[2/5] Starting authority node..."
 "$PROJECT_ROOT_PATH/scripts/execute/02_run_authority.sh" &
-sleep 1.5  # Give it time to bind the port
+sleep 1.5
 
 # 3. Start leader
 echo "[3/5] Starting leader node..."

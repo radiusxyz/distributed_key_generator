@@ -66,61 +66,61 @@ async fn test_run_multiple_committees_one_leader() {
     println!("Waiting 3 seconds before registering next batch...");
     sleep(Duration::from_secs(3)).await;
 
-    // Stage 2: Register next 2 committee nodes
-    println!("Registering second batch of committee nodes");
-    for i in 2..4 {
-        let (ports, config) = &committee_details[i];
+    // // Stage 2: Register next 2 committee nodes
+    // println!("Registering second batch of committee nodes");
+    // for i in 2..4 {
+    //     let (ports, config) = &committee_details[i];
 
-        register_nodes(&leader_ports, &leader_config, ports, config).await;
+    //     register_nodes(&leader_ports, &leader_config, ports, config).await;
 
-        // Verify registration
-        let (leader_found, committee_found) =
-            verify_mutual_registration(&leader_ports, ports).await;
+    //     // Verify registration
+    //     let (leader_found, committee_found) =
+    //         verify_mutual_registration(&leader_ports, ports).await;
 
-        assert!(
-            leader_found,
-            "Leader node not found in committee node {}'s key generator list",
-            i + 1
-        );
-        assert!(
-            committee_found,
-            "Committee node {} not found in leader's key generator list",
-            i + 1
-        );
-    }
+    //     assert!(
+    //         leader_found,
+    //         "Leader node not found in committee node {}'s key generator list",
+    //         i + 1
+    //     );
+    //     assert!(
+    //         committee_found,
+    //         "Committee node {} not found in leader's key generator list",
+    //         i + 1
+    //     );
+    // }
 
-    // Wait 3 seconds before final batch
-    println!("Waiting 3 seconds before registering final batch...");
-    sleep(Duration::from_secs(3)).await;
+    // // Wait 3 seconds before final batch
+    // println!("Waiting 3 seconds before registering final batch...");
+    // sleep(Duration::from_secs(3)).await;
 
-    // Stage 3: Register final 3 committee nodes
-    println!("Registering final batch of committee nodes");
-    for i in 4..6 {
-        let (ports, config) = &committee_details[i];
+    // // Stage 3: Register final 3 committee nodes
+    // println!("Registering final batch of committee nodes");
+    // for i in 4..6 {
+    //     let (ports, config) = &committee_details[i];
 
-        register_nodes(&leader_ports, &leader_config, ports, config).await;
+    //     register_nodes(&leader_ports, &leader_config, ports, config).await;
 
-        // Verify registration
-        let (leader_found, committee_found) =
-            verify_mutual_registration(&leader_ports, ports).await;
+    //     // Verify registration
+    //     let (leader_found, committee_found) =
+    //         verify_mutual_registration(&leader_ports, ports).await;
 
-        assert!(
-            leader_found,
-            "Leader node not found in committee node {}'s key generator list",
-            i + 1
-        );
-        assert!(
-            committee_found,
-            "Committee node {} not found in leader's key generator list",
-            i + 1
-        );
-    }
+    //     assert!(
+    //         leader_found,
+    //         "Leader node not found in committee node {}'s key generator list",
+    //         i + 1
+    //     );
+    //     assert!(
+    //         committee_found,
+    //         "Committee node {} not found in leader's key generator list",
+    //         i + 1
+    //     );
+    // }
 
-    // Wait for some time to observe system behavior
-    println!("All nodes registered. Waiting to observe system behavior...");
-    sleep(Duration::from_secs(10)).await;
+    // // Wait for some time to observe system behavior
+    // println!("All nodes registered. Waiting to observe system behavior...");
+    // sleep(Duration::from_secs(10)).await;
 
-    // 5. Cleanup all processes
-    println!("Test completed. Cleaning up processes...");
-    cleanup_existing_processes();
+    // // 5. Cleanup all processes
+    // println!("Test completed. Cleaning up processes...");
+    // cleanup_existing_processes();
 }

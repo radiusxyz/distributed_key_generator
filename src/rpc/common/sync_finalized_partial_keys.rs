@@ -34,7 +34,7 @@ pub fn process_partial_key_submissions(
     } = payload;
 
     info!(
-        "{} Received finalized partial keys ACK - partial_key_submissions.len(): {:?}, session_id: {:?}, timestamp: {}",
+        "{} Received finalized partial keys - partial_key_submissions.len(): {:?}, session_id: {:?}, timestamp: {}",
         prefix,
         partial_key_submissions.len(),
         session_id,
