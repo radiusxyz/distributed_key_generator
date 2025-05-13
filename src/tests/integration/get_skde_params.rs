@@ -14,7 +14,7 @@ use crate::{
 #[tokio::test]
 async fn test_get_skde_params() {
     // Initialize test environment
-    init_test_environment("node registration test");
+    init_test_environment("test_get_skde_params");
 
     // Vector to manage temporary directories
     let mut temp_dirs = Vec::new();
@@ -88,9 +88,11 @@ async fn test_get_skde_params() {
 
     // Compare entire JSON objects at once
     assert_eq!(
-        file_json,
+        file_json["params"],
         response_json,
-        "File content and API response do not match.\nFile: {}\nResponse: {}",
+        "File content and API response do not match.
+        Please re-run test after removing data/authority/skde_params.json and generate new one.
+        File: {}\nResponse: {}",
         serde_json::to_string_pretty(&file_json).unwrap(),
         serde_json::to_string_pretty(&response_json).unwrap()
     );

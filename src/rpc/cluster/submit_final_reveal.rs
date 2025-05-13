@@ -1,4 +1,3 @@
-use bincode::serialize as serialize_to_bincode;
 use radius_sdk::{
     json_rpc::{
         client::{Id, RpcClient},
@@ -12,14 +11,13 @@ use tracing::info;
 use super::{SyncDecryptionKey, SyncPartialKey};
 use crate::{rpc::prelude::*, utils::signature::create_signature};
 
-// Message from leader to verifiers
+// TODO: Add handler to submit partial keys and decryption key from leader to a verifier
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SubmitFinalReveal {
     pub signature: Signature,
     pub payload: FinalRevealPayload,
 }
 
-// TODO: determine the structure of the payload
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FinalRevealPayload {
     pub session_id: SessionId,
@@ -46,12 +44,6 @@ impl RpcParameter<AppState> for SubmitFinalReveal {
             self.payload.partial_keys.len()
         );
 
-        // Logic to store final reveal information
-        // In actual implementation, validators store this data for later verification
-
-        // TODO: Add validator logic (only logging for now)
-        // Actual validators can use this data to verify fairness of leader decisions
-
         Ok(RevealResponse { success: true })
     }
 }
@@ -72,11 +64,7 @@ pub fn broadcast_final_reveal(
         sync_decryption_key,
     };
 
-    let signature = create_signature(
-        context.config().signer(),
-        &serialize_to_bincode(&payload).unwrap(),
-    )
-    .unwrap();
+    let signature = create_signature(context.config().signer(), &payload).unwrap();
 
     let parameter = SubmitFinalReveal { signature, payload };
 

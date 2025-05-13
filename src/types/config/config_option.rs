@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     config_path::ConfigPath, DEFAULT_CHAIN_TYPE, DEFAULT_CLUSTER_RPC_URL, DEFAULT_EXTERNAL_RPC_URL,
-    DEFAULT_INTERNAL_RPC_URL, DEFAULT_PARTIAL_KEY_AGGREGATION_CYCLE_MS,
-    DEFAULT_PARTIAL_KEY_GENERATION_CYCLE_MS, DEFAULT_RADIUS_FOUNDATION_ADDRESS,
+    DEFAULT_INTERNAL_RPC_URL, DEFAULT_RADIUS_FOUNDATION_ADDRESS, DEFAULT_SESSION_CYCLE_MS,
 };
 
 /// Node roles in the DKG network
@@ -101,13 +100,9 @@ pub struct ConfigOption {
     #[clap(long = "chain-type")]
     pub chain_type: Option<String>,
 
-    #[doc = "Set partial key generation cycle"]
-    #[clap(long = "partial-key-generation-cycle")]
-    pub partial_key_generation_cycle_ms: Option<u64>,
-
-    #[doc = "Set partial key aggregation cycle"]
-    #[clap(long = "partial-key-aggregation-cycle")]
-    pub partial_key_aggregation_cycle_ms: Option<u64>,
+    #[doc = "Set session cycle"]
+    #[clap(long = "session-cycle")]
+    pub session_cycle: Option<u64>,
 }
 
 impl Default for ConfigOption {
@@ -126,8 +121,7 @@ impl Default for ConfigOption {
             role: None,
             radius_foundation_address: Some(DEFAULT_RADIUS_FOUNDATION_ADDRESS.into()),
             chain_type: Some(DEFAULT_CHAIN_TYPE.into()),
-            partial_key_generation_cycle_ms: Some(DEFAULT_PARTIAL_KEY_GENERATION_CYCLE_MS),
-            partial_key_aggregation_cycle_ms: Some(DEFAULT_PARTIAL_KEY_AGGREGATION_CYCLE_MS),
+            session_cycle: Some(DEFAULT_SESSION_CYCLE_MS),
         }
     }
 }
@@ -198,19 +192,8 @@ impl ConfigOption {
         );
         set_toml_name_value(&mut toml_string, "chain_type", &self.chain_type);
 
-        set_toml_comment(&mut toml_string, "Set partial key generation cycle");
-        set_toml_name_value(
-            &mut toml_string,
-            "partial_key_generation_cycle_ms",
-            &self.partial_key_generation_cycle_ms,
-        );
-
-        set_toml_comment(&mut toml_string, "Set partial key aggregation cycle");
-        set_toml_name_value(
-            &mut toml_string,
-            "partial_key_aggregation_cycle_ms",
-            &self.partial_key_aggregation_cycle_ms,
-        );
+        set_toml_comment(&mut toml_string, "Set session cycle");
+        set_toml_name_value(&mut toml_string, "session_cycle", &self.session_cycle);
 
         toml_string
     }
@@ -268,14 +251,8 @@ impl ConfigOption {
             self.chain_type.clone_from(&other.chain_type);
         }
 
-        if other.partial_key_generation_cycle_ms.is_some() {
-            self.partial_key_generation_cycle_ms
-                .clone_from(&other.partial_key_generation_cycle_ms);
-        }
-
-        if other.partial_key_aggregation_cycle_ms.is_some() {
-            self.partial_key_aggregation_cycle_ms
-                .clone_from(&other.partial_key_aggregation_cycle_ms);
+        if other.session_cycle.is_some() {
+            self.session_cycle.clone_from(&other.session_cycle);
         }
 
         self

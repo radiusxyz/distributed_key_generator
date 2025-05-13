@@ -31,10 +31,10 @@ impl RpcParameter<AppState> for RequestSubmitPartialKey {
         let prefix = log_prefix_with_session_id(context.config(), &self.session_id);
         let skde_params = context.skde_params();
 
+        info!("{} Submitted partial key to leader", prefix);
+
         let (_, partial_key) = generate_partial_key(skde_params).unwrap();
         submit_partial_key_to_leader(self.session_id, partial_key, &context.clone()).await?;
-
-        info!("{} Submitted partial key to leader", prefix);
 
         Ok(Some(()))
     }

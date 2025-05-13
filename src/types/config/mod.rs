@@ -20,8 +20,7 @@ const DEFAULT_CLUSTER_RPC_URL: &str = "http://127.0.0.1:5000";
 const DEFAULT_RADIUS_FOUNDATION_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 const DEFAULT_CHAIN_TYPE: &str = "ethereum";
 
-const DEFAULT_PARTIAL_KEY_GENERATION_CYCLE_MS: u64 = 500;
-const DEFAULT_PARTIAL_KEY_AGGREGATION_CYCLE_MS: u64 = 500;
+const DEFAULT_SESSION_CYCLE_MS: u64 = 500;
 
 #[derive(Clone)]
 pub struct Config {
@@ -42,8 +41,7 @@ pub struct Config {
     radius_foundation_address: Address,
     chain_type: ChainType,
 
-    partial_key_generation_cycle_ms: u64,
-    partial_key_aggregation_cycle_ms: u64,
+    session_cycle: u64,
 }
 
 impl Config {
@@ -165,12 +163,7 @@ impl Config {
             .unwrap(),
             chain_type,
 
-            partial_key_generation_cycle_ms: merged_config_option
-                .partial_key_generation_cycle_ms
-                .unwrap(),
-            partial_key_aggregation_cycle_ms: merged_config_option
-                .partial_key_aggregation_cycle_ms
-                .unwrap(),
+            session_cycle: merged_config_option.session_cycle.unwrap(),
         })
     }
 
@@ -206,12 +199,8 @@ impl Config {
         &self.internal_rpc_url
     }
 
-    pub fn partial_key_generation_cycle_ms(&self) -> u64 {
-        self.partial_key_generation_cycle_ms
-    }
-
-    pub fn partial_key_aggregation_cycle_ms(&self) -> u64 {
-        self.partial_key_aggregation_cycle_ms
+    pub fn session_cycle(&self) -> u64 {
+        self.session_cycle
     }
 
     pub fn cluster_rpc_url(&self) -> &String {
