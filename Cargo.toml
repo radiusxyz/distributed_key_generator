@@ -1,13 +1,38 @@
-[package]
-name = "distributed-key-generation"
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+authors = ["<dev@radius.xyz>"]
+homepage = "https://theradius.xyz"
+repository = "https://github.com/radiusxyz/distributed_key_generator"
 
-[[bin]]
-name = "key-generator"
-path = "src/bin/key_generator.rs"
+[workspace]
+resolver = "2"
+members = [
+    "src/rpc",
+    "src/cli",
+    "src/utils",
+    "src/types",
+    "src/bin",
+    "src/node",
+]
 
-[dependencies]
+default-members = ["src/bin"]
+
+[workspace.dependencies]
+# Internal
+dkg-node = { path = "src/node" }
+dkg-rpc = { path = "src/rpc" }
+dkg-cli = { path = "src/cli" }
+dkg-utils = { path = "src/utils" }
+dkg-types = { path = "src/types" }
+
+# Radius
+skde = { git = "https://github.com/radiusxyz/skde", rev = "d6ef27d4f1e34b391eddb039cf0b9f994f7cc2fe" }
+radius-sdk = { git = "https://github.com/radiusxyz/radius-sdk-rs", tag = "v0.1", features = [
+    "full",
+] }
+# External 
 bincode = "1.3.3"
 tokio = { version = "1.37.0", features = ["full"] }
 serde = { version = "1.0.197", features = ["derive"] }
@@ -20,11 +45,6 @@ sha2 = "0.10"
 sha3 = "0.10"
 once_cell = "1.19.0"
 ethers = "2.0.4"
-
-skde = { git = "https://github.com/radiusxyz/skde", rev = "d6ef27d4f1e34b391eddb039cf0b9f994f7cc2fe" }
-radius-sdk = { git = "https://github.com/radiusxyz/radius-sdk-rs", tag = "v0.1", features = [
-    "full",
-] }
 const-hex = "1.14.0"
 anyhow = "1.0.97"
 thiserror = "2.0.12"

@@ -1,0 +1,27 @@
+[package]
+name = "dkg"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "dkg"
+path = "./main.rs"
+
+[dependencies]
+# Radius
+radius-sdk.workspace = true
+
+# Internal
+dkg-rpc.workspace = true
+dkg-cli.workspace = true
+dkg-utils.workspace = true
+dkg-types.workspace = true
+
+# External
+clap.workspace = true
+serde.workspace = true
+tokio.workspace = true
+tracing.workspace = true
