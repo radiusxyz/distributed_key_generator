@@ -28,17 +28,17 @@ chmod -R 755 "$DATA_DIR" "$AUTHORITY_DATA_DIR" 2>/dev/null
 # Create Authority Node config file
 cat > "$AUTHORITY_DATA_DIR/Config.toml" << EOL
 # NODE CONFIG: Authority Node
+# Change the following values as needed:
 authority_rpc_url = "http://127.0.0.1:6000"
 role = "authority"
 
 # The following are unused by authority, but required for Config::load
 external_rpc_url = "http://127.0.0.1:7102"
 internal_rpc_url = "http://127.0.0.1:7202"
-cluster_rpc_url = "http://127.0.0.1:7302"
+cluster_rpc_url = "http://127.0.0.1:7303"
 radius_foundation_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 chain_type = "ethereum"
-partial_key_generation_cycle_ms = 1500
-partial_key_aggregation_cycle_ms = 1500
+session_cycle = 0
 EOL
 
 # Set private key
