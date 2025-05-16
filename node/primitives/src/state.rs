@@ -1,6 +1,6 @@
-use std::sync::Arc;
 
-use dkg_primitives::{Config, Role};
+use crate::{Config, Role};
+use std::sync::Arc;
 use skde::delay_encryption::SkdeParams;
 
 pub struct AppState {

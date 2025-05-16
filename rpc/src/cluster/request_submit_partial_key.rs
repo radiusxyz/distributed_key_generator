@@ -1,18 +1,10 @@
-use radius_sdk::json_rpc::{
-    client::{Id, RpcClient},
-    server::{RpcError, RpcParameter},
-};
+use super::SubmitPartialKey;
+use crate::primitives::*;
+use dkg_primitives::{AppState, SessionId, PartialKeyPayload};
 use serde::{Deserialize, Serialize};
 use skde::key_generation::{generate_partial_key, PartialKey as SkdePartialKey};
 use tracing::info;
 
-use super::SubmitPartialKey;
-use crate::{
-    rpc::{common::PartialKeyPayload, prelude::*},
-    utils::{
-        log::log_prefix_with_session_id, signature::create_signature, time::get_current_timestamp,
-    },
-};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RequestSubmitPartialKey {
@@ -20,46 +12,37 @@ pub struct RequestSubmitPartialKey {
 }
 
 // RPC Method for committee members to submit their partial keys to the leader
-impl RpcParameter<AppState> for RequestSubmitPartialKey {
+impl<C: AppState> RpcParameter<C> for RequestSubmitPartialKey 
+where
+    C: 'static
+{
     type Response = Option<()>;
 
     fn method() -> &'static str {
         "request_submit_partial_key"
     }
 
-    async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        let prefix = log_prefix_with_session_id(context.config(), &self.session_id);
-        let skde_params = context.skde_params();
-
-        info!("{} Submitted partial key to leader", prefix);
-
-        let (_, partial_key) = generate_partial_key(skde_params).unwrap();
+    async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
+        info!("{} Submitted partial key to leader on session {:?}", context.log_prefix(), self.session_id);
+        let (_, partial_key) = generate_partial_key(&context.skde_params()).unwrap();
         submit_partial_key_to_leader(self.session_id, partial_key, &context.clone()).await?;
 
         Ok(Some(()))
     }
 }
 
-pub async fn submit_partial_key_to_leader(
+pub async fn submit_partial_key_to_leader<C: AppState>(
     session_id: SessionId,
     partial_key: SkdePartialKey,
-    context: &AppState,
+    context: &C,
 ) -> Result<(), RpcError> {
-    let leader_rpc_url = match context.config().is_leader() {
-        true => context.config().cluster_rpc_url(),
-        false => &context.config().leader_cluster_rpc_url().clone().unwrap(),
-    };
+    let leader_rpc_url = context.leader_rpc_url();
 
     // Create payload with partial key and metadata
-    let payload = PartialKeyPayload {
-        sender: context.config().address().clone(),
-        partial_key,
-        submit_timestamp: get_current_timestamp(),
-        session_id,
-    };
+    let payload = PartialKeyPayload::new(context.address().clone(), partial_key, session_id);
 
     // Create signature for the payload
-    let signature = create_signature(context.config().signer(), &payload).unwrap();
+    let signature = context.create_signature(&payload).unwrap();
 
     let parameter = SubmitPartialKey { signature, payload };
 

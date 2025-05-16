@@ -1,9 +1,12 @@
-use dkg_types::SignedSkdeParams;
-use skde::delay_encryption::SkdeParams;
-
 use crate::primitives::*;
+use dkg_primitives::{SignedSkdeParams, AppState};
+use skde::delay_encryption::SkdeParams;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct GetSkdeParams;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetSkdeParamsResponse {
     pub signed_skde_params: SignedSkdeParams,
 }
@@ -14,16 +17,16 @@ impl GetSkdeParamsResponse {
     }
 }
 
-impl RpcParameter<AppState> for GetSkdeParams {
+impl<C: AppState> RpcParameter<C> for GetSkdeParams {
     type Response = GetSkdeParamsResponse;
 
     fn method() -> &'static str {
         "get_skde_params"
     }
 
-    async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
+    async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
         let skde_params = context.skde_params();
-        let signature = create_signature(context.config().signer(), &skde_params).unwrap();
+        let signature = context.create_signature(&skde_params)?;
         let signed_skde_params = SignedSkdeParams {
             params: skde_params,
             signature,

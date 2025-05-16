@@ -1,6 +1,6 @@
-use radius_sdk::json_rpc::server::RpcParameter;
-
-use crate::rpc::prelude::*;
+use crate::primitives::*;
+use serde::{Deserialize, Serialize};
+use dkg_primitives::{AppState, SessionId, DecryptionKey};   
 
 /// 09/05
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -13,18 +13,16 @@ pub struct GetDecryptionKeyResponse {
     pub decryption_key: String,
 }
 
-impl RpcParameter<AppState> for GetDecryptionKey {
+impl<C: AppState> RpcParameter<C> for GetDecryptionKey {
     type Response = GetDecryptionKeyResponse;
 
     fn method() -> &'static str {
         "get_decryption_key"
     }
 
-    async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
-        let decryption_key = DecryptionKey::get(self.session_id)?;
-
+    async fn handler(self, _context: C) -> Result<Self::Response, RpcError> {
         Ok(GetDecryptionKeyResponse {
-            decryption_key: decryption_key.as_string(),
+            decryption_key: DecryptionKey::get(self.session_id)?.into(),
         })
     }
 }

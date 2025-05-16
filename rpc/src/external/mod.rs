@@ -8,4 +8,4 @@ pub use get_decryption_key::*;
 pub use get_encryption_key::*;
 pub use get_finalized_partial_keys::*;
 pub use get_latest_encryption_key::*;
-pub use get_latest_key_id::*;
+pub use get_latest_session_id::*;

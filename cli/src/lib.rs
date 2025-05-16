@@ -1,10 +1,10 @@
-
 mod command;
-use command::run;
-
+mod config;
 use clap::{Parser, Subcommand};
+use command::run;
+use config::*;
+use dkg_node::config::{ConfigOption, ConfigPath};
 use serde::{Deserialize, Serialize};
-use dkg_node::config::{ConfigPath, ConfigOption};
 
 #[derive(Debug, Parser, Serialize, Deserialize)]
 #[command(author, version, about, long_about = None)]

@@ -1,34 +1,32 @@
 use std::collections::HashSet;
-use radius_sdk::{
-    kvstore::{KvStoreError, Model},
-    signature::{Address, Signature},
-};
+use std::hash::Hash;
+use radius_sdk::kvstore::{KvStoreError, Model};
 use serde::{Deserialize, Serialize};
 use skde::key_aggregation::AggregatedKey as SkdeAggregatedKey;
 
-use crate::{PartialKeyPayload, SessionId};
+use crate::{AppState, PartialKeyPayload, SessionId};
 
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
 #[kvstore(key(session_id: SessionId, address: &Address))]
-pub struct PartialKeySubmission {
+pub struct PartialKeySubmission<Signature, Address> {
     pub signature: Signature,
-    pub payload: PartialKeyPayload,
+    pub payload: PartialKeyPayload<Address>,
 }
 
-impl PartialKeySubmission {
-    pub fn new(partial_key_submission: &PartialKeySubmission) -> Self {
-        Self {
-            signature: partial_key_submission.signature.clone(),
-            payload: partial_key_submission.payload.clone(),
-        }
+impl<Signature, Address> PartialKeySubmission<Signature, Address> {
+    pub fn new(signature: Signature, payload: PartialKeyPayload<Address>) -> Self {
+        Self { signature, payload }
     }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Model)]
 #[kvstore(key(session_id: SessionId))]
-pub struct PartialKeyAddressList(HashSet<Address>);
+pub struct PartialKeyAddressList<Address: Hash + Eq + Clone>(HashSet<Address>);
 
-impl PartialKeyAddressList {
+impl<Address> PartialKeyAddressList<Address> 
+where
+    Address: Hash + Eq + Clone + Serialize,
+{
     pub fn insert(&mut self, address: Address) {
         self.0.insert(address);
     }
@@ -53,11 +51,14 @@ impl PartialKeyAddressList {
         Self(HashSet::new()).put(session_id)
     }
 
-    pub fn get_partial_key_list(
+    pub fn get_partial_key_list<C>(
         &self,
         session_id: SessionId,
-    ) -> Result<Vec<PartialKeySubmission>, KvStoreError> {
-        let partial_key_submissions: Result<Vec<PartialKeySubmission>, _> = self
+    ) -> Result<Vec<PartialKeySubmission<C::Signature, C::Address>>, KvStoreError> 
+    where
+        C: AppState,
+    {
+        let partial_key_submissions: Result<Vec<PartialKeySubmission<C::Signature, C::Address>>, _> = self
             .0
             .iter()
             .map(|address| PartialKeySubmission::get(session_id, address))

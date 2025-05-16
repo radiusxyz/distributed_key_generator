@@ -16,3 +16,4 @@ skde.workspace = true
 serde.workspace = true
 bincode.workspace = true
 tracing.workspace = true
+tokio.workspace = true

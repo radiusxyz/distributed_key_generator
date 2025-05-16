@@ -1,5 +1,5 @@
 async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Error> {
-    let prefix = log_prefix_role_and_address(app_state.config());
+    let prefix = log_prefix(app_state.config());
     let internal_rpc_url = app_state.config().internal_rpc_url().to_string();
 
     // Initialize the internal RPC server.
@@ -9,7 +9,7 @@ async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Erro
         .await
         .map_err(error::Error::RpcServerError)?;
 
-    info!(
+    tracing::info!(
         "{} Successfully started the internal RPC server: {}",
         prefix, internal_rpc_url
     );
@@ -22,7 +22,7 @@ async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Erro
 }
 
 async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error> {
-    let prefix = log_prefix_role_and_address(app_state.config());
+    let prefix = log_prefix(app_state.config());
     let cluster_rpc_url = anywhere(&app_state.config().cluster_port()?);
 
     let key_generator_rpc_server = RpcServer::new(app_state.clone())
@@ -51,7 +51,7 @@ async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error
 }
 
 async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHandle<()>, Error> {
-    let prefix = log_prefix_role_and_address(app_state.config());
+    let prefix = log_prefix(app_state.config());
     let external_rpc_url = anywhere(&app_state.config().external_port()?);
 
     // Initialize the external RPC server.
@@ -82,7 +82,7 @@ pub fn anywhere(port: &str) -> String {
 }
 
 async fn initialize_authority_rpc_server(app_state: &AppState) -> Result<JoinHandle<()>, Error> {
-    let prefix = log_prefix_role_and_address(app_state.config());
+    let prefix = log_prefix(app_state.config());
     let authority_rpc_url = anywhere(&app_state.config().authority_port()?);
 
     let rpc_server = RpcServer::new(app_state.clone())
@@ -104,7 +104,7 @@ async fn initialize_authority_rpc_server(app_state: &AppState) -> Result<JoinHan
 }
 
 async fn initialize_solve_rpc_server(app_state: &AppState) -> Result<JoinHandle<()>, Error> {
-    let prefix = log_prefix_role_and_address(app_state.config());
+    let prefix = log_prefix(app_state.config());
     let solver_rpc_url = app_state.config().solver_rpc_url().clone().unwrap();
 
     let rpc_server_builder = RpcServer::new(app_state.clone());

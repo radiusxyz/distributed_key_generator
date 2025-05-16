@@ -1,28 +1,21 @@
-use radius_sdk::{
-    json_rpc::{
-        client::{Id, RpcClient},
-        server::{RpcError, RpcParameter},
-    },
-    signature::Signature,
-};
+use super::{SyncDecryptionKey, SyncPartialKey};
+use crate::primitives::*;
+use dkg_primitives::{AppState, SessionId, Error, KeyGeneratorList};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use super::{SyncDecryptionKey, SyncPartialKey};
-use crate::{rpc::prelude::*, utils::signature::create_signature};
-
 // TODO: Add handler to submit partial keys and decryption key from leader to a verifier
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SubmitFinalReveal {
+pub struct SubmitFinalReveal<Signature, Address> {
     pub signature: Signature,
-    pub payload: FinalRevealPayload,
+    pub payload: FinalRevealPayload<Signature, Address>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct FinalRevealPayload {
+pub struct FinalRevealPayload<Signature, Address> {
     pub session_id: SessionId,
-    pub partial_keys: Vec<SyncPartialKey>,
-    pub sync_decryption_key: SyncDecryptionKey,
+    pub partial_keys: Vec<SyncPartialKey<Signature, Address>>,
+    pub sync_decryption_key: SyncDecryptionKey<Signature, Address>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -30,16 +23,18 @@ pub struct RevealResponse {
     pub success: bool,
 }
 
-impl RpcParameter<AppState> for SubmitFinalReveal {
+impl<C: AppState> RpcParameter<C> for SubmitFinalReveal<C::Signature, C::Address> {
     type Response = RevealResponse;
 
     fn method() -> &'static str {
         "submit_final_reveal"
     }
 
-    async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
+    async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
+        let prefix = context.log_prefix();
         info!(
-            "Received final reveal - session_id: {:?}, partial_keys: {}",
+            "{} Received final reveal - session_id: {:?}, partial_keys: {}",
+            prefix,
             self.payload.session_id,
             self.payload.partial_keys.len()
         );
@@ -49,11 +44,11 @@ impl RpcParameter<AppState> for SubmitFinalReveal {
 }
 
 // Broadcast final reveal information from leader
-pub fn broadcast_final_reveal(
+pub fn broadcast_final_reveal<C: AppState>(
     session_id: SessionId,
-    partial_keys: Vec<SyncPartialKey>,
+    partial_keys: Vec<SyncPartialKey<C::Signature, C::Address>>,
     sync_decryption_key: SyncDecryptionKey,
-    context: &AppState,
+    context: &C,
 ) -> Result<(), Error> {
     let all_key_generator_rpc_url_list =
         KeyGeneratorList::get()?.get_all_key_generator_rpc_url_list();
@@ -64,7 +59,7 @@ pub fn broadcast_final_reveal(
         sync_decryption_key,
     };
 
-    let signature = create_signature(context.config().signer(), &payload).unwrap();
+    let signature = context.create_signature(&payload).unwrap();
 
     let parameter = SubmitFinalReveal { signature, payload };
 

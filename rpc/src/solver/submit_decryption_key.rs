@@ -1,16 +1,13 @@
-use dkg_primitives::AppState;
-use radius_sdk::{
-    json_rpc::server::{RpcError, RpcParameter},
-    signature::{Address, Signature},
+use crate::{
+    cluster::broadcast_decryption_key_ack, 
+    primitives::*
 };
+use std::time::{SystemTime, UNIX_EPOCH};
+use dkg_primitives::{AppState, KeyGenerationError, SessionId};
+use dkg_utils::signature::verify_signature;
+use radius_sdk::signature::{Address, Signature};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
-
-use crate::{
-    error::KeyGenerationError,
-    rpc::{cluster::broadcast_decryption_key_ack, prelude::*},
-    utils::{log::log_prefix_role_and_address, signature::verify_signature},
-};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SubmitDecryptionKey {
@@ -26,6 +23,16 @@ pub struct SubmitDecryptionKeyPayload {
     pub timestamp: u128,
 }
 
+impl SubmitDecryptionKeyPayload {
+    pub fn new(sender: Address, decryption_key: String, session_id: SessionId) -> Self {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        Self { sender, decryption_key, session_id, timestamp }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DecryptionKeyResponse {
     pub success: bool,
@@ -33,7 +40,7 @@ pub struct DecryptionKeyResponse {
 
 impl<C> RpcParameter<C> for SubmitDecryptionKey
 where
-    C: AppState,
+    C: AppState + 'static,
 {
     type Response = DecryptionKeyResponse;
 
@@ -41,8 +48,8 @@ where
         "submit_decryption_key"
     }
 
-    async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        let prefix = log_prefix_role_and_address(context.config());
+    async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
+        let prefix = context.log_prefix();
 
         let sender_address = verify_signature(&self.signature, &self.payload)?;
         if sender_address != self.payload.sender {
@@ -52,8 +59,6 @@ where
                 err_msg.into(),
             )));
         }
-
-        let prefix = log_prefix_role_and_address(context.config());
 
         info!(
             "{} Received decryption key - session_id: {:?}, timestamp: {}",

@@ -1,17 +1,16 @@
 use dkg_primitives::{
     AggregatedKey, AppState as DkgAppState, DecryptionKey, Error, KeyGenerationError,
-    PartialKeyAddressList, SessionId,
+    PartialKeyAddressList, SessionId, TraceExt
 };
 use sha2::{Digest, Sha256};
+use sha3::{digest::{ExtendableOutput, Update, XofReader}, Shake256};
 use skde::{
-    delay_encryption::{solve_time_lock_puzzle, SkdeParams},
+    delay_encryption::{decrypt, encrypt, solve_time_lock_puzzle, SkdeParams},
     key_aggregation::{aggregate_key, AggregatedKey as SkdeAggregatedKey},
     key_generation::{generate_uv_pair, PartialKey as SkdePartialKey},
     BigUint,
 };
 use tracing::info;
-
-use crate::log::log_prefix_role_and_address;
 
 pub fn initialize_next_session_from_current(current_session_id: &SessionId) -> Result<(), Error> {
     let next_session_id = current_session_id.next().ok_or(Error::Arithmetic)?;
@@ -20,41 +19,52 @@ pub fn initialize_next_session_from_current(current_session_id: &SessionId) -> R
     Ok(())
 }
 
-// TODO: A more robust mechanism to handle delayed or missing solve operations should be designed.
-pub fn perform_randomized_aggregation(
-    context: dyn AppState,
+pub fn aggregate_partial_keys_from_partial_key_list(
+    skde_params: &SkdeParams,
     session_id: SessionId,
     partial_key_list: &[SkdePartialKey],
 ) -> SkdeAggregatedKey {
-    let prefix = log_prefix_role_and_address(context.config());
-    let skde_params = context.skde_params();
     let randomness = get_randomness(session_id);
     let mut selected_keys = select_random_partial_keys(partial_key_list, &randomness);
     let derived_key = derive_partial_key(&selected_keys, &skde_params);
     selected_keys.push(derived_key);
+    aggregate_key(&skde_params, &selected_keys)
+}
 
-    let skde_aggregated_key = aggregate_key(&skde_params, &selected_keys);
+// TODO: A more robust mechanism to handle delayed or missing solve operations should be designed.
+pub fn perform_randomized_aggregation<C: DkgAppState>(
+    context: &C,
+    session_id: SessionId,
+    partial_key_list: &[SkdePartialKey],
+) -> SkdeAggregatedKey {
+    let skde_params = context.skde_params().clone();
+
+    let skde_aggregated_key =
+        aggregate_partial_keys_from_partial_key_list(&skde_params, session_id, partial_key_list);
+
     AggregatedKey::new(skde_aggregated_key.clone())
         .put(session_id)
         .unwrap();
 
     info!(
         "{} Completed to generate encryption key - session id: {:?}",
-        prefix, session_id,
+        context.log_prefix(), session_id,
     );
 
     skde_aggregated_key
 }
 
-pub fn calculate_decryption_key(
-    context: &dyn DkgAppState,
+pub fn calculate_decryption_key<C: DkgAppState>(
+    context: &C,
     session_id: SessionId,
     skde_aggregated_key: &SkdeAggregatedKey,
 ) -> Result<DecryptionKey, KeyGenerationError> {
     let skde_params = context.skde_params();
+
     let secure_key = solve_time_lock_puzzle(&skde_params, skde_aggregated_key).map_err(|err| {
         KeyGenerationError::InternalError(format!("Failed to solve time lock puzzle: {:?}", err))
     })?;
+
     let decryption_key = DecryptionKey::new(secure_key.sk.clone());
 
     decryption_key.put(session_id).map_err(|err| {
@@ -165,8 +175,39 @@ pub fn get_randomness(current_session_id: SessionId) -> Vec<u8> {
             Err(_) => b"default-randomness".to_vec(),
         },
         None => {
-            // Underflow which mean initial session
+            // Underflow means `initial session`
             return b"initial-randomness".to_vec();
         }
     }
+}
+
+pub fn verify_encryption_decryption_key_pair(
+    skde_params: &SkdeParams,
+    encryption_key: &str,
+    decryption_key: &str,
+    prefix: &str,
+) -> Result<(), KeyGenerationError> {
+    let sample_message = "sample_message";
+
+    let ciphertext = encrypt(skde_params, sample_message, encryption_key, true)
+        .ok_or_trace()
+        .ok_or_else(|| KeyGenerationError::InternalError("Encryption failed".into()))?;
+
+    let decrypted_message = match decrypt(skde_params, &ciphertext, decryption_key) {
+        Ok(message) => message,
+        Err(err) => {
+            tracing::error!("{} Decryption failed: {}", prefix, err);
+            return Err(KeyGenerationError::InternalError(
+                format!("Decryption failed: {}", err).into(),
+            ));
+        }
+    };
+
+    if decrypted_message.as_str() != sample_message {
+        return Err(KeyGenerationError::InternalError(
+            "Decryption failed: message mismatch".into(),
+        ));
+    }
+
+    Ok(())
 }

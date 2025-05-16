@@ -1,33 +1,32 @@
-use dkg_utils::log::log_prefix_role_and_address;
-use radius_sdk::signature::Address;
+use crate::{primitives::*, cluster::SyncKeyGenerator};
+use dkg_primitives::{AppState, KeyGenerator, KeyGeneratorList};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct AddKeyGeneratorMessage {
+pub struct AddKeyGeneratorMessage<Address> {
     address: Address,
     cluster_rpc_url: String,
     external_rpc_url: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct AddKeyGenerator {
+pub struct AddKeyGenerator<Address> {
     // signature: Signature, // TODO: Uncomment this code
-    message: AddKeyGeneratorMessage,
+    message: AddKeyGeneratorMessage<Address>,
 }
 
 // TODO (Post-PoC): Replace leader self-RPC calls for partial key submission and decryption key sync with direct internal handling.
 // See Issue #38
-impl RpcParameter<AppState> for AddKeyGenerator {
+impl<C: AppState> RpcParameter<C> for AddKeyGenerator<C::Address> {
     type Response = ();
 
     fn method() -> &'static str {
         "add_key_generator"
     }
 
-    async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        let prefix = log_prefix_role_and_address(context.config());
-
+    async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
+        let prefix = context.log_prefix();
         let key_generator_list = KeyGeneratorList::get()?;
         if key_generator_list
             .iter()
@@ -67,8 +66,8 @@ impl RpcParameter<AppState> for AddKeyGenerator {
     }
 }
 
-pub fn sync_key_generator(context: AppState, add_key_generator: AddKeyGenerator) {
-    let prefix = log_prefix_role_and_address(context.config());
+pub fn sync_key_generator<C: AppState>(context: C, add_key_generator: AddKeyGenerator) {
+    let prefix = context.log_prefix();
     let key_generator_rpc_url_list = KeyGeneratorList::get()
         .unwrap()
         .get_all_key_generator_rpc_url_list();
@@ -86,7 +85,7 @@ pub fn sync_key_generator(context: AppState, add_key_generator: AddKeyGenerator)
         rpc_client
             .multicast(
                 key_generator_rpc_url_list,
-                SyncKeyGenerator::method(),
+                SyncKeyGenerator::<C::Address>::method(),
                 &add_key_generator,
                 Id::Null,
             )

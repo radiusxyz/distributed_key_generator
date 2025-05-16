@@ -2394,7 +2394,9 @@ name = "dkg-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "dkg-node-primitives",
  "dkg-node-service",
+ "dkg-primitives",
  "serde",
 ]
 
@@ -2403,22 +2405,35 @@ name = "dkg-node-primitives"
 version = "0.1.0"
 dependencies = [
  "dkg-primitives",
+ "radius-sdk",
+ "serde",
  "skde",
+ "toml",
 ]
 
 [[package]]
 name = "dkg-node-service"
 version = "0.1.0"
+dependencies = [
+ "dkg-node-primitives",
+ "dkg-primitives",
+ "dkg-rpc",
+ "radius-sdk",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "dkg-primitives"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "futures-util",
  "radius-sdk",
  "serde",
  "serde_json",
  "skde",
+ "tokio",
  "toml",
  "tracing",
 ]
@@ -2433,6 +2448,7 @@ dependencies = [
  "radius-sdk",
  "serde",
  "skde",
+ "tokio",
  "tracing",
 ]
 
@@ -2440,11 +2456,15 @@ dependencies = [
 name = "dkg-utils"
 version = "0.1.0"
 dependencies = [
+ "bincode",
+ "chrono",
  "dkg-primitives",
  "ethers",
  "radius-sdk",
  "serde",
+ "serde_json",
  "sha2",
+ "sha3 0.10.8",
  "skde",
  "tracing",
 ]
@@ -6823,6 +6843,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
+name = "signal-hook-registry"
+version = "1.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9203b8055f63a2a00e2f593bb0510367fe707d7ff1e5c872de2f537b339e5410"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "signature"
 version = "0.1.0"
 source = "git+https://github.com/radiusxyz/radius-sdk-rs?tag=v0.1#b08101cb25dd44c3e65bc6e09fa9b370c2e1bc74"
@@ -7361,7 +7390,9 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
+ "parking_lot",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.52.0",

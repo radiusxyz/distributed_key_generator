@@ -7,5 +7,6 @@ pub mod internal;
 
 pub mod authority;
 
-pub mod schema;
-pub use schema::*;
+mod primitives {
+    pub use radius_sdk::json_rpc::{server::{RpcParameter, RpcError}, client::{RpcClient, Id}};
+}

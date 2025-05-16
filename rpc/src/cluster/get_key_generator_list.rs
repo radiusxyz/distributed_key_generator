@@ -1,4 +1,6 @@
-use crate::rpc::prelude::*;
+use crate::primitives::*;
+use serde::{Deserialize, Serialize};
+use dkg_primitives::{AppState, KeyGeneratorList};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetKeyGeneratorList;
@@ -16,14 +18,14 @@ pub struct GetKeyGeneratorRpcUrlListResponse {
     pub key_generator_rpc_url_list: Vec<KeyGeneratorRpcInfo>,
 }
 
-impl RpcParameter<AppState> for GetKeyGeneratorList {
+impl<C: AppState + 'static> RpcParameter<C> for GetKeyGeneratorList {
     type Response = GetKeyGeneratorRpcUrlListResponse;
 
     fn method() -> &'static str {
         "get_key_generator_list"
     }
 
-    async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
+    async fn handler(self, _context: C) -> Result<Self::Response, RpcError> {
         let key_generator_list = KeyGeneratorList::get()?;
 
         let key_generator_rpc_url_list: Vec<KeyGeneratorRpcInfo> = key_generator_list

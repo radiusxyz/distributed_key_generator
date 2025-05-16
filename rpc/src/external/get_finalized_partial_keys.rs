@@ -1,4 +1,8 @@
-use crate::{error::KeyGenerationError, rpc::prelude::*};
+use crate::primitives::*;
+use dkg_primitives::{
+    AppState, SessionId, PartialKeySubmission, PartialKeyAddressList, KeyGenerationError
+};
+use serde::{Deserialize, Serialize};
 
 /// Get finalized partial keys for a specified session ID
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -11,19 +15,16 @@ pub struct GetFinalizedPartialKeysResponse {
     pub partial_key_submissions: Vec<PartialKeySubmission>,
 }
 
-impl RpcParameter<AppState> for GetFinalizedPartialKeys {
+impl<C: AppState> RpcParameter<C> for GetFinalizedPartialKeys {
     type Response = GetFinalizedPartialKeysResponse;
 
     fn method() -> &'static str {
         "get_finalized_partial_keys"
     }
 
-    async fn handler(self, _context: AppState) -> Result<Self::Response, RpcError> {
+    async fn handler(self, _context: C) -> Result<Self::Response, RpcError> {
         let session_id = self.session_id;
-
-        let partial_key_address_list = PartialKeyAddressList::get(session_id)?;
-
-        let partial_key_submissions = partial_key_address_list
+        let partial_key_submissions = PartialKeyAddressList::get(session_id)?
             .get_partial_key_list(session_id)
             .map_err(|err| {
                 RpcError::from(KeyGenerationError::InternalError(

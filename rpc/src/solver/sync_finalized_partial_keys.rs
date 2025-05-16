@@ -1,52 +1,45 @@
-use radius_sdk::{
-    json_rpc::server::{RpcError, RpcParameter},
-    signature::Signature,
+use crate::{
+    primitives::*,
+    common::process_partial_key_submissions,
+    solver::submit_decryption_key::{
+        DecryptionKeyResponse, SubmitDecryptionKey, SubmitDecryptionKeyPayload,
+    }
 };
 use serde::{Deserialize, Serialize};
 use skde::key_generation::PartialKey;
 use tracing::{error, info, warn};
-
-use super::submit_decryption_key::{
-    DecryptionKeyResponse, SubmitDecryptionKey, SubmitDecryptionKeyPayload,
-};
-use crate::{
-    get_current_timestamp,
-    rpc::{
-        common::{
-            process_partial_key_submissions, validate_partial_key_submission,
-            SyncFinalizedPartialKeysPayload,
-        },
-        prelude::*,
-    },
-    utils::{
-        key::{
-            calculate_decryption_key, perform_randomized_aggregation,
-            verify_encryption_decryption_key_pair,
-        },
-        log::log_prefix_role_and_address,
-        signature::create_signature,
-    },
+use dkg_primitives::{AppState, KeyGenerationError, SessionId, DecryptionKey, PartialKeyAddressList, SyncFinalizedPartialKeysPayload};
+use dkg_utils::key::{
+    calculate_decryption_key, perform_randomized_aggregation,
+    verify_encryption_decryption_key_pair,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SolverSyncFinalizedPartialKeys {
+pub struct SolverSyncFinalizedPartialKeys<Signature, Address> {
     pub signature: Signature,
-    pub payload: SyncFinalizedPartialKeysPayload,
+    pub payload: SyncFinalizedPartialKeysPayload<Signature, Address>,
 }
 
-impl RpcParameter<AppState> for SolverSyncFinalizedPartialKeys {
+impl<C: AppState> RpcParameter<C> for SolverSyncFinalizedPartialKeys<C::Signature, C::Address>
+where
+    C: 'static,
+{
     type Response = ();
 
     fn method() -> &'static str {
         "sync_finalized_partial_keys"
     }
 
-    async fn handler(self, context: AppState) -> Result<Self::Response, RpcError> {
-        let prefix = log_prefix_role_and_address(context.config());
+    async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
+        let prefix = context.log_prefix();
 
         PartialKeyAddressList::initialize(self.payload.session_id)?;
-
-        validate_partial_key_submission(&self.signature, &self.payload)?;
+        let sender_address = context.verify_signature(&self.signature, &self.payload)?;
+        if sender_address != self.payload.sender {
+            return Err(RpcError::from(KeyGenerationError::InternalError(
+                "Signature does not match sender address".into(),
+            )));
+        }
 
         let partial_keys = process_partial_key_submissions(&prefix, &self.payload)?;
 
@@ -56,16 +49,16 @@ impl RpcParameter<AppState> for SolverSyncFinalizedPartialKeys {
                     .await
             {
                 error!(
-                    "{} Solve failed for session {}: {:?}",
+                    "{} Solve failed for session {:?}: {:?}",
                     prefix,
-                    self.payload.session_id.as_u64(),
+                    self.payload.session_id,
                     err
                 );
             } else {
                 info!(
-                    "{} Solve completed successfully for session {}",
+                    "{} Solve completed successfully for session {:?}",
                     prefix,
-                    self.payload.session_id.as_u64()
+                    self.payload.session_id
                 );
             }
         });
@@ -73,49 +66,44 @@ impl RpcParameter<AppState> for SolverSyncFinalizedPartialKeys {
     }
 }
 
-async fn derive_and_submit_decryption_key(
-    context: &AppState,
+async fn derive_and_submit_decryption_key<C: AppState>(
+    context: &C,
     session_id: SessionId,
     partial_keys: &[PartialKey],
 ) -> Result<(), RpcError> {
-    let prefix = log_prefix_role_and_address(context.config());
+    let prefix = context.log_prefix();
 
     let aggregated_key = perform_randomized_aggregation(context, session_id, &partial_keys);
 
-    let decryption_key = calculate_decryption_key(context, session_id, &aggregated_key)
+    let decryption_key: String = calculate_decryption_key(context, session_id, &aggregated_key)
         .unwrap()
-        .as_string();
+        .into();
 
     let encryption_key = aggregated_key.u;
 
     verify_encryption_decryption_key_pair(
-        context.skde_params(),
+        &context.skde_params(),
         &encryption_key,
-        decryption_key.as_str(),
+        &decryption_key,
         &prefix,
     )?;
 
     DecryptionKey::new(decryption_key.clone()).put(session_id)?;
 
-    // Submit to leader
-    let node = context.config().signer();
-    let leader_rpc_url = context.config().leader_solver_rpc_url().clone().unwrap();
-
-    let payload = SubmitDecryptionKeyPayload {
-        sender: node.address().clone(),
-        decryption_key: decryption_key.clone(),
+    let payload = SubmitDecryptionKeyPayload::new(
+        context.address(),
+        decryption_key.clone(),
         session_id,
-        timestamp: get_current_timestamp(),
-    };
+    );
 
     let timestamp = payload.timestamp;
-    let signature = create_signature(node, &payload).unwrap();
+    let signature = context.create_signature(&payload)?;
     let request = SubmitDecryptionKey { signature, payload };
 
     let rpc_client = RpcClient::new()?;
     let response: DecryptionKeyResponse = rpc_client
         .request(
-            leader_rpc_url,
+            context.leader_rpc_url(),
             SubmitDecryptionKey::method(),
             &request,
             Id::Null,

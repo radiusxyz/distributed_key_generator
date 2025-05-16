@@ -7,3 +7,10 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+dkg-primitives.workspace = true
+dkg-node-primitives.workspace = true
+dkg-rpc.workspace = true
+radius-sdk.workspace = true
+
+tokio.workspace = true
+tracing.workspace = true

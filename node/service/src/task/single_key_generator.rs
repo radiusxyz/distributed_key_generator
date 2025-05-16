@@ -1,34 +1,26 @@
 use std::time::Duration;
-
-use radius_sdk::json_rpc::{
-    client::{Id, RpcClient, RpcClientError},
-    server::{RpcError, RpcParameter},
-};
 use tokio::time::sleep;
+use radius_sdk::json_rpc::client::RpcClient;
 use tracing::{debug, error, info};
-
-use crate::{
-    get_current_timestamp,
-    rpc::{
-        cluster::{ClusterSyncFinalizedPartialKeys, RequestSubmitPartialKey},
-        common::SyncFinalizedPartialKeysPayload,
-        solver::SolverSyncFinalizedPartialKeys,
-    },
-    state::AppState,
-    types::*,
-    utils::{
-        key::initialize_next_session_from_current,
-        log::{log_prefix_role_and_address, log_prefix_with_session_id},
-        signature::create_signature,
-    },
+use dkg_primitives::{
+    SyncFinalizedPartialKeysPayload, 
+    AppState, 
+    KeyGeneratorList, 
+    PartialKeyAddressList,
+    SessionId,
 };
+use dkg_rpc::{
+    cluster::{ClusterSyncFinalizedPartialKeys, RequestSubmitPartialKey},
+    solver::SolverSyncFinalizedPartialKeys,
+};
+
 pub const THRESHOLD: usize = 1;
 
 // Spawns a loop that periodically generates partial keys and aggregates them
-pub fn run_single_key_generator(context: AppState) {
-    let prefix = log_prefix_role_and_address(context.config());
+pub fn run_single_key_generator<C: AppState>(context: C) {
+    let prefix = context.log_prefix();
     tokio::spawn(async move {
-        let session_cycle = context.config().session_cycle();
+        let session_cycle = context.session_cycle();
         PartialKeyAddressList::initialize(SessionId::from(0)).unwrap();
 
         info!("{} Session cycle: {} ms", prefix, session_cycle);
@@ -41,9 +33,11 @@ pub fn run_single_key_generator(context: AppState) {
             let current_session_id = session_id.clone();
             initialize_next_session_from_current(&current_session_id);
 
-            let prefix: String = log_prefix_with_session_id(context.config(), &current_session_id);
-
-            info!("{} 🔑🗝️🔑 Waiting to start session 🔑🗝️🔑", prefix,);
+            info!(
+                "{} 🔑🗝️🔑 Waiting to start on session {} 🔑🗝️🔑",
+                context.log_prefix(),
+                current_session_id
+            );
 
             tokio::spawn(async move {
                 let key_generator_rpc_url_list = KeyGeneratorList::get()
@@ -168,12 +162,11 @@ pub async fn broadcast_finalized_partial_keys(
 
     let partial_key_submissions = list.get_partial_key_list(session_id).unwrap();
 
-    let payload: SyncFinalizedPartialKeysPayload = SyncFinalizedPartialKeysPayload {
-        sender: context.config().address().clone(),
+    let payload = SyncFinalizedPartialKeysPayload::new(
+        context.address().clone(),
         partial_key_submissions,
         session_id,
-        ack_timestamp: get_current_timestamp(),
-    };
+    );
 
     let signature = create_signature(context.config().signer(), &payload).unwrap();
     let message = ClusterSyncFinalizedPartialKeys {

@@ -1,56 +1,119 @@
-use std::path::PathBuf;
-
+use std::{env, fs, path::PathBuf};
 use clap::Parser;
+use dkg_node_primitives::{
+    CONFIG_FILE_NAME, DEFAULT_CHAIN_TYPE, DEFAULT_CLUSTER_RPC_URL, DEFAULT_EXTERNAL_RPC_URL,
+    DEFAULT_INTERNAL_RPC_URL, DEFAULT_RADIUS_FOUNDATION_ADDRESS, DEFAULT_SESSION_CYCLE_MS,
+    ConfigError, DEFAULT_HOME_PATH
+};
 use serde::{Deserialize, Serialize};
 
-use super::{
-    config_path::ConfigPath, DEFAULT_CHAIN_TYPE, DEFAULT_CLUSTER_RPC_URL, DEFAULT_EXTERNAL_RPC_URL,
-    DEFAULT_INTERNAL_RPC_URL, DEFAULT_RADIUS_FOUNDATION_ADDRESS, DEFAULT_SESSION_CYCLE_MS,
-};
-
-/// Node roles in the DKG network
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub enum Role {
-    /// Leader node responsible for collecting partial keys and coordinating
-    Leader,
-    /// Committee node that generates partial keys
-    Committee,
-    /// Solver node that computes decryption keys
-    Solver,
-    /// Verifier node that monitors the network for Byzantine behavior
-    Verifier,
-    /// Authority node that conducts the secure skde parameter setup
-    Authority,
+#[derive(Debug, Parser, Serialize, Deserialize)]
+pub struct ConfigPath {
+    #[doc = "Set the key generator configuration path"]
+    #[clap(long = "path", default_value_t = Self::default().to_string())]
+    path: String,
 }
 
-impl std::fmt::Display for Role {
+impl std::fmt::Display for ConfigPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Role::Leader => write!(f, "leader"),
-            Role::Committee => write!(f, "committee"),
-            Role::Solver => write!(f, "solver"),
-            Role::Verifier => write!(f, "verifier"),
-            Role::Authority => write!(f, "authority"),
-        }
+        write!(f, "{}", self.path)
     }
 }
 
-impl std::str::FromStr for Role {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "leader" => Ok(Role::Leader),
-            "committee" => Ok(Role::Committee),
-            "solver" => Ok(Role::Solver),
-            "verifier" => Ok(Role::Verifier),
-            "authority" => Ok(Role::Authority),
-            _ => Err(format!("Unknown role: {}", s)),
-        }
+impl AsRef<Path> for ConfigPath {
+    fn as_ref(&self) -> &Path {
+        self.path.as_ref()
     }
 }
 
-#[derive(Debug, Deserialize, Parser, Serialize)]
+impl Default for ConfigPath {
+    fn default() -> Self {
+        let args: Vec<String> = std::env::args().collect();
+        let path_arg = args.iter().enumerate().find_map(|(i, arg)| {
+            if arg == "--path" && i + 1 < args.len() {
+                Some(args[i + 1].clone())
+            } else if arg.starts_with("--path=") {
+                Some(arg.trim_start_matches("--path=").to_string())
+            } else {
+                None
+            }
+        });
+
+        let path = match path_arg {
+            Some(p) => p,
+            None => match std::env::var("RADIUS_NODE_PATH") {
+                Ok(env_path) => env_path,
+                Err(_) => {
+                    let current_dir = std::env::current_dir()
+                        .unwrap_or_else(|_| PathBuf::from("."))
+                        .to_string_lossy()
+                        .to_string();
+
+                    let node1_path = PathBuf::from(&current_dir).join("data").join("node1");
+
+                    if node1_path.exists() && node1_path.join(CONFIG_FILE_NAME).exists() {
+                        node1_path.to_string_lossy().to_string()
+                    } else {
+                        PathBuf::from(env::var("HOME").unwrap_or_else(|_| ".".to_string()))
+                            .join(DEFAULT_HOME_PATH)
+                            .to_string_lossy()
+                            .to_string()
+                    }
+                }
+            },
+        };
+
+        Self { path }
+    }
+}
+
+impl ConfigPath {
+    pub fn init(&self) -> Result<(), ConfigError> {
+        if !self.as_ref().exists() {
+            fs::create_dir_all(self).map_err(ConfigError::CreateConfigDirectory)?;
+        }
+
+        let config_file_path = self.as_ref().join(CONFIG_FILE_NAME);
+        if !config_file_path.exists() {
+            let config_toml_string = ConfigOption::default().get_toml_string();
+            fs::write(config_file_path, config_toml_string)
+                .map_err(ConfigError::CreateConfigFile)?;
+        }
+
+        let signing_key_path = self.as_ref().join(SIGNING_KEY);
+        if !signing_key_path.exists() {
+            // 기본 서명 키
+            let signing_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+            fs::write(signing_key_path, signing_key).map_err(ConfigError::CreatePrivateKeyFile)?;
+        }
+
+        info!("Config directory at {:?}", self.as_ref());
+        Ok(())
+    }
+    /// Initialize SKDE parameter file with default values if it doesn't exist.
+    /// This is only used in authority nodes.
+    pub fn init_skde_params_if_missing(&self) {
+        let skde_path = self.as_ref().join("skde_params.json");
+
+        // Skip if the file already exists
+        if skde_path.exists() {
+            return;
+        }
+
+        // Generate SKDE parameters
+        let default_params = default_skde_params();
+
+        // Serialize to JSON (POC: unwrap used)
+        let serialized = serde_json::to_string_pretty(&default_params).unwrap();
+
+        // Write to file (POC: unwrap used)
+        fs::write(&skde_path, serialized).unwrap();
+
+        info!("Default SKDE params written to {:?}", skde_path);
+    }
+}
+
+#[derive(Debug, Parser, Serialize, Deserialize)]
 pub struct ConfigOption {
     #[doc = "Set the configuration file path to load from"]
     #[clap(long = "path")]

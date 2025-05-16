@@ -1,27 +1,14 @@
 use std::{fs, path::PathBuf};
 
+use dkg_node_primitives::{DEFAULT_GENERATOR, DEFAULT_MAX_SEQUENCER_NUMBER, DEFAULT_TIME_PARAM_T};
 use radius_sdk::signature::{ChainType, PrivateKeySigner, Signature};
 use serde::{Deserialize, Serialize};
 use skde::delay_encryption::{setup, SkdeParams};
 use tracing::{info, warn};
 
-use crate::ConfigPath;
-
-// Constants for SKDE setup parameters
-const DEFAULT_TIME_PARAM_T: u32 = 4;
-const DEFAULT_GENERATOR: u32 = 4;
-const DEFAULT_MAX_SEQUENCER_NUMBER: u32 = 2;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SignedSkdeParams {
-    pub params: SkdeParams,
-    pub signature: Signature,
-}
-
-pub fn run_setup_skde_params(path: &ConfigPath) {
-    let config_dir: PathBuf = path.as_ref().into();
-    let skde_path = config_dir.join("skde_params.json");
-    let signing_key_path = config_dir.join("signing_key");
+pub fn run_setup_skde_params(path: PathBuf) {
+    let skde_path = path.join("skde_params.json");
+    let signing_key_path = path.join("signing_key");
 
     if skde_path.exists() {
         warn!("SKDE parameter file already exists: {:?}", skde_path);

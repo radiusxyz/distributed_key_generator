@@ -1,18 +1,18 @@
-use radius_sdk::{json_rpc::server::RpcError, signature::Signature};
+use crate::primitives::*;
 use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::info;
+use dkg_primitives::{AppState, PartialKeyAddressList, KeyGenerationError, SyncFinalizedPartialKeysPayload};
+use dkg_utils::signature::verify_signature;
 
-use crate::{
-    error::KeyGenerationError,
-    rpc::{common::SyncFinalizedPartialKeysPayload, prelude::*},
-    utils::signature::verify_signature,
-};
-
-pub fn validate_partial_key_submission(
-    signature: &Signature,
+pub fn validate_partial_key_submission<C>(
+    context: &C,
+    signature: &C::Signature,
     payload: &SyncFinalizedPartialKeysPayload,
-) -> Result<(), RpcError> {
-    let sender_address = verify_signature(signature, payload)?;
+) -> Result<(), RpcError> 
+where
+    C: AppState,
+{
+    let sender_address = context.verify_signature(signature, payload)?;
     if sender_address != payload.sender {
         return Err(RpcError::from(KeyGenerationError::InternalError(
             "Signature does not match sender address".into(),
@@ -69,7 +69,7 @@ pub fn process_partial_key_submissions(
             list.insert(signer.clone());
         })?;
 
-        PartialKeySubmission::new(pk_submission).put(*session_id, &signer)?;
+        pk_submission.clone().put(*session_id, &signer)?;
         partial_keys.push(pk_submission.payload.partial_key.clone());
     }
 
