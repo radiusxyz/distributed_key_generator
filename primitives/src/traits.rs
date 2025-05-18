@@ -1,21 +1,31 @@
 use crate::KeyGenerationError;
-use std::hash::Hash;
-use radius_sdk::signature::{Address, PrivateKeySigner, Signature, SignatureError};
+use std::{hash::Hash, fmt::Debug};
+use radius_sdk::{
+    signature::{PrivateKeySigner, SignatureError}, 
+    kvstore::KvStoreError,
+};
 use skde::delay_encryption::SkdeParams;
 use futures_util::future::BoxFuture;
 use tokio::task::JoinHandle;
 use serde::{Serialize, de::DeserializeOwned};
 
-pub trait AppState: Clone + Send + Sync {
-
-    /// The error type of this app
-    type Error: std::error::Error + Send + Sync + 'static + From<SignatureError>;
+pub trait AppState: Clone + Send + Sync + 'static {
     /// The address type that this app accepts
-    type Address: Serialize + DeserializeOwned + PartialEq + Eq + Hash + Send + Sync + 'static;
+    type Address: Parameter + AddressT;
     /// The signature type that this app accepts
-    type Signature: Serialize + DeserializeOwned + Send + Sync + 'static;
+    type Signature: Parameter + Debug;
     /// Verifier for the signature
-    type Verify: Verify<Self::Signature>;
+    type Verify: Verify<Self::Signature, Self::Address>;
+    /// Type that spawns tasks
+    type TaskSpawner: TaskSpawner;
+    /// The error type of this app
+    type Error: std::error::Error 
+        + From<SignatureError>
+        + From<KvStoreError>
+        + From<KeyGenerationError>
+        + Send 
+        + Sync 
+        + 'static;
 
     /// Check if the node is a leader
     fn is_leader(&self) -> bool;
@@ -24,7 +34,7 @@ pub trait AppState: Clone + Send + Sync {
     /// Get the node's signer
     fn signer(&self) -> PrivateKeySigner;
     /// Get the node's address which is used for creating payload
-    fn address(&self) -> Address;
+    fn address(&self) -> Self::Address;
     /// Get pre-set skde parameter
     fn skde_params(&self) -> SkdeParams;
     /// Get the session cycle
@@ -32,36 +42,42 @@ pub trait AppState: Clone + Send + Sync {
     /// Helper function to get log prefix
     fn log_prefix(&self) -> String;
     /// Helper function to get signature
-    fn create_signature<T: Serialize>(&self, message: &T) -> Result<Signature, Self::Error> {
-        self.signer()
-            .sign_message(message)
-            .map_err(|e| Self::Error::from(e))
-    }
+    //self.signer()
+    //.sign_message(message)
+    //.map_err(|e| Self::Error::from(e))
+    fn sign<T: Serialize>(&self, message: &T) -> Result<Self::Signature, Self::Error>;
     /// Helper function to verify signature. Verification will be handled by `Self::VerifySignature` type
-    fn verify_signature<T: Serialize>(&self, signature: &Self::Signature, message: &T) -> Result<Address, Self::Error> {
-        Self::Verify::verify_signature(signature, message)
-            .map_err(|e| Self::Error::from(e))
+    fn verify_signature<T: Serialize>(&self, signature: &Self::Signature, message: &T, address: &Self::Address) -> Result<Self::Address, Self::Error> {
+        let signer = Self::Verify::verify_signature(signature, message)
+            .map_err(|e| Self::Error::from(e))?;
+        if signer != *address {
+            return Err(Self::Error::from(KeyGenerationError::InvalidSignature));
+        }
+        Ok(signer)
     }
     /// Helper function to verify decryption key
     fn verify_decryption_key(
         &self,
         skde_params: &SkdeParams,
-        encryption_key: &str,
-        decryption_key: &str,
+        encryption_key: String,
+        decryption_key: String,
         prefix: &str,
     ) -> Result<(), KeyGenerationError> {
         Self::Verify::verify_decryption_key(skde_params, encryption_key, decryption_key, prefix)
     }
+
+    /// Helper function to get task spawner
+    fn task_spawner(&self) -> &Self::TaskSpawner;
 }
 
-pub trait Verify<Signature> {
+pub trait Verify<Signature, Address> {
 
     fn verify_signature<T: Serialize>(signature: &Signature, message: &T) -> Result<Address, SignatureError>;
 
     fn verify_decryption_key(
         skde_params: &SkdeParams,
-        encryption_key: &str,
-        decryption_key: &str,
+        encryption_key: String,
+        decryption_key: String,
         prefix: &str,
     ) -> Result<(), KeyGenerationError>;
 }
@@ -101,3 +117,14 @@ where
         }
     }
 }
+
+/// A trait for types that can be used in RPC parameters
+pub trait Parameter: Serialize + DeserializeOwned + Clone + Send + Sync + 'static {}
+
+impl<T> Parameter for T where T: Serialize + DeserializeOwned + Clone + Send + Sync + 'static {}
+
+pub trait AddressT: Hash + Eq + PartialEq + Clone + Debug + Into<String> + From<String> {}
+
+impl<T> AddressT for T where T: Hash + Eq + PartialEq + Clone + Debug + Into<String> + From<String> {}
+
+

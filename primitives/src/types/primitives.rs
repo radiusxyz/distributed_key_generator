@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Error;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Model, Default, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Model, Default, Hash, Serialize, Deserialize)]
 #[kvstore(key())]
 pub struct SessionId(u64);
 

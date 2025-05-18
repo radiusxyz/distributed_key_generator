@@ -1,5 +1,4 @@
 use crate::{cluster::broadcast_partial_key_ack, primitives::*};
-use radius_sdk::signature::Signature;
 use dkg_primitives::{
     AppState,
     KeyGenerationError,
@@ -8,19 +7,18 @@ use dkg_primitives::{
     PartialKeyAddressList,
     PartialKeySubmission,
 };
-use dkg_utils::{signature::verify_signature, short_addr};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SubmitPartialKey {
+pub struct SubmitPartialKey<Signature, Address> {
     pub signature: Signature,
-    pub payload: PartialKeyPayload,
+    pub payload: PartialKeyPayload<Address>,
 }
 
-impl<C: AppState> RpcParameter<C> for SubmitPartialKey 
+impl<C> RpcParameter<C> for SubmitPartialKey<C::Signature, C::Address>
 where
-    C: 'static
+    C: AppState
 {
     type Response = ();
 
@@ -29,36 +27,34 @@ where
     }
 
     async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
-        let sender_address = verify_signature(&self.signature, &self.payload)?;
-
-        if sender_address != self.payload.sender {
-            return Err(RpcError::from(KeyGenerationError::InternalError(
-                "Signature does not match sender address".into(),
-            )));
-        }
-
+        let sender_address = context.verify_signature(
+            &self.signature, 
+            &self.payload, 
+            &self.payload.sender
+        )?;
+        let session_id = self.payload.session_id;
         info!(
-            "{} Received partial key - session_id: {:?}, sender: {}, timestamp: {}",
+            "{} Received partial key - session_id: {:?}, sender: {:?}, timestamp: {}",
             context.log_prefix(),
-            self.payload.session_id,
-            short_addr(&self.payload.sender),
+            session_id,
+            sender_address,
             self.payload.submit_timestamp
         );
 
         // Check if key generator is registered in the cluster
         let key_generator_list = KeyGeneratorList::get()?;
-        if !key_generator_list.is_key_generator_in_cluster(&self.payload.sender) {
+        if !key_generator_list.is_key_generator_in_cluster(&sender_address) {
             return Err(RpcError::from(KeyGenerationError::NotRegisteredGenerator(
-                self.payload.sender.as_hex_string(),
+                sender_address.into(),
             )));
         }
 
-        PartialKeyAddressList::apply(self.payload.session_id, |list| {
+        PartialKeyAddressList::apply(session_id, |list| {
             list.insert(sender_address.clone());
         })?;
 
         let partial_key_submission = PartialKeySubmission::new(self.signature, self.payload);
-        partial_key_submission.put(self.payload.session_id, &self.payload.sender)?;
+        partial_key_submission.put(session_id, sender_address)?;
 
         let _ = broadcast_partial_key_ack(partial_key_submission, &context);
 

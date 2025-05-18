@@ -13,5 +13,3 @@ pub use error::*;
 pub use payload::*;
 pub use primitives::*;
 
-pub const CONFIG_FILE_NAME: &str = "Config.toml";
-pub const SIGNING_KEY: &str = "signing_key";

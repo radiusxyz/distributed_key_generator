@@ -1,13 +1,12 @@
-use std::collections::HashSet;
-use std::hash::Hash;
+use crate::{AppState, PartialKeyPayload, SessionId};
+use std::fmt::{Debug, Display};
 use radius_sdk::kvstore::{KvStoreError, Model};
-use serde::{Deserialize, Serialize};
+use crate::traits::{AddressT, Parameter};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use skde::key_aggregation::AggregatedKey as SkdeAggregatedKey;
 
-use crate::{AppState, PartialKeyPayload, SessionId};
-
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
-#[kvstore(key(session_id: SessionId, address: &Address))]
+#[kvstore(key(session_id: SessionId, address: Address))]
 pub struct PartialKeySubmission<Signature, Address> {
     pub signature: Signature,
     pub payload: PartialKeyPayload<Address>,
@@ -17,22 +16,33 @@ impl<Signature, Address> PartialKeySubmission<Signature, Address> {
     pub fn new(signature: Signature, payload: PartialKeyPayload<Address>) -> Self {
         Self { signature, payload }
     }
+
+    pub fn sender(&self) -> &Address {
+        &self.payload.sender
+    }
+}
+
+impl<Signature, Address: Debug> Display for PartialKeySubmission<Signature, Address> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Broadcasting partial key acknowledgment - PartialKeySubmission {{ sender: {:?}, session_id: {:?}, timestamp: {} }}", 
+            self.payload.sender, 
+            self.payload.session_id, 
+            self.payload.submit_timestamp
+        )
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Model)]
 #[kvstore(key(session_id: SessionId))]
-pub struct PartialKeyAddressList<Address: Hash + Eq + Clone>(HashSet<Address>);
+pub struct PartialKeyAddressList<Address>(Vec<Address>);
 
-impl<Address> PartialKeyAddressList<Address> 
-where
-    Address: Hash + Eq + Clone + Serialize,
-{
+impl<Address: Parameter + AddressT> PartialKeyAddressList<Address> {
     pub fn insert(&mut self, address: Address) {
-        self.0.insert(address);
+        self.0.push(address);
     }
 
     pub fn remove(&mut self, address: Address) {
-        self.0.remove(&address);
+        self.0.retain(|a| a != &address);
     }
 
     pub fn to_vec(&self) -> Vec<Address> {
@@ -48,20 +58,22 @@ where
     }
 
     pub fn initialize(session_id: SessionId) -> Result<(), KvStoreError> {
-        Self(HashSet::new()).put(session_id)
+        Self(Vec::new()).put(session_id)
     }
 
-    pub fn get_partial_key_list<C>(
+    pub fn get_partial_key_list<C: AppState>(
         &self,
         session_id: SessionId,
     ) -> Result<Vec<PartialKeySubmission<C::Signature, C::Address>>, KvStoreError> 
     where
-        C: AppState,
+        C::Address: From<Address>,
     {
         let partial_key_submissions: Result<Vec<PartialKeySubmission<C::Signature, C::Address>>, _> = self
             .0
             .iter()
-            .map(|address| PartialKeySubmission::get(session_id, address))
+            .map(|address| {
+                PartialKeySubmission::<C::Signature, C::Address>::get(session_id, C::Address::from(address.clone()))
+            })
             .collect();
 
         partial_key_submissions?

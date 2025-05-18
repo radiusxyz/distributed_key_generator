@@ -1,31 +1,29 @@
 use crate::primitives::*;
 use skde::key_generation::PartialKey as SkdePartialKey;
 use tracing::info;
-use dkg_primitives::{AppState, PartialKeyAddressList, KeyGenerationError, SyncFinalizedPartialKeysPayload};
-use dkg_utils::signature::verify_signature;
+use dkg_primitives::{AppState, PartialKeyAddressList, SyncFinalizedPartialKeysPayload};
 
 pub fn validate_partial_key_submission<C>(
     context: &C,
     signature: &C::Signature,
-    payload: &SyncFinalizedPartialKeysPayload,
+    payload: &SyncFinalizedPartialKeysPayload<C::Signature, C::Address>,
 ) -> Result<(), RpcError> 
 where
     C: AppState,
 {
-    let sender_address = context.verify_signature(signature, payload)?;
-    if sender_address != payload.sender {
-        return Err(RpcError::from(KeyGenerationError::InternalError(
-            "Signature does not match sender address".into(),
-        )));
-    }
-
+    let _ = context.verify_signature(signature, payload, &payload.sender)?;
     Ok(())
 }
 
-pub fn process_partial_key_submissions(
-    prefix: &str,
-    payload: &SyncFinalizedPartialKeysPayload,
-) -> Result<Vec<SkdePartialKey>, RpcError> {
+pub fn process_partial_key_submissions<C>(
+    context: &C,
+    payload: &SyncFinalizedPartialKeysPayload<C::Signature, C::Address>,
+) -> Result<Vec<SkdePartialKey>, RpcError> 
+where
+    C: AppState,
+    C::Signature: Clone,
+    C::Address: Clone,
+{
     let SyncFinalizedPartialKeysPayload {
         partial_key_submissions,
         session_id,
@@ -35,7 +33,7 @@ pub fn process_partial_key_submissions(
 
     info!(
         "{} Received finalized partial keys - partial_key_submissions.len(): {:?}, session_id: {:?}, timestamp: {}",
-        prefix,
+        context.log_prefix(),
         partial_key_submissions.len(),
         session_id,
         ack_timestamp
@@ -47,29 +45,14 @@ pub fn process_partial_key_submissions(
     let mut sorted_submissions = partial_key_submissions.clone();
     sorted_submissions.sort_by(|a, b| a.payload.partial_key.u.cmp(&b.payload.partial_key.u));
 
-    for (i, pk_submission) in sorted_submissions.iter().enumerate() {
+    for pk_submission in sorted_submissions.iter() {
         let signable_message = pk_submission.payload.clone();
-        let signer = verify_signature(&pk_submission.signature, &signable_message)?;
-
-        if signer != pk_submission.payload.sender {
-            info!(
-                "Signature mismatch at index {}: expected {:?}, got {:?}",
-                i, pk_submission.payload.sender, signer
-            );
-            return Err(RpcError::from(KeyGenerationError::InvalidPartialKey(
-                format!(
-                    "Signature mismatch at index {}: expected {:?}, got {:?}",
-                    i, pk_submission.payload.sender, signer
-                ),
-            )));
-        }
-
-        PartialKeyAddressList::initialize(*session_id)?;
+        let signer = context.verify_signature(&pk_submission.signature, &signable_message, &pk_submission.sender())?;
+        PartialKeyAddressList::<C::Address>::initialize(*session_id)?;
         PartialKeyAddressList::apply(*session_id, |list| {
             list.insert(signer.clone());
         })?;
-
-        pk_submission.clone().put(*session_id, &signer)?;
+        pk_submission.clone().put(*session_id, signer)?;
         partial_keys.push(pk_submission.payload.partial_key.clone());
     }
 

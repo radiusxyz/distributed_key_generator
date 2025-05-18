@@ -12,5 +12,7 @@ dkg-node-primitives.workspace = true
 dkg-rpc.workspace = true
 radius-sdk.workspace = true
 
+serde_json.workspace = true
+skde.workspace = true
 tokio.workspace = true
 tracing.workspace = true

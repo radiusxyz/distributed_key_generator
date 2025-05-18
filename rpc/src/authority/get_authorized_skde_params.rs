@@ -7,12 +7,15 @@ use skde::delay_encryption::SkdeParams;
 pub struct GetAuthorizedSkdeParams;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct GetAuthorizedSkdeParamsResponse {
-    pub signed_skde_params: SignedSkdeParams,
+pub struct GetAuthorizedSkdeParamsResponse<Signature> {
+    pub signed_skde_params: SignedSkdeParams<Signature>,
 }
 
-impl<C: AppState> RpcParameter<C> for GetAuthorizedSkdeParams {
-    type Response = GetAuthorizedSkdeParamsResponse;
+impl<C> RpcParameter<C> for GetAuthorizedSkdeParams
+where
+    C: AppState,
+{
+    type Response = GetAuthorizedSkdeParamsResponse<C::Signature>;
 
     fn method() -> &'static str {
         "get_authorized_skde_params"
@@ -20,7 +23,9 @@ impl<C: AppState> RpcParameter<C> for GetAuthorizedSkdeParams {
 
     async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
         let skde_params = context.skde_params();
-        let signature = context.create_signature(&skde_params).unwrap();
+        let signature = context
+            .sign(&skde_params)
+            .map_err(|e| RpcError::from(e))?;
         let signed_skde_params = SignedSkdeParams {
             params: skde_params,
             signature,
@@ -29,16 +34,14 @@ impl<C: AppState> RpcParameter<C> for GetAuthorizedSkdeParams {
     }
 }
 
-impl From<SignedSkdeParams> for GetAuthorizedSkdeParamsResponse {
-    fn from(signed: SignedSkdeParams) -> Self {
-        Self {
-            signed_skde_params: signed,
-        }
+impl<Signature> From<SignedSkdeParams<Signature>> for GetAuthorizedSkdeParamsResponse<Signature> {
+    fn from(value: SignedSkdeParams<Signature>) -> Self {
+        Self { signed_skde_params: value }
     }
 }
 
-impl GetAuthorizedSkdeParamsResponse {
-    pub fn into_skde_params(self) -> SkdeParams {
+impl<Signature> Into<SkdeParams> for GetAuthorizedSkdeParamsResponse<Signature> {
+    fn into(self) -> SkdeParams {
         self.signed_skde_params.params
     }
 }

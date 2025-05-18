@@ -1,17 +1,20 @@
-use crate::{
-    primitives::*,
-    common::process_partial_key_submissions,
-    solver::submit_decryption_key::{
-        DecryptionKeyResponse, SubmitDecryptionKey, SubmitDecryptionKeyPayload,
-    }
+use dkg_primitives::{
+    AppState, DecryptionKey, PartialKeyAddressList, SessionId,
+    SyncFinalizedPartialKeysPayload, SubmitDecryptionKeyPayload,
+};
+use dkg_utils::key::{
+    calculate_decryption_key, perform_randomized_aggregation, verify_encryption_decryption_key_pair,
 };
 use serde::{Deserialize, Serialize};
 use skde::key_generation::PartialKey;
 use tracing::{error, info, warn};
-use dkg_primitives::{AppState, KeyGenerationError, SessionId, DecryptionKey, PartialKeyAddressList, SyncFinalizedPartialKeysPayload};
-use dkg_utils::key::{
-    calculate_decryption_key, perform_randomized_aggregation,
-    verify_encryption_decryption_key_pair,
+
+use crate::{
+    common::process_partial_key_submissions,
+    primitives::*,
+    solver::submit_decryption_key::{
+        DecryptionKeyResponse, SubmitDecryptionKey,
+    },
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -20,9 +23,9 @@ pub struct SolverSyncFinalizedPartialKeys<Signature, Address> {
     pub payload: SyncFinalizedPartialKeysPayload<Signature, Address>,
 }
 
-impl<C: AppState> RpcParameter<C> for SolverSyncFinalizedPartialKeys<C::Signature, C::Address>
+impl<C> RpcParameter<C> for SolverSyncFinalizedPartialKeys<C::Signature, C::Address>
 where
-    C: 'static,
+    C: AppState
 {
     type Response = ();
 
@@ -33,32 +36,22 @@ where
     async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
         let prefix = context.log_prefix();
 
-        PartialKeyAddressList::initialize(self.payload.session_id)?;
-        let sender_address = context.verify_signature(&self.signature, &self.payload)?;
-        if sender_address != self.payload.sender {
-            return Err(RpcError::from(KeyGenerationError::InternalError(
-                "Signature does not match sender address".into(),
-            )));
-        }
-
-        let partial_keys = process_partial_key_submissions(&prefix, &self.payload)?;
-
+        PartialKeyAddressList::<C::Address>::initialize(self.payload.session_id)?;
+        let _ = context.verify_signature(&self.signature, &self.payload, &self.payload.sender)?;
+        let partial_keys = process_partial_key_submissions::<C>(&context, &self.payload)?;
         tokio::spawn(async move {
             if let Err(err) =
-                derive_and_submit_decryption_key(&context, self.payload.session_id, &partial_keys)
+                derive_and_submit_decryption_key::<C>(&context, self.payload.session_id, &partial_keys)
                     .await
             {
                 error!(
                     "{} Solve failed for session {:?}: {:?}",
-                    prefix,
-                    self.payload.session_id,
-                    err
+                    prefix, self.payload.session_id, err
                 );
             } else {
                 info!(
                     "{} Solve completed successfully for session {:?}",
-                    prefix,
-                    self.payload.session_id
+                    prefix, self.payload.session_id
                 );
             }
         });
@@ -90,21 +83,18 @@ async fn derive_and_submit_decryption_key<C: AppState>(
 
     DecryptionKey::new(decryption_key.clone()).put(session_id)?;
 
-    let payload = SubmitDecryptionKeyPayload::new(
-        context.address(),
-        decryption_key.clone(),
-        session_id,
-    );
+    let payload =
+        SubmitDecryptionKeyPayload::new(context.address(), decryption_key.clone(), session_id);
 
     let timestamp = payload.timestamp;
-    let signature = context.create_signature(&payload)?;
+    let signature = context.sign(&payload)?;
     let request = SubmitDecryptionKey { signature, payload };
 
     let rpc_client = RpcClient::new()?;
     let response: DecryptionKeyResponse = rpc_client
         .request(
             context.leader_rpc_url(),
-            SubmitDecryptionKey::method(),
+            <SubmitDecryptionKey::<C::Signature, C::Address> as RpcParameter<C>>::method(),
             &request,
             Id::Null,
         )

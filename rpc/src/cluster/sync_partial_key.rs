@@ -4,11 +4,9 @@ use tracing::info;
 use dkg_primitives::{
     AppState,
     KeyGeneratorList,
-    KeyGenerationError,
     PartialKeyAddressList,
     PartialKeySubmission,
     SyncPartialKeyPayload,
-    Error,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -17,9 +15,9 @@ pub struct SyncPartialKey<Signature, Address> {
     pub payload: SyncPartialKeyPayload<Signature, Address>,
 }
 
-impl<C: AppState> RpcParameter<C> for SyncPartialKey<C::Signature, C::Address> 
+impl<C> RpcParameter<C> for SyncPartialKey<C::Signature, C::Address> 
 where
-    C::Signature: Send + 'static,
+    C: AppState
 {
     type Response = ();
 
@@ -30,37 +28,24 @@ where
     async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
         let prefix = context.log_prefix();
 
-        // If partial_key_sender is me, ignore
-        let partial_key_sender = &self.payload.partial_key_submission.payload.sender;
-        if partial_key_sender == &context.address() {
+        // If partial_key_sender is node itself, ignore
+        if self.payload.partial_key_sender() == &context.address() {
             return Ok(());
         }
 
-        let sender_address = context.verify_signature(&self.signature, &self.payload)?;
-        if sender_address != self.payload.sender {
-            return Err(RpcError::from(KeyGenerationError::InternalError(
-                "Signature does not match sender address".into(),
-            )));
-        }
+        let _ = context.verify_signature(&self.signature, &self.payload, &self.payload.sender())?;
 
-        info!(
-            "{} Received partial key ACK - sender:{:?}, session_id: {:?
-            }, timestamp: {}",
-            prefix,
-            &self.payload.partial_key_submission.payload.sender,
-            self.payload.session_id,
-            self.payload.ack_timestamp
-        );
+        info!("{} {}", prefix, self.payload);
 
-        PartialKeyAddressList::initialize(self.payload.session_id)?;
+        PartialKeyAddressList::<C::Address>::initialize(self.payload.session_id)?;
         PartialKeyAddressList::apply(self.payload.session_id, |list| {
-            list.insert(self.payload.partial_key_submission.payload.sender.clone());
+            list.insert(self.payload.partial_key_sender().clone());
         })?;
 
         let partial_key_submission = self.payload.partial_key_submission.clone();
         partial_key_submission.put(
             self.payload.session_id,
-            &self.payload.partial_key_submission.payload.sender,
+            self.payload.partial_key_sender().clone()
         )?;
 
         Ok(())
@@ -68,33 +53,27 @@ where
 }
 
 // Broadcast partial key acknowledgment from leader to the entire network
-pub fn broadcast_partial_key_ack<C: AppState>(
-    partial_key_submission: PartialKeySubmission,
+pub fn broadcast_partial_key_ack<C>(
+    partial_key_submission: PartialKeySubmission<C::Signature, C::Address>,
     context: &C,
-) -> Result<(), Error> 
+) -> Result<(), C::Error> 
 where
-    Error: From<C::Error>,
+    C: AppState,
 {
     let prefix = context.log_prefix();
     let key_generator_rpc_url_list =
-        KeyGeneratorList::get()?.get_other_key_generator_rpc_url_list(&context.address());
-    // let key_generator_rpc_url_list = KeyGeneratorList::get()?.get_all_key_generator_rpc_url_list();
+        KeyGeneratorList::<C::Address>::get()
+            .map_err(|e| C::Error::from(e))?
+            .get_other_key_generator_rpc_url_list(&context.address());
 
-    info!(
-        "{} Broadcasting partial key acknowledgment - sender: {:?}, session_id: {:?}, timestamp: {}",
-        prefix,
-        partial_key_submission.payload.sender,
-        partial_key_submission.payload.session_id,
-        partial_key_submission.payload.submit_timestamp
-    );
+    info!("{} {}", prefix, partial_key_submission);
 
     let payload = SyncPartialKeyPayload::new(
         context.address(),
         partial_key_submission,
-        partial_key_submission.payload.session_id,
     );
 
-    let signature = context.create_signature(&payload)?;
+    let signature = context.sign(&payload)?;
 
     let parameter = SyncPartialKey { signature, payload };
 
@@ -103,7 +82,7 @@ where
             let _ = rpc_client
                 .multicast(
                     key_generator_rpc_url_list,
-                    SyncPartialKey::method(),
+                    <SyncPartialKey::<C::Signature, C::Address> as RpcParameter<C>>::method(),
                     &parameter,
                     Id::Null,
                 )

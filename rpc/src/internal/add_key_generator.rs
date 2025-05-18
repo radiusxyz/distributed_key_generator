@@ -27,15 +27,15 @@ impl<C: AppState> RpcParameter<C> for AddKeyGenerator<C::Address> {
 
     async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
         let prefix = context.log_prefix();
-        let key_generator_list = KeyGeneratorList::get()?;
+        let key_generator_list = KeyGeneratorList::<C::Address>::get()?;
         if key_generator_list
-            .iter()
-            .any(|kg| kg.address() == &self.message.address)
+            .into_iter()
+            .any(|kg| kg.address() == self.message.address)
         {
             warn!(
                 "[{}] Duplicate key generator registration - address: {:?} / cluster_rpc_url: {:?} / external_rpc_url: {:?}",
                 prefix,
-                self.message.address.as_hex_string(),
+                self.message.address,
                 self.message.cluster_rpc_url,
                 self.message.external_rpc_url
             );
@@ -45,7 +45,7 @@ impl<C: AppState> RpcParameter<C> for AddKeyGenerator<C::Address> {
         info!(
             "[{}] Add distributed key generation - address: {:?} / cluster_rpc_url: {:?} / external_rpc_url: {:?}",
             prefix,
-            self.message.address.as_hex_string(),
+            self.message.address,
             self.message.cluster_rpc_url,
             self.message.external_rpc_url
         );
@@ -60,15 +60,15 @@ impl<C: AppState> RpcParameter<C> for AddKeyGenerator<C::Address> {
             key_generator_list.insert(key_generator);
         })?;
 
-        sync_key_generator(context, self);
+        sync_key_generator::<C>(context, self);
 
         Ok(())
     }
 }
 
-pub fn sync_key_generator<C: AppState>(context: C, add_key_generator: AddKeyGenerator) {
+pub fn sync_key_generator<C: AppState>(context: C, add_key_generator: AddKeyGenerator<C::Address>) {
     let prefix = context.log_prefix();
-    let key_generator_rpc_url_list = KeyGeneratorList::get()
+    let key_generator_rpc_url_list = KeyGeneratorList::<C::Address>::get()
         .unwrap()
         .get_all_key_generator_rpc_url_list();
 
@@ -76,7 +76,7 @@ pub fn sync_key_generator<C: AppState>(context: C, add_key_generator: AddKeyGene
         info!(
             "[{}] Sync distributed key generation - address: {:?} / cluster_rpc_url: {:?} / rpc_client_count: {:?}",
             prefix,
-            add_key_generator.message.address.as_hex_string(),
+            add_key_generator.message.address,
             add_key_generator.message.cluster_rpc_url,
             key_generator_rpc_url_list.len()
         );
@@ -85,7 +85,7 @@ pub fn sync_key_generator<C: AppState>(context: C, add_key_generator: AddKeyGene
         rpc_client
             .multicast(
                 key_generator_rpc_url_list,
-                SyncKeyGenerator::<C::Address>::method(),
+                <SyncKeyGenerator::<C::Address> as RpcParameter<C>>::method(),
                 &add_key_generator,
                 Id::Null,
             )

@@ -11,12 +11,16 @@ pub struct GetFinalizedPartialKeys {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct GetFinalizedPartialKeysResponse {
-    pub partial_key_submissions: Vec<PartialKeySubmission>,
+pub struct GetFinalizedPartialKeysResponse<Signature, Address> {
+    pub partial_key_submissions: Vec<PartialKeySubmission<Signature, Address>>,
 }
 
-impl<C: AppState> RpcParameter<C> for GetFinalizedPartialKeys {
-    type Response = GetFinalizedPartialKeysResponse;
+impl<C> RpcParameter<C> for GetFinalizedPartialKeys
+where
+    C: AppState + 'static,
+    C::Address: Clone,
+{
+    type Response = GetFinalizedPartialKeysResponse<C::Signature, C::Address>;
 
     fn method() -> &'static str {
         "get_finalized_partial_keys"
@@ -24,8 +28,8 @@ impl<C: AppState> RpcParameter<C> for GetFinalizedPartialKeys {
 
     async fn handler(self, _context: C) -> Result<Self::Response, RpcError> {
         let session_id = self.session_id;
-        let partial_key_submissions = PartialKeyAddressList::get(session_id)?
-            .get_partial_key_list(session_id)
+        let partial_key_submissions = PartialKeyAddressList::<C::Address>::get(session_id)?
+            .get_partial_key_list::<C>(session_id)
             .map_err(|err| {
                 RpcError::from(KeyGenerationError::InternalError(
                     format!("Failed to get partial key list: {:?}", err).into(),

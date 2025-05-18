@@ -47,6 +47,7 @@ pub enum KeyGenerationError {
     NotRegisteredGenerator(String),
     InvalidPartialKey(String),
     InternalError(String),
+    InvalidSignature,
 }
 
 // Implement Display trait for KeyGenerationError
@@ -58,6 +59,7 @@ impl std::fmt::Display for KeyGenerationError {
             }
             KeyGenerationError::InvalidPartialKey(msg) => write!(f, "Invalid key format: {}", msg),
             KeyGenerationError::InternalError(msg) => write!(f, "Internal error: {}", msg),
+            KeyGenerationError::InvalidSignature => write!(f, "Invalid signature"),
         }
     }
 }
@@ -112,6 +114,10 @@ impl From<KeyGenerationError> for RpcError {
             KeyGenerationError::InternalError(msg) => RpcError::from(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Internal error: {}", msg),
+            )),
+            KeyGenerationError::InvalidSignature => RpcError::from(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid signature",
             )),
         }
     }

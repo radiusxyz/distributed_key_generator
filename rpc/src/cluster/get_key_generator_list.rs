@@ -18,7 +18,11 @@ pub struct GetKeyGeneratorRpcUrlListResponse {
     pub key_generator_rpc_url_list: Vec<KeyGeneratorRpcInfo>,
 }
 
-impl<C: AppState + 'static> RpcParameter<C> for GetKeyGeneratorList {
+impl<C> RpcParameter<C> for GetKeyGeneratorList 
+where
+    C: AppState + 'static,
+    C::Address: Clone + Into<String>,
+{
     type Response = GetKeyGeneratorRpcUrlListResponse;
 
     fn method() -> &'static str {
@@ -26,13 +30,13 @@ impl<C: AppState + 'static> RpcParameter<C> for GetKeyGeneratorList {
     }
 
     async fn handler(self, _context: C) -> Result<Self::Response, RpcError> {
-        let key_generator_list = KeyGeneratorList::get()?;
+        let key_generator_list = KeyGeneratorList::<C::Address>::get()?;
 
         let key_generator_rpc_url_list: Vec<KeyGeneratorRpcInfo> = key_generator_list
-            .iter()
+            .into_iter()
             .filter_map(|key_generator| {
                 Some(KeyGeneratorRpcInfo {
-                    address: key_generator.address().as_hex_string(),
+                    address: key_generator.address().into(),
                     external_rpc_url: key_generator.external_rpc_url().to_owned(),
                     cluster_rpc_url: key_generator.cluster_rpc_url().to_owned(),
                 })

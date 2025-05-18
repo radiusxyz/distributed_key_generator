@@ -1,6 +1,6 @@
 use dkg_primitives::{
-    AggregatedKey, AppState as DkgAppState, DecryptionKey, Error, KeyGenerationError,
-    PartialKeyAddressList, SessionId, TraceExt
+    AggregatedKey, AppState, DecryptionKey, Error, KeyGenerationError,
+    PartialKeyAddressList, SessionId, TraceExt, Parameter, AddressT,
 };
 use sha2::{Digest, Sha256};
 use sha3::{digest::{ExtendableOutput, Update, XofReader}, Shake256};
@@ -12,10 +12,13 @@ use skde::{
 };
 use tracing::info;
 
-pub fn initialize_next_session_from_current(current_session_id: &SessionId) -> Result<(), Error> {
+pub fn initialize_next_session_from_current<Address>(current_session_id: &SessionId) -> Result<(), Error> 
+where
+    Address: Parameter + AddressT,
+{
     let next_session_id = current_session_id.next().ok_or(Error::Arithmetic)?;
 
-    PartialKeyAddressList::initialize(next_session_id).map_err(|e| Error::Database(e))?;
+    PartialKeyAddressList::<Address>::initialize(next_session_id).map_err(|e| Error::Database(e))?;
     Ok(())
 }
 
@@ -32,7 +35,7 @@ pub fn aggregate_partial_keys_from_partial_key_list(
 }
 
 // TODO: A more robust mechanism to handle delayed or missing solve operations should be designed.
-pub fn perform_randomized_aggregation<C: DkgAppState>(
+pub fn perform_randomized_aggregation<C: AppState>(
     context: &C,
     session_id: SessionId,
     partial_key_list: &[SkdePartialKey],
@@ -54,7 +57,7 @@ pub fn perform_randomized_aggregation<C: DkgAppState>(
     skde_aggregated_key
 }
 
-pub fn calculate_decryption_key<C: DkgAppState>(
+pub fn calculate_decryption_key<C: AppState>(
     context: &C,
     session_id: SessionId,
     skde_aggregated_key: &SkdeAggregatedKey,

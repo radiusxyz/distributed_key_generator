@@ -13,7 +13,7 @@ use radius_sdk::json_rpc::{
 use skde::{delay_encryption::SkdeParams, BigUint};
 use tracing::{error, info, warn};
 
-use super::config::{Config, Role};
+use dkg_node_primitives::{Config, Role};
 use crate::task::authority_setup::SignedSkdeParams;
 
 async fn fetch_skde_params(config: &Config) -> Option<SkdeParams> {

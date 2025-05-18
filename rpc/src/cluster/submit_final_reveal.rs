@@ -1,6 +1,6 @@
 use super::{SyncDecryptionKey, SyncPartialKey};
 use crate::primitives::*;
-use dkg_primitives::{AppState, SessionId, Error, KeyGeneratorList};
+use dkg_primitives::{AppState, SessionId, KeyGeneratorList};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -47,11 +47,11 @@ impl<C: AppState> RpcParameter<C> for SubmitFinalReveal<C::Signature, C::Address
 pub fn broadcast_final_reveal<C: AppState>(
     session_id: SessionId,
     partial_keys: Vec<SyncPartialKey<C::Signature, C::Address>>,
-    sync_decryption_key: SyncDecryptionKey,
+    sync_decryption_key: SyncDecryptionKey<C::Signature, C::Address>,
     context: &C,
-) -> Result<(), Error> {
+) -> Result<(), C::Error> {
     let all_key_generator_rpc_url_list =
-        KeyGeneratorList::get()?.get_all_key_generator_rpc_url_list();
+        KeyGeneratorList::<C::Address>::get()?.get_all_key_generator_rpc_url_list();
 
     let payload = FinalRevealPayload {
         session_id,
@@ -59,7 +59,7 @@ pub fn broadcast_final_reveal<C: AppState>(
         sync_decryption_key,
     };
 
-    let signature = context.create_signature(&payload).unwrap();
+    let signature = context.sign(&payload)?;
 
     let parameter = SubmitFinalReveal { signature, payload };
 
@@ -68,7 +68,7 @@ pub fn broadcast_final_reveal<C: AppState>(
             let _ = rpc_client
                 .multicast(
                     all_key_generator_rpc_url_list,
-                    SubmitFinalReveal::method(),
+                    <SubmitFinalReveal::<C::Signature, C::Address> as RpcParameter<C>>::method(),
                     &parameter,
                     Id::Null,
                 )

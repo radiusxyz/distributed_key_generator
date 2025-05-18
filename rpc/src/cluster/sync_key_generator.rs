@@ -16,7 +16,10 @@ struct SyncKeyGeneratorMessage<Address> {
     external_rpc_url: String,
 }
 
-impl<C: AppState> RpcParameter<C> for SyncKeyGenerator<C::Address> {
+impl<C> RpcParameter<C> for SyncKeyGenerator<C::Address> 
+where
+    C: AppState
+{
     type Response = ();
 
     fn method() -> &'static str {
@@ -28,7 +31,7 @@ impl<C: AppState> RpcParameter<C> for SyncKeyGenerator<C::Address> {
         info!(
             "{} Sync key generator - address: {:?} / cluster_rpc_url: {:?} / external_rpc_url: {:?}",
             prefix,
-            self.message.address.as_hex_string(),
+            self.message.address,
             self.message.cluster_rpc_url,
             self.message.external_rpc_url
         );
@@ -41,7 +44,7 @@ impl<C: AppState> RpcParameter<C> for SyncKeyGenerator<C::Address> {
         // )?;
 
         let key_generator = KeyGenerator::new(
-            self.message.address.clone(),
+            self.message.address,
             self.message.cluster_rpc_url.clone(),
             self.message.external_rpc_url.clone(),
         );
