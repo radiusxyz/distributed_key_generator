@@ -17,3 +17,4 @@ dkg-cli.workspace = true
 
 # External
 tracing-subscriber.workspace = true
+anyhow.workspace = true

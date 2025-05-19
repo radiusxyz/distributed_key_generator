@@ -1846,6 +1846,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
+name = "cli"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "tokio",
+]
+
+[[package]]
 name = "cobs"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2384,6 +2392,7 @@ dependencies = [
 name = "dkg"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "dkg-cli",
  "tracing-subscriber 0.3.19",
 ]
@@ -2393,31 +2402,43 @@ name = "dkg-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "dirs",
  "dkg-node-primitives",
  "dkg-node-service",
  "dkg-primitives",
+ "radius-sdk",
  "serde",
+ "tokio",
 ]
 
 [[package]]
 name = "dkg-node-primitives"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "dkg-primitives",
+ "ethers",
+ "futures-util",
  "radius-sdk",
  "serde",
  "skde",
+ "tokio",
  "toml",
+ "tracing",
 ]
 
 [[package]]
 name = "dkg-node-service"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "dkg-node-primitives",
  "dkg-primitives",
  "dkg-rpc",
+ "ethers",
+ "futures-util",
  "radius-sdk",
+ "serde",
  "serde_json",
  "skde",
  "tokio",
@@ -2443,6 +2464,7 @@ dependencies = [
 name = "dkg-rpc"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bincode",
  "dkg-primitives",
  "dkg-utils",
@@ -5653,6 +5675,7 @@ checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
 name = "radius-sdk"
 version = "0.1.0"
 dependencies = [
+ "cli",
  "context",
  "json-rpc-client",
  "json-rpc-server",

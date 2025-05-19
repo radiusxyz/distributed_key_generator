@@ -1,6 +1,5 @@
 use dkg_primitives::{
-    AppState, DecryptionKey, PartialKeyAddressList, SessionId,
-    SyncFinalizedPartialKeysPayload, SubmitDecryptionKeyPayload,
+    AppState, DecryptionKey, Error, PartialKeyAddressList, SessionId, SubmitDecryptionKeyPayload, SyncFinalizedPartialKeysPayload
 };
 use dkg_utils::key::{
     calculate_decryption_key, perform_randomized_aggregation, verify_encryption_decryption_key_pair,
@@ -23,10 +22,7 @@ pub struct SolverSyncFinalizedPartialKeys<Signature, Address> {
     pub payload: SyncFinalizedPartialKeysPayload<Signature, Address>,
 }
 
-impl<C> RpcParameter<C> for SolverSyncFinalizedPartialKeys<C::Signature, C::Address>
-where
-    C: AppState
-{
+impl<C: AppState> RpcParameter<C> for SolverSyncFinalizedPartialKeys<C::Signature, C::Address> {
     type Response = ();
 
     fn method() -> &'static str {
@@ -37,7 +33,7 @@ where
         let prefix = context.log_prefix();
 
         PartialKeyAddressList::<C::Address>::initialize(self.payload.session_id)?;
-        let _ = context.verify_signature(&self.signature, &self.payload, &self.payload.sender)?;
+        let _ = context.verify_signature(&self.signature, &self.payload, Some(&self.payload.sender))?;
         let partial_keys = process_partial_key_submissions::<C>(&context, &self.payload)?;
         tokio::spawn(async move {
             if let Err(err) =
@@ -91,9 +87,10 @@ async fn derive_and_submit_decryption_key<C: AppState>(
     let request = SubmitDecryptionKey { signature, payload };
 
     let rpc_client = RpcClient::new()?;
+    let leader_rpc_url = context.leader_rpc_url().ok_or(Error::InvalidParams("Leader RPC URL is not set".to_string()))?;
     let response: DecryptionKeyResponse = rpc_client
         .request(
-            context.leader_rpc_url(),
+            &leader_rpc_url,
             <SubmitDecryptionKey::<C::Signature, C::Address> as RpcParameter<C>>::method(),
             &request,
             Id::Null,

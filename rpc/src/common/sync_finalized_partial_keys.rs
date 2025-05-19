@@ -11,19 +11,14 @@ pub fn validate_partial_key_submission<C>(
 where
     C: AppState,
 {
-    let _ = context.verify_signature(signature, payload, &payload.sender)?;
+    let _ = context.verify_signature(signature, payload, Some(&payload.sender))?;
     Ok(())
 }
 
-pub fn process_partial_key_submissions<C>(
+pub fn process_partial_key_submissions<C: AppState>(
     context: &C,
     payload: &SyncFinalizedPartialKeysPayload<C::Signature, C::Address>,
-) -> Result<Vec<SkdePartialKey>, RpcError> 
-where
-    C: AppState,
-    C::Signature: Clone,
-    C::Address: Clone,
-{
+) -> Result<Vec<SkdePartialKey>, RpcError> {
     let SyncFinalizedPartialKeysPayload {
         partial_key_submissions,
         session_id,
@@ -47,7 +42,7 @@ where
 
     for pk_submission in sorted_submissions.iter() {
         let signable_message = pk_submission.payload.clone();
-        let signer = context.verify_signature(&pk_submission.signature, &signable_message, &pk_submission.sender())?;
+        let signer = context.verify_signature(&pk_submission.signature, &signable_message, Some(&pk_submission.sender()))?;
         PartialKeyAddressList::<C::Address>::initialize(*session_id)?;
         PartialKeyAddressList::apply(*session_id, |list| {
             list.insert(signer.clone());

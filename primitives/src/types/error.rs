@@ -6,6 +6,7 @@ use radius_sdk::{
         server::{RpcError, RpcServerError},
     },
     kvstore::KvStoreError,
+    signature::SignatureError,
 };
 use toml::de::Error as TomlError;
 
@@ -25,6 +26,8 @@ pub enum Error {
     /// File system errors
     LoadConfigOption(IoError),
     ParseTomlString(TomlError),
+    /// Signature error
+    Signature(SignatureError),
     RemoveConfigDirectory,
     CreateConfigDirectory,
     CreateConfigFile,
@@ -66,6 +69,7 @@ impl std::fmt::Display for KeyGenerationError {
 
 // Ensure Error type can be safely sent between threads
 unsafe impl Send for Error {}
+unsafe impl Sync for Error {}
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -74,6 +78,18 @@ impl std::fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+impl From<SignatureError> for Error {
+    fn from(value: SignatureError) -> Self {
+        Self::Signature(value)
+    }
+}
+
+impl From<KeyGenerationError> for Error {
+    fn from(value: KeyGenerationError) -> Self {
+        Self::KeyGeneration(value)
+    }
+}
 
 // Implement From trait for external error types
 impl From<KvStoreError> for Error {
@@ -131,9 +147,10 @@ pub enum ConfigError {
     CreateConfigDirectory(std::io::Error),
     CreateConfigFile(std::io::Error),
     CreatePrivateKeyFile(std::io::Error),
-
+    NotFound(String),
     InvalidExternalPort,
     InvalidClusterPort,
+    AlreadyExists,
 }
 
 impl std::fmt::Display for ConfigError {

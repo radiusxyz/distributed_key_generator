@@ -15,11 +15,7 @@ pub struct GetFinalizedPartialKeysResponse<Signature, Address> {
     pub partial_key_submissions: Vec<PartialKeySubmission<Signature, Address>>,
 }
 
-impl<C> RpcParameter<C> for GetFinalizedPartialKeys
-where
-    C: AppState + 'static,
-    C::Address: Clone,
-{
+impl<C: AppState> RpcParameter<C> for GetFinalizedPartialKeys {
     type Response = GetFinalizedPartialKeysResponse<C::Signature, C::Address>;
 
     fn method() -> &'static str {

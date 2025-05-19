@@ -15,10 +15,7 @@ pub struct SyncPartialKey<Signature, Address> {
     pub payload: SyncPartialKeyPayload<Signature, Address>,
 }
 
-impl<C> RpcParameter<C> for SyncPartialKey<C::Signature, C::Address> 
-where
-    C: AppState
-{
+impl<C: AppState> RpcParameter<C> for SyncPartialKey<C::Signature, C::Address> {
     type Response = ();
 
     fn method() -> &'static str {
@@ -33,7 +30,7 @@ where
             return Ok(());
         }
 
-        let _ = context.verify_signature(&self.signature, &self.payload, &self.payload.sender())?;
+        let _ = context.verify_signature(&self.signature, &self.payload, Some(&self.payload.sender()))?;
 
         info!("{} {}", prefix, self.payload);
 

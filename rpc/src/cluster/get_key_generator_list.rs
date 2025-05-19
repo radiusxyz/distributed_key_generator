@@ -1,6 +1,6 @@
 use crate::primitives::*;
 use serde::{Deserialize, Serialize};
-use dkg_primitives::{AppState, KeyGeneratorList};
+use dkg_primitives::{AppState, KeyGeneratorList, KeyGenerator, AddressT};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetKeyGeneratorList;
@@ -18,11 +18,18 @@ pub struct GetKeyGeneratorRpcUrlListResponse {
     pub key_generator_rpc_url_list: Vec<KeyGeneratorRpcInfo>,
 }
 
-impl<C> RpcParameter<C> for GetKeyGeneratorList 
-where
-    C: AppState + 'static,
-    C::Address: Clone + Into<String>,
-{
+impl<Address: AddressT> From<GetKeyGeneratorRpcUrlListResponse> for KeyGeneratorList<Address> {
+    fn from(value: GetKeyGeneratorRpcUrlListResponse) -> Self {
+        let mut key_generator_list = KeyGeneratorList::<Address>::default();
+        let key_generator_rpc_url_list = value.key_generator_rpc_url_list;
+        for key_generator_rpc_info in key_generator_rpc_url_list {
+            key_generator_list.insert(KeyGenerator::new(key_generator_rpc_info.address.into(), key_generator_rpc_info.cluster_rpc_url, key_generator_rpc_info.external_rpc_url));
+        }
+        key_generator_list
+    }
+}
+
+impl<C: AppState> RpcParameter<C> for GetKeyGeneratorList {
     type Response = GetKeyGeneratorRpcUrlListResponse;
 
     fn method() -> &'static str {

@@ -1,132 +1,118 @@
-async fn initialize_internal_rpc_server(app_state: &AppState) -> Result<(), Error> {
-    let prefix = log_prefix(app_state.config());
-    let internal_rpc_url = app_state.config().internal_rpc_url().to_string();
+use dkg_primitives::AppState;
+use radius_sdk::json_rpc::server::RpcServer;
+use tracing::info;
+use dkg_rpc::{
+    internal::AddKeyGenerator,
+    cluster::{
+        GetKeyGeneratorList, 
+        SyncKeyGenerator, 
+        SyncPartialKey, 
+        ClusterSyncFinalizedPartialKeys, 
+        SyncDecryptionKey, 
+        SubmitPartialKey, 
+        RequestSubmitPartialKey,
+    },
+    external::{
+        GetEncryptionKey,
+        GetDecryptionKey,
+        GetLatestEncryptionKey,
+        GetLatestSessionId,
+        GetSkdeParams,
+    },
+    solver::{SubmitDecryptionKey, SolverSyncFinalizedPartialKeys},
+};
 
-    // Initialize the internal RPC server.
-    let internal_rpc_server = RpcServer::new(app_state.clone())
-        .register_rpc_method::<internal::AddKeyGenerator>()?
-        .init(app_state.config().internal_rpc_url().to_string())
+/// Initialize the internal RPC server.
+pub async fn initialize_internal_rpc_server<C: AppState>(ctx: &C, url: &str) -> Result<(), C::Error> {
+    let internal_rpc_server = RpcServer::new(ctx.clone())
+        .register_rpc_method::<AddKeyGenerator<C::Address>>()?
+        .init(url)
         .await
-        .map_err(error::Error::RpcServerError)?;
+        .map_err(C::Error::from)?;
 
-    tracing::info!(
-        "{} Successfully started the internal RPC server: {}",
-        prefix, internal_rpc_url
+    info!(
+        "{} Internal RPC server runs at {}",
+        ctx.log_prefix(), url
     );
 
-    tokio::spawn(async move {
+    ctx.spawn_task(Box::pin(async move {
         internal_rpc_server.stopped().await;
-    });
+    }));
 
     Ok(())
 }
 
-async fn initialize_cluster_rpc_server(app_state: &AppState) -> Result<(), Error> {
-    let prefix = log_prefix(app_state.config());
-    let cluster_rpc_url = anywhere(&app_state.config().cluster_port()?);
-
-    let key_generator_rpc_server = RpcServer::new(app_state.clone())
-        .register_rpc_method::<cluster::GetKeyGeneratorList>()?
-        .register_rpc_method::<cluster::SyncKeyGenerator>()?
-        .register_rpc_method::<cluster::SyncPartialKey>()?
-        .register_rpc_method::<cluster::ClusterSyncFinalizedPartialKeys>()?
-        .register_rpc_method::<cluster::SyncDecryptionKey>()?
-        .register_rpc_method::<cluster::SubmitPartialKey>()?
-        .register_rpc_method::<cluster::RequestSubmitPartialKey>()?
-        .register_rpc_method::<common::GetSkdeParams>()?
-        .init(cluster_rpc_url.clone())
+/// Initialize the cluster RPC server.
+pub async fn initialize_cluster_rpc_server<C: AppState>(ctx: &C, url: &str) -> Result<(), C::Error> {
+    let key_generator_rpc_server = RpcServer::new(ctx.clone())
+        .register_rpc_method::<GetKeyGeneratorList>()?
+        .register_rpc_method::<SyncKeyGenerator<C::Address>>()?
+        .register_rpc_method::<SyncPartialKey<C::Signature, C::Address>>()?
+        .register_rpc_method::<ClusterSyncFinalizedPartialKeys<C::Signature, C::Address>>()?
+        .register_rpc_method::<SyncDecryptionKey<C::Signature, C::Address>>()?
+        .register_rpc_method::<SubmitPartialKey<C::Signature, C::Address>>()?
+        .register_rpc_method::<RequestSubmitPartialKey>()?
+        .init(url)
         .await
-        .map_err(error::Error::RpcServerError)?;
+        .map_err(C::Error::from)?;
 
     info!(
-        "{} Successfully started the cluster RPC server: {}",
-        prefix, cluster_rpc_url
+        "{} Cluster RPC server runs at {}",
+        ctx.log_prefix(), url
     );
 
-    tokio::spawn(async move {
+    ctx.spawn_task(Box::pin(async move {
         key_generator_rpc_server.stopped().await;
-    });
+    }));
 
     Ok(())
 }
 
-async fn initialize_external_rpc_server(app_state: &AppState) -> Result<JoinHandle<()>, Error> {
-    let prefix = log_prefix(app_state.config());
-    let external_rpc_url = anywhere(&app_state.config().external_port()?);
-
-    // Initialize the external RPC server.
-    let external_rpc_server = RpcServer::new(app_state.clone())
-        .register_rpc_method::<external::GetEncryptionKey>()?
-        .register_rpc_method::<external::GetDecryptionKey>()?
-        .register_rpc_method::<external::GetLatestEncryptionKey>()?
-        .register_rpc_method::<external::GetLatestSessionId>()?
-        .register_rpc_method::<common::GetSkdeParams>()?
-        .init(external_rpc_url.clone())
+/// Initialize the external RPC server.
+pub async fn initialize_external_rpc_server<C: AppState>(ctx: &C, url: &str) -> Result<(), C::Error> {
+    let external_rpc_server = RpcServer::new(ctx.clone())
+        .register_rpc_method::<GetEncryptionKey>()?
+        .register_rpc_method::<GetDecryptionKey>()?
+        .register_rpc_method::<GetLatestEncryptionKey>()?
+        .register_rpc_method::<GetLatestSessionId>()?
+        .register_rpc_method::<GetSkdeParams>()?
+        .init(url)
         .await
-        .map_err(error::Error::RpcServerError)?;
+        .map_err(C::Error::from)?;
 
     info!(
-        "{} Successfully started the external RPC server: {}",
-        prefix, external_rpc_url
+        "{} External RPC server runs at {}",
+        ctx.log_prefix(), url
     );
 
-    let server_handle = tokio::spawn(async move {
+    ctx.spawn_task(Box::pin(async move {
         external_rpc_server.stopped().await;
-    });
+    }));
 
-    Ok(server_handle)
+    Ok(())
 }
 
-pub fn anywhere(port: &str) -> String {
-    format!("0.0.0.0:{}", port)
-}
-
-async fn initialize_authority_rpc_server(app_state: &AppState) -> Result<JoinHandle<()>, Error> {
-    let prefix = log_prefix(app_state.config());
-    let authority_rpc_url = anywhere(&app_state.config().authority_port()?);
-
-    let rpc_server = RpcServer::new(app_state.clone())
-        .register_rpc_method::<GetAuthorizedSkdeParams>()?
-        .init(authority_rpc_url.clone())
-        .await
-        .map_err(Error::RpcServerError)?;
-
-    info!(
-        "{} Successfully started the authority RPC server: {}",
-        prefix, authority_rpc_url
-    );
-
-    let handle = tokio::spawn(async move {
-        rpc_server.stopped().await;
-    });
-
-    Ok(handle)
-}
-
-async fn initialize_solve_rpc_server(app_state: &AppState) -> Result<JoinHandle<()>, Error> {
-    let prefix = log_prefix(app_state.config());
-    let solver_rpc_url = app_state.config().solver_rpc_url().clone().unwrap();
-
-    let rpc_server_builder = RpcServer::new(app_state.clone());
-
-    let rpc_server = if app_state.config().is_leader() {
+async fn initialize_solver_rpc_server<C: AppState>(ctx: &C, url: &str) -> Result<(), C::Error> {
+    let prefix = ctx.log_prefix();
+    let rpc_server_builder = RpcServer::new(ctx.clone());
+    let rpc_server = if ctx.is_leader() {
         rpc_server_builder
-            .register_rpc_method::<common::GetSkdeParams>()?
-            .register_rpc_method::<solver::SubmitDecryptionKey>()?
+            .register_rpc_method::<GetSkdeParams>()?
+            .register_rpc_method::<SubmitDecryptionKey<C::Signature, C::Address>>()?
     } else {
-        rpc_server_builder.register_rpc_method::<solver::SolverSyncFinalizedPartialKeys>()?
+        rpc_server_builder.register_rpc_method::<SolverSyncFinalizedPartialKeys<C::Signature, C::Address>>()?
     };
 
     let rpc_server = rpc_server
-        .init(solver_rpc_url.clone())
+        .init(url)
         .await
-        .map_err(Error::RpcServerError)?;
+        .map_err(C::Error::from)?;
 
-    info!("{} Started solve RPC server at {}", prefix, solver_rpc_url);
+    info!("{} Solver RPC server runs at {}", prefix, url);
 
-    let handle = tokio::spawn(async move {
+    ctx.spawn_task(Box::pin(async move {
         rpc_server.stopped().await;
-    });
+    }));
 
-    Ok(handle)
+    Ok(())
 }

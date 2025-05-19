@@ -1,6 +1,5 @@
 use crate::primitives::*;
 use dkg_primitives::{SignedSkdeParams, AppState};
-use skde::delay_encryption::SkdeParams;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -11,10 +10,7 @@ pub struct GetSkdeParamsResponse<Signature> {
     pub signed_skde_params: SignedSkdeParams<Signature>,
 }
 
-impl<C> RpcParameter<C> for GetSkdeParams
-where
-    C: AppState,
-{
+impl<C: AppState> RpcParameter<C> for GetSkdeParams {
     type Response = GetSkdeParamsResponse<C::Signature>;
 
     fn method() -> &'static str {

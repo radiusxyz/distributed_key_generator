@@ -1,6 +1,6 @@
 use std::{
     hash::{Hash, Hasher},
-    fmt::Debug,
+    fmt::{Debug, Display},
 };
 use crate::traits::AddressT;
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
@@ -11,6 +11,12 @@ pub struct KeyGenerator<Address> {
     address: Address,
     cluster_rpc_url: String,
     external_rpc_url: String,
+}
+
+impl<Address: Debug> Display for KeyGenerator<Address> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "address: {:?}, cluster_rpc_url: {:?}, external_rpc_url: {:?}", self.address, self.cluster_rpc_url, self.external_rpc_url)
+    }
 }
 
 impl<Address: PartialEq> PartialEq for KeyGenerator<Address> {

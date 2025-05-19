@@ -2,9 +2,9 @@ use crate::{
     cluster::broadcast_decryption_key_ack, 
     primitives::*
 };
-use dkg_primitives::{AppState, KeyGenerationError, SubmitDecryptionKeyPayload};
+use dkg_primitives::{AppState, SubmitDecryptionKeyPayload};
 use serde::{Deserialize, Serialize};
-use tracing::{error, info};
+use tracing::info;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SubmitDecryptionKey<Signature, Address> {
@@ -17,10 +17,7 @@ pub struct DecryptionKeyResponse {
     pub success: bool,
 }
 
-impl<C> RpcParameter<C> for SubmitDecryptionKey<C::Signature, C::Address>
-where
-    C: AppState + 'static,
-{
+impl<C: AppState> RpcParameter<C> for SubmitDecryptionKey<C::Signature, C::Address> {
     type Response = DecryptionKeyResponse;
 
     fn method() -> &'static str {
@@ -30,7 +27,7 @@ where
     async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
         let prefix = context.log_prefix();
 
-        let _ = context.verify_signature(&self.signature, &self.payload, &self.payload.sender)?;
+        let _ = context.verify_signature(&self.signature, &self.payload, Some(&self.payload.sender))?;
         info!(
             "{} Received decryption key - session_id: {:?}, timestamp: {}",
             prefix, self.payload.session_id, self.payload.timestamp

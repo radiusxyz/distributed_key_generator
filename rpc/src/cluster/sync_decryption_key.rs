@@ -21,10 +21,7 @@ pub struct SyncDecryptionKey<Signature, Address> {
 }
 
 // TODO (Post-PoC): Decouple session start trigger from decryption key sync to improve robustness.
-impl<C> RpcParameter<C> for SyncDecryptionKey<C::Signature, C::Address> 
-where 
-    C: AppState
-{
+impl<C: AppState> RpcParameter<C> for SyncDecryptionKey<C::Signature, C::Address> {
     type Response = ();
 
     fn method() -> &'static str {
@@ -36,7 +33,7 @@ where
         let _ = context.verify_signature(
             &self.signature, 
             &self.payload, 
-            &self.payload.sender
+            Some(&self.payload.sender)
         )?;
 
         let session_id = self.payload.session_id;

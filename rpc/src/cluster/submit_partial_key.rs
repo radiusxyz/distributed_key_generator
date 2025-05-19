@@ -16,10 +16,8 @@ pub struct SubmitPartialKey<Signature, Address> {
     pub payload: PartialKeyPayload<Address>,
 }
 
-impl<C> RpcParameter<C> for SubmitPartialKey<C::Signature, C::Address>
-where
-    C: AppState
-{
+impl<C: AppState> RpcParameter<C> for SubmitPartialKey<C::Signature, C::Address> {
+    
     type Response = ();
 
     fn method() -> &'static str {
@@ -30,7 +28,7 @@ where
         let sender_address = context.verify_signature(
             &self.signature, 
             &self.payload, 
-            &self.payload.sender
+            Some(&self.payload.sender)
         )?;
         let session_id = self.payload.session_id;
         info!(

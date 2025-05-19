@@ -16,10 +16,7 @@ struct SyncKeyGeneratorMessage<Address> {
     external_rpc_url: String,
 }
 
-impl<C> RpcParameter<C> for SyncKeyGenerator<C::Address> 
-where
-    C: AppState
-{
+impl<C: AppState> RpcParameter<C> for SyncKeyGenerator<C::Address> {
     type Response = ();
 
     fn method() -> &'static str {

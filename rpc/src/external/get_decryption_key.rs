@@ -13,10 +13,7 @@ pub struct GetDecryptionKeyResponse {
     pub decryption_key: String,
 }
 
-impl<C> RpcParameter<C> for GetDecryptionKey
-where
-    C: AppState,
-{
+impl<C: AppState> RpcParameter<C> for GetDecryptionKey {
     type Response = GetDecryptionKeyResponse;
 
     fn method() -> &'static str {

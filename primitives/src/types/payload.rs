@@ -12,6 +12,16 @@ pub struct SyncFinalizedPartialKeysPayload<Signature, Address> {
     pub ack_timestamp: u128,
 }
 
+impl<Signature, Address> SyncFinalizedPartialKeysPayload<Signature, Address> {
+    pub fn new(sender: Address, partial_key_submissions: Vec<PartialKeySubmission<Signature, Address>>, session_id: SessionId) -> Self {
+        let ack_timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        Self { sender, partial_key_submissions, session_id, ack_timestamp }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PartialKeyPayload<Address> {
     pub sender: Address,

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use dkg_primitives::{AppState, SessionId};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct GetLatestSessionId {}
+pub struct GetLatestSessionId;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetLatestSessionIdResponse {

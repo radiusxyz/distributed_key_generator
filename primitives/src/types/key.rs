@@ -37,6 +37,11 @@ impl<Signature, Address: Debug> Display for PartialKeySubmission<Signature, Addr
 pub struct PartialKeyAddressList<Address>(Vec<Address>);
 
 impl<Address: Parameter + AddressT> PartialKeyAddressList<Address> {
+
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+
     pub fn insert(&mut self, address: Address) {
         self.0.push(address);
     }

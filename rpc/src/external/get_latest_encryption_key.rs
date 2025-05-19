@@ -2,7 +2,7 @@ use crate::primitives::*;
 use serde::{Deserialize, Serialize};
 use dkg_primitives::{AppState, SessionId, AggregatedKey, Error};
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct GetLatestEncryptionKey {}
+pub struct GetLatestEncryptionKey;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetLatestEncryptionKeyResponse {

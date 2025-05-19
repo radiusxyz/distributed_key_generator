@@ -12,3 +12,6 @@ dkg-node-primitives.workspace = true
 dkg-node-service.workspace = true
 clap.workspace = true
 serde.workspace = true
+radius-sdk.workspace = true
+tokio.workspace = true
+dirs.workspace = true

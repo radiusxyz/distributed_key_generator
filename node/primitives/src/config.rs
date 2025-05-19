@@ -1,184 +1,75 @@
+
 use std::path::PathBuf;
-use radius_sdk::signature::{Address, PrivateKeySigner, ChainType};
+
+use radius_sdk::signature::{Address, ChainType};
 
 use crate::Role;
 
-pub const DEFAULT_HOME_PATH: &str = ".radius";
-pub const DATABASE_DIR_NAME: &str = "database";
-pub const CONFIG_FILE_NAME: &str = "Config.toml";
-pub const SIGNING_KEY: &str = "signing_key";
+pub use constants::*;
 
-pub const DEFAULT_EXTERNAL_RPC_URL: &str = "http://127.0.0.1:3000";
-pub const DEFAULT_INTERNAL_RPC_URL: &str = "http://127.0.0.1:4000";
-pub const DEFAULT_CLUSTER_RPC_URL: &str = "http://127.0.0.1:5000";
-
-pub const DEFAULT_RADIUS_FOUNDATION_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
-pub const DEFAULT_CHAIN_TYPE: &str = "ethereum";
-
-pub const DEFAULT_SESSION_CYCLE_MS: u64 = 500;
+mod constants {
+    pub const DEFAULT_HOME_PATH: &str = ".radius";
+    pub const DATABASE_DIR_NAME: &str = "database";
+    pub const SIGNING_KEY: &str = "signing_key";
+    pub const DEFAULT_EXTERNAL_RPC_PORT: u16 = 3000;
+    pub const DEFAULT_INTERNAL_RPC_PORT: u16 = 4000;
+    pub const DEFAULT_CLUSTER_RPC_PORT: u16 = 5000;
+    pub const DEFAULT_LEADER_RPC_PORT: u16 = 6000;
+    pub const DEFAULT_AUTHORITY_RPC_PORT: u16 = 7000;
+    pub const DEFAULT_TRUSTED_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+    pub const DEFAULT_SESSION_CYCLE_MS: u64 = 500;
+    pub const DEFAULT_CHAIN_TYPE: &str = "ethereum";
+    pub const DEFAULT_TIME_PARAM_T: u32 = 4;
+    pub const DEFAULT_GENERATOR: u32 = 4;
+    pub const DEFAULT_MAX_SEQUENCER_NUMBER: u32 = 2;
+}
 
 #[derive(Clone)]
 pub struct Config {
-    path: PathBuf,
-    external_rpc_url: String,
-    internal_rpc_url: String,
-    cluster_rpc_url: String,
-    solver_rpc_url: Option<String>,
-    leader_cluster_rpc_url: Option<String>,
-    leader_solver_rpc_url: Option<String>,
-    solver_solver_rpc_url: Option<String>,
-    authority_rpc_url: String,
-    role: Role,
-    signer: PrivateKeySigner,
-    radius_foundation_address: Address,
-    chain_type: ChainType,
-    session_cycle: u64,
+    pub external_rpc_url: String,
+    pub internal_rpc_url: String,
+    pub cluster_rpc_url: String,
+    pub maybe_leader_rpc_url: Option<String>,
+    pub role: Role,
+    pub trusted_address: String,
+    pub chain_type: ChainType,
+    pub session_cycle: u64,
+    pub private_key_path: PathBuf,
+    pub db_path: PathBuf,
+    pub skde_path: Option<PathBuf>,
 }
 
 impl Config {
-
     pub fn new(
-        path: PathBuf, 
         external_rpc_url: String, 
         internal_rpc_url: String, 
         cluster_rpc_url: String,
-        solver_rpc_url: Option<String>,
-        leader_cluster_rpc_url: Option<String>,
-        leader_solver_rpc_url: Option<String>,
-        solver_solver_rpc_url: Option<String>,
-        authority_rpc_url: String,
+        maybe_leader_rpc_url: Option<String>,
         role: Role,
-        signer: PrivateKeySigner,
-        radius_foundation_address: Address,
+        trusted_address: String,
         chain_type: ChainType,
         session_cycle: u64,
+        private_key_path: PathBuf,
+        db_path: PathBuf,
+        skde_path: Option<PathBuf>,
     ) -> Self {
         Self {
-            path,
             external_rpc_url,
             internal_rpc_url,
             cluster_rpc_url,
-            solver_rpc_url,
-            leader_cluster_rpc_url,
-            leader_solver_rpc_url,
-            solver_solver_rpc_url,
-            authority_rpc_url,
+            maybe_leader_rpc_url,
             role,
-            signer,
-            radius_foundation_address,
+            trusted_address,
             chain_type,
             session_cycle,
+            private_key_path,
+            db_path,
+            skde_path,
         }
     }
 
-    pub fn path(&self) -> &PathBuf {
-        &self.path
-    }
-
-    pub fn database_path(&self) -> PathBuf {
-        self.path.join(DATABASE_DIR_NAME)
-    }
-
-    pub fn signer(&self) -> &PrivateKeySigner {
-        &self.signer
-    }
-
-    pub fn radius_foundation_address(&self) -> &Address {
-        &self.radius_foundation_address
-    }
-
-    pub fn chain_type(&self) -> &ChainType {
-        &self.chain_type
-    }
-
-    pub fn address(&self) -> &Address {
-        self.signer().address()
-    }
-
-    pub fn external_rpc_url(&self) -> &String {
-        &self.external_rpc_url
-    }
-
-    pub fn internal_rpc_url(&self) -> &String {
-        &self.internal_rpc_url
-    }
-
-    pub fn session_cycle(&self) -> u64 {
-        self.session_cycle
-    }
-
-    pub fn cluster_rpc_url(&self) -> &String {
-        &self.cluster_rpc_url
-    }
-
-    pub fn solver_rpc_url(&self) -> &Option<String> {
-        &self.solver_rpc_url
-    }
-
-    pub fn leader_cluster_rpc_url(&self) -> &Option<String> {
-        &self.leader_cluster_rpc_url
-    }
-
-    pub fn leader_solver_rpc_url(&self) -> &Option<String> {
-        &self.leader_solver_rpc_url
-    }
-
-    pub fn solver_solver_rpc_url(&self) -> &Option<String> {
-        &self.solver_solver_rpc_url
-    }
-
-    pub fn authority_rpc_url(&self) -> &String {
-        &self.authority_rpc_url
-    }
-
-    pub fn role(&self) -> &Role {
-        &self.role
-    }
-
-    pub fn is_authority(&self) -> bool {
-        matches!(self.role, Role::Authority)
-    }
-
     pub fn is_leader(&self) -> bool {
-        matches!(&self.role, Role::Leader)
-    }
-
-    pub fn is_committee(&self) -> bool {
-        matches!(&self.role, Role::Committee)
-    }
-
-    pub fn is_solver(&self) -> bool {
-        matches!(&self.role, Role::Solver)
-    }
-
-    pub fn is_verifier(&self) -> bool {
-        matches!(&self.role, Role::Verifier)
-    }
-
-    pub fn external_port(&self) -> Result<String, ConfigError> {
-        Ok(self
-            .external_rpc_url()
-            .split(':')
-            .last()
-            .ok_or(ConfigError::InvalidExternalPort)?
-            .to_string())
-    }
-
-    pub fn cluster_port(&self) -> Result<String, ConfigError> {
-        Ok(self
-            .cluster_rpc_url()
-            .split(':')
-            .last()
-            .ok_or(ConfigError::InvalidClusterPort)?
-            .to_string())
-    }
-    pub fn authority_port(&self) -> Result<String, ConfigError> {
-        Ok(self
-            .authority_rpc_url()
-            .split(':')
-            .last()
-            .ok_or(ConfigError::InvalidClusterPort)?
-            .to_string())
+        self.role == Role::Leader
     }
 }
 
