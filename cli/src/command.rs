@@ -27,6 +27,7 @@ fn create_configuration(cli: Box<NodeCommand>) -> Config {
         cli.rpc.external_rpc_url(),
         cli.rpc.internal_rpc_url(),
         cli.rpc.cluster_rpc_url(),
+        cli.rpc.authority_rpc_url,
         cli.rpc.leader_rpc_url,
         cli.dkg.role,
         cli.dkg.trusted_address,

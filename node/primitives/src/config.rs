@@ -1,10 +1,6 @@
-
-use std::path::PathBuf;
-
-use radius_sdk::signature::{Address, ChainType};
-
 use crate::Role;
-
+use std::path::PathBuf;
+use radius_sdk::signature::ChainType;
 pub use constants::*;
 
 mod constants {
@@ -29,6 +25,7 @@ pub struct Config {
     pub external_rpc_url: String,
     pub internal_rpc_url: String,
     pub cluster_rpc_url: String,
+    pub maybe_authority_rpc_url: Option<String>,
     pub maybe_leader_rpc_url: Option<String>,
     pub role: Role,
     pub trusted_address: String,
@@ -44,6 +41,7 @@ impl Config {
         external_rpc_url: String, 
         internal_rpc_url: String, 
         cluster_rpc_url: String,
+        maybe_authority_rpc_url: Option<String>,
         maybe_leader_rpc_url: Option<String>,
         role: Role,
         trusted_address: String,
@@ -57,6 +55,7 @@ impl Config {
             external_rpc_url,
             internal_rpc_url,
             cluster_rpc_url,
+            maybe_authority_rpc_url,
             maybe_leader_rpc_url,
             role,
             trusted_address,
@@ -66,10 +65,6 @@ impl Config {
             db_path,
             skde_path,
         }
-    }
-
-    pub fn is_leader(&self) -> bool {
-        self.role == Role::Leader
     }
 }
 

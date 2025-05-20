@@ -1,7 +1,6 @@
 use super::SubmitPartialKey;
 use crate::primitives::*;
 use dkg_primitives::{AppState, PartialKeyPayload, SessionId};
-use radius_sdk::json_rpc::server::RpcServerError;
 use serde::{Deserialize, Serialize};
 use skde::key_generation::{generate_partial_key, PartialKey as SkdePartialKey};
 use tracing::info;

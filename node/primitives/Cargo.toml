@@ -19,3 +19,6 @@ bincode.workspace = true
 futures-util.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+
+[features]
+experimental = []

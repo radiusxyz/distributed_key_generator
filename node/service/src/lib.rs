@@ -7,13 +7,13 @@ use std::{fs, path::PathBuf};
 mod task;
 pub use task::*;
 
+#[cfg(feature = "experimental")]
 mod builder;
 
 fn create_app_state(config: &Config) -> DkgAppState {
     let signer = create_signer(&config.private_key_path, config.chain_type);
     let executor = DkgExecutor;
     DkgAppState::new(
-        config.is_leader(),
         config.maybe_leader_rpc_url.clone(),
         signer,
         executor,

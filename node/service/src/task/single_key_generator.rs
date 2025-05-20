@@ -10,10 +10,7 @@ use dkg_primitives::{
     SessionId,
     DecryptionKey,
 };
-use dkg_rpc::{
-    cluster::{ClusterSyncFinalizedPartialKeys, RequestSubmitPartialKey},
-    solver::SolverSyncFinalizedPartialKeys,
-};
+use dkg_rpc::cluster::{SyncFinalizedPartialKeys, RequestSubmitPartialKey};
 
 pub const THRESHOLD: usize = 1;
 
@@ -174,7 +171,7 @@ pub async fn broadcast_finalized_partial_keys<C: AppState>(
     );
 
     let signature = ctx.sign(&payload).unwrap();
-    let message = ClusterSyncFinalizedPartialKeys {
+    let message = SyncFinalizedPartialKeys {
         signature: signature.clone(),
         payload: payload.clone(),
     };
@@ -188,7 +185,7 @@ pub async fn broadcast_finalized_partial_keys<C: AppState>(
     if let Err(err) = rpc_client
         .multicast(
             peers,
-            <ClusterSyncFinalizedPartialKeys<C::Signature, C::Address> as RpcParameter<C>>::method(),
+            <SyncFinalizedPartialKeys<C::Signature, C::Address> as RpcParameter<C>>::method(),
             &message,
             Id::Null,
         )
@@ -202,12 +199,12 @@ pub async fn broadcast_finalized_partial_keys<C: AppState>(
         );
     }
 
-    let message = SolverSyncFinalizedPartialKeys { signature, payload };
+    let message = SyncFinalizedPartialKeys { signature, payload };
     let rpc_client = RpcClient::new()?;
     let response = rpc_client
         .request::<_, ()>(
-            solver_rpc_url.clone(),
-            <SolverSyncFinalizedPartialKeys<C::Signature, C::Address> as RpcParameter<C>>::method(),
+            solver_rpc_url,
+            <SyncFinalizedPartialKeys<C::Signature, C::Address> as RpcParameter<C>>::method(),
             &message,
             Id::Null,
         )

@@ -1,18 +1,39 @@
 use super::{AppState, SkdeParams, RpcClient, RpcClientError, Id, RpcParameter, DkgAppState, Config, Error};
-use crate::rpc::{initialize_internal_rpc_server, initialize_external_rpc_server, initialize_cluster_rpc_server};
-use dkg_rpc::external::{GetSkdeParams, GetSkdeParamsResponse};
+use crate::rpc::{default_internal_rpc_server, default_external_rpc_server, default_cluster_rpc_server};
+use dkg_node_primitives::{Address, Signature};
+use dkg_rpc::{cluster::SubmitDecryptionKey, external::{GetSkdeParams, GetSkdeParamsResponse}};
+use dkg_primitives::TaskSpawner;
 
 pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<(), Error> {
-    let leader_rpc_url = ctx.leader_rpc_url().expect("Leader RPC URL not set");
-    let skde_params = fetch_skde_params(ctx, &leader_rpc_url).await;
+    let authority_rpc_url = config.maybe_authority_rpc_url.expect("Authority RPC URL not set");
+    let skde_params = fetch_skde_params(ctx, &authority_rpc_url).await;
     ctx.with_skde_params(skde_params);
-    initialize_internal_rpc_server(ctx, &config.internal_rpc_url).await?;
-    initialize_external_rpc_server(ctx, &config.external_rpc_url).await?;
-    initialize_cluster_rpc_server(ctx, &config.cluster_rpc_url).await?;
+    
+    let internal_server = default_internal_rpc_server(ctx).await?;
+    let server_handle = internal_server.init(config.internal_rpc_url).await?;
+    ctx.task_spawner().spawn_task(Box::pin(async move {
+        server_handle.stopped().await;
+    }));
+
+    let external_server = default_external_rpc_server(ctx).await?;
+    let server_handle = external_server
+        .register_rpc_method::<SubmitDecryptionKey<Signature, Address>>()?
+        .init(config.external_rpc_url.clone())
+        .await?;
+    ctx.task_spawner().spawn_task(Box::pin(async move {
+        server_handle.stopped().await;
+    }));
+    
+    let cluster_server = default_cluster_rpc_server(ctx).await?;
+    let server_handle = cluster_server.init(config.cluster_rpc_url).await?;
+    ctx.task_spawner().spawn_task(Box::pin(async move {
+        server_handle.stopped().await;
+    }));
 
     Ok(())
 }
 
+// TODO: REFACTOR ME!
 pub async fn fetch_skde_params<C: AppState>(ctx: &C, authority_url: &str) -> SkdeParams {
     let client = RpcClient::new().unwrap();
     let result: Result<GetSkdeParamsResponse<C::Signature>, RpcClientError> = client

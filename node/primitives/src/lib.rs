@@ -1,5 +1,8 @@
 pub use crate::Config;
-pub use dkg_primitives::{AppState, Verify, TaskSpawner, Error, TraceExt, KeyGenerationError};
+pub use dkg_primitives::{
+    AppState, Verify, TaskSpawner, Error, TraceExt, KeyGenerationError, SessionId,
+    DecryptionKey,
+};
 use radius_sdk::signature::PrivateKeySigner;
 pub use radius_sdk::signature::{Address, Signature, SignatureError};
 use ethers::{types::Signature as EthersSignature, utils::hash_message};
@@ -11,9 +14,14 @@ use tokio::task::JoinHandle;
 pub mod config;
 pub use config::*;
 
+#[cfg(feature = "experimental")]
+mod randomness;
+#[cfg(feature = "experimental")]
+mod key;
+
+
 #[derive(Clone)]
 pub struct DkgAppState {
-    is_leader: bool,
     leader_rpc_url: Option<String>,
     signer: PrivateKeySigner,
     skde_params: Option<SkdeParams>,
@@ -23,29 +31,37 @@ pub struct DkgAppState {
 
 impl DkgAppState {
     pub fn new(
-        is_leader: bool,
         leader_rpc_url: Option<String>,
         signer: PrivateKeySigner,
         task_spawner: DkgExecutor,
         role: Role,
     ) -> Self {
-        Self { is_leader, leader_rpc_url, signer, skde_params: None, task_spawner, role }
+        Self { leader_rpc_url, signer, skde_params: None, task_spawner, role }
     }
 
     pub fn with_skde_params(&mut self, skde_params: SkdeParams) {
         self.skde_params = Some(skde_params);
     }
+
+    pub fn task_spawner(&self) -> &DkgExecutor {
+        &self.task_spawner
+    }
 }
 
 impl AppState for DkgAppState {
     type Address = Address;
+    type SessionId = SessionId;
     type Signature = Signature;
     type Verify = DkgVerify;
     type TaskSpawner = DkgExecutor;
     type Error = Error;
 
     fn is_leader(&self) -> bool {
-        self.is_leader
+        self.role == Role::Leader
+    }
+
+    fn is_solver(&self) -> bool {
+        self.role == Role::Solver
     }
 
     fn leader_rpc_url(&self) -> Option<String> {

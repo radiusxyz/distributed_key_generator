@@ -1,6 +1,5 @@
 use dkg_primitives::{
-    AggregatedKey, AppState, DecryptionKey, Error, KeyGenerationError,
-    PartialKeyAddressList, SessionId, TraceExt, Parameter, AddressT,
+    AggregatedKey, AppState, DecryptionKey, KeyGenerationError, SessionId, TraceExt,
 };
 use sha2::{Digest, Sha256};
 use sha3::{digest::{ExtendableOutput, Update, XofReader}, Shake256};
@@ -11,16 +10,6 @@ use skde::{
     BigUint,
 };
 use tracing::info;
-
-pub fn initialize_next_session_from_current<Address>(current_session_id: &SessionId) -> Result<(), Error> 
-where
-    Address: Parameter + AddressT,
-{
-    let next_session_id = current_session_id.next().ok_or(Error::Arithmetic)?;
-
-    PartialKeyAddressList::<Address>::initialize(next_session_id).map_err(|e| Error::Database(e))?;
-    Ok(())
-}
 
 pub fn aggregate_partial_keys_from_partial_key_list(
     skde_params: &SkdeParams,

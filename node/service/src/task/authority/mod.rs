@@ -12,6 +12,7 @@ pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<(), Error
     run_setup_skde_params(ctx, skde_path.clone());
     let skde_params = fetch_skde_params(ctx, skde_path);
     ctx.with_skde_params(skde_params);
+    
     let rpc_server = RpcServer::new(ctx.clone())
         .register_rpc_method::<GetSkdeParams>()?
         .init(config.external_rpc_url.clone())

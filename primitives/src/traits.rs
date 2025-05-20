@@ -14,6 +14,8 @@ use serde::{Serialize, de::DeserializeOwned};
 pub trait AppState: Clone + Send + Sync + 'static {
     /// The address type that this app accepts
     type Address: Parameter + AddressT;
+    /// Period of creating a new decryption key
+    type SessionId: Parameter + Debug;
     /// The signature type that this app accepts
     type Signature: Parameter + Debug;
     /// Verifier for the signature
@@ -33,6 +35,8 @@ pub trait AppState: Clone + Send + Sync + 'static {
 
     /// Check if the node is a leader
     fn is_leader(&self) -> bool;
+    /// Check if the node is a solver
+    fn is_solver(&self) -> bool;
     /// Get the leader's rpc url
     fn leader_rpc_url(&self) -> Option<String>;
     /// Get the node's signer
@@ -56,6 +60,7 @@ pub trait AppState: Clone + Send + Sync + 'static {
         }
         Ok(signer)
     }
+
     /// Helper function to verify decryption key
     fn verify_decryption_key(
         &self,
@@ -91,6 +96,32 @@ pub trait Verify<Signature, Address> {
         decryption_key: String,
         prefix: &str,
     ) -> Result<(), KeyGenerationError>;
+}
+
+pub trait Aggregator<SessionId, Error> {
+    
+    type PartialKey: Parameter;
+    type AggregatedKey: Parameter;
+    type Selector: Selector<SessionId>;
+
+    /// Finalizes the given partial keys
+    fn finalize(&self, session_id: SessionId, partial_keys: Vec<Self::PartialKey>) -> Result<Self::AggregatedKey, Error>;
+
+    /// Derives a partial key from which `Self::Selector` selects
+    fn derive_partial_key(&self, selected_keys: &Vec<Self::PartialKey>, params: &SkdeParams) -> Self::PartialKey;
+
+    fn calculate_decryption_key<Hasher>(partial_keys: Vec<Self::PartialKey>) -> Result<String, Error>;
+}
+
+pub trait Selector<SessionId> {
+
+    type Hasher: FixedHasher;
+
+    /// Gets the randomness for the given session id
+    fn get_randomness(session_id: SessionId) -> Vec<u8>;
+
+    /// Selects a subset of the given partial keys based on the randomness
+    fn select(len: usize, session_id: SessionId) -> Vec<usize>;
 }
 
 pub trait TaskSpawner: Send + Sync + Unpin {
@@ -138,4 +169,17 @@ pub trait AddressT: Hash + Eq + PartialEq + Clone + Debug + Into<String> + From<
 
 impl<T> AddressT for T where T: Hash + Eq + PartialEq + Clone + Debug + Into<String> + From<String> {}
 
+pub trait FixedHasher {
+    type Output: AsRef<[u8]>;
+    const LENGTH: usize;
 
+    /// Hashes the input and returns a vector of the given `LENGTH`
+    fn hash(input: &[u8]) -> Self::Output;
+}
+
+pub trait VariableHasher {
+    type Output;
+
+    /// Hashes the input and returns a vector of the given `size`
+    fn hash(input: &[u8], size: usize) -> Self::Output;
+}

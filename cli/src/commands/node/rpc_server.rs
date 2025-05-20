@@ -1,7 +1,7 @@
 use std::net::{IpAddr, Ipv4Addr};
 use crate::Args;
 use dkg_node_primitives::config::{
-    DEFAULT_INTERNAL_RPC_PORT, DEFAULT_EXTERNAL_RPC_PORT, DEFAULT_CLUSTER_RPC_PORT, DEFAULT_LEADER_RPC_PORT, DEFAULT_AUTHORITY_RPC_PORT,
+    DEFAULT_INTERNAL_RPC_PORT, DEFAULT_EXTERNAL_RPC_PORT, DEFAULT_CLUSTER_RPC_PORT,
 };
 
 #[derive(Debug, Args)]
@@ -18,8 +18,12 @@ pub struct RpcServerArgs {
     pub cluster_rpc_url: IpAddr,
     #[arg(long = "cluster.port", default_value_t = DEFAULT_CLUSTER_RPC_PORT)]
     pub cluster_rpc_port: u16,
+    /// Args for other nodes except leader node
     #[arg(long = "leader.rpc.url")]
     pub leader_rpc_url: Option<String>,
+    /// Args for leader node
+    #[arg(long = "authority.rpc.url")]
+    pub authority_rpc_url: Option<String>,
 }
 
 impl Default for RpcServerArgs {
@@ -32,6 +36,7 @@ impl Default for RpcServerArgs {
             cluster_rpc_url: IpAddr::V4(Ipv4Addr::LOCALHOST).into(),
             cluster_rpc_port: DEFAULT_CLUSTER_RPC_PORT,
             leader_rpc_url: None,
+            authority_rpc_url: None,
         }
     }
 }
