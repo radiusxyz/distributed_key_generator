@@ -4,12 +4,11 @@ use dkg_node_primitives::{DEFAULT_GENERATOR, DEFAULT_MAX_SEQUENCER_NUMBER, DEFAU
 use dkg_rpc::external::GetSkdeParams;
 use skde::delay_encryption::setup;
 use tracing::info;
-
+use tokio::task::JoinHandle;
 use super::{SkdeParams, RpcServer, AppState, DkgAppState, Config, Error};
 
-pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<(), Error> {
-    let skde_path = config.skde_path.expect("SKDE path not set");
-    run_setup_skde_params(ctx, skde_path.clone());
+pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<Vec<JoinHandle<()>>, Error> {
+    let skde_path = run_setup_skde_params(ctx, &config);
     let skde_params = fetch_skde_params(ctx, skde_path);
     ctx.with_skde_params(skde_params);
     
@@ -21,14 +20,17 @@ pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<(), Error
 
     info!("RPC server runs at {}", config.external_rpc_url);
 
-    ctx.spawn_task(Box::pin(async move { rpc_server.stopped().await; }));
+    let handle = ctx.spawn_task(Box::pin(async move { rpc_server.stopped().await; }));
 
-    Ok(())
+    Ok(vec![handle])
 }
 
 
-pub fn run_setup_skde_params<C: AppState>(ctx: &C, path: PathBuf) {
-    let skde_path = path.join("skde_params.json");
+pub fn run_setup_skde_params<C: AppState>(ctx: &C, config: &Config) -> PathBuf {
+    let skde_path = config.skde_path().join("skde_params.json");
+    if skde_path.exists() {
+        return skde_path;
+    }
     let params = setup(
         DEFAULT_TIME_PARAM_T,
         DEFAULT_GENERATOR.into(),
@@ -39,6 +41,7 @@ pub fn run_setup_skde_params<C: AppState>(ctx: &C, path: PathBuf) {
     let serialized = serde_json::to_string_pretty(&signed_params).unwrap();
     fs::write(&skde_path, serialized).unwrap();
     info!("Successfully generated SKDE params at {:?}", skde_path);
+    skde_path
 }
 
 pub fn fetch_skde_params<C: AppState>(ctx: &C, path: PathBuf) -> SkdeParams {

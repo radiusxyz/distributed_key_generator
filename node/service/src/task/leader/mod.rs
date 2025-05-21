@@ -1,59 +1,76 @@
-use super::{AppState, SkdeParams, RpcClient, RpcClientError, Id, RpcParameter, DkgAppState, Config, Error};
-use crate::rpc::{default_internal_rpc_server, default_external_rpc_server, default_cluster_rpc_server};
+use super::{AppState, SkdeParams, RpcParameter, DkgAppState, Config, Error};
+use crate::{DkgWorker, run_dkg_worker};
+use crate::rpc::{default_external_rpc_server, default_cluster_rpc_server};
 use dkg_node_primitives::{Address, Signature};
-use dkg_rpc::{cluster::SubmitDecryptionKey, external::{GetSkdeParams, GetSkdeParamsResponse}};
+use dkg_rpc::{SubmitDecryptionKey, GetSkdeParams, GetSkdeParamsResponse};
 use dkg_primitives::TaskSpawner;
+use tokio::task::JoinHandle;
+use tracing::{info, error};
 
-pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<(), Error> {
-    let authority_rpc_url = config.maybe_authority_rpc_url.expect("Authority RPC URL not set");
+pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<Vec<JoinHandle<()>>, Error> {
+    let mut handle: Vec<JoinHandle<()>> = vec![];
+    let authority_rpc_url = config.maybe_authority_rpc_url.clone().expect("Authority RPC URL not set");
     let skde_params = fetch_skde_params(ctx, &authority_rpc_url).await;
     ctx.with_skde_params(skde_params);
-    
-    let internal_server = default_internal_rpc_server(ctx).await?;
-    let server_handle = internal_server.init(config.internal_rpc_url).await?;
-    ctx.task_spawner().spawn_task(Box::pin(async move {
-        server_handle.stopped().await;
-    }));
 
     let external_server = default_external_rpc_server(ctx).await?;
     let server_handle = external_server
         .register_rpc_method::<SubmitDecryptionKey<Signature, Address>>()?
         .init(config.external_rpc_url.clone())
         .await?;
-    ctx.task_spawner().spawn_task(Box::pin(async move {
+    handle.push(ctx.task_spawner().spawn_task(Box::pin(async move {
         server_handle.stopped().await;
-    }));
+    })));
     
     let cluster_server = default_cluster_rpc_server(ctx).await?;
-    let server_handle = cluster_server.init(config.cluster_rpc_url).await?;
-    ctx.task_spawner().spawn_task(Box::pin(async move {
+    let server_handle = cluster_server.init(&config.cluster_rpc_url).await?;
+    handle.push(ctx.task_spawner().spawn_task(Box::pin(async move {
         server_handle.stopped().await;
-    }));
+    })));
 
-    Ok(())
+    info!("External RPC server: {}", config.external_rpc_url);
+    info!("Cluster RPC server: {}", config.cluster_rpc_url);
+
+    let key_generator_worker = DkgWorker::new(config.cluster_rpc_url.clone(), config.session_cycle, config.threshold);
+    let cloned_ctx = ctx.clone();
+    let worker_handle = ctx.spawn_task(async move {
+        if let Err(e) = run_dkg_worker(&cloned_ctx, key_generator_worker).await {
+            // TODO: Spawn critical task to start DKG worker
+            panic!("Error running DKG worker: {}", e);
+        }
+    });
+    handle.push(worker_handle);
+
+    Ok(handle)
 }
 
 // TODO: REFACTOR ME!
 pub async fn fetch_skde_params<C: AppState>(ctx: &C, authority_url: &str) -> SkdeParams {
-    let client = RpcClient::new().unwrap();
-    let result: Result<GetSkdeParamsResponse<C::Signature>, RpcClientError> = client
-        .request(
-            authority_url,
-            <GetSkdeParams as RpcParameter<C>>::method(),
-            &GetSkdeParams,
-            Id::Null,
-        )
-        .await;
+    info!("Fetching SKDE params from authority: {}", authority_url);
+    loop {
+        let result: Result<GetSkdeParamsResponse<C::Signature>, C::Error> = ctx.request(
+            authority_url.to_string(),
+            <GetSkdeParams as RpcParameter<C>>::method().to_string(),
+            GetSkdeParams,
+            )
+            .await;
 
-    match result {
-        Ok(response) => {
-            let signed = response.signed_skde_params;
+        match result {
+            Ok(response) => {
+                let signed = response.signed_skde_params;
 
-            match ctx.verify_signature(&signed.signature, &signed.params, None) {
-                Ok(_signer_address) => { signed.params }
-                Err(e) => { panic!("Failed to verify SKDE params signature: {}", e) }
+                match ctx.verify_signature(&signed.signature, &signed.params, None) {
+                    Ok(_signer_address) => { 
+                        info!("Successfully fetched SKDE params from authority");
+                        return signed.params
+                    }
+                    Err(e) => { panic!("Failed to verify SKDE params signature: {}", e) }
+                }
+            }
+            Err(err) => { 
+                error!("Failed to fetch SkdeParams from authority: {}, retrying in 1s...", err);
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
         }
-        Err(err) => { panic!("Failed to fetch SkdeParams from authority: {}", err) }
     }
 }

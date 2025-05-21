@@ -1,15 +1,17 @@
 pub use crate::Config;
+use std::sync::Arc;
 pub use dkg_primitives::{
     AppState, Verify, TaskSpawner, Error, TraceExt, KeyGenerationError, SessionId,
-    DecryptionKey,
+    DecryptionKey, Parameter
 };
-use radius_sdk::signature::PrivateKeySigner;
+use radius_sdk::{signature::PrivateKeySigner, json_rpc::client::{RpcClient, Id}};
 pub use radius_sdk::signature::{Address, Signature, SignatureError};
 use ethers::{types::Signature as EthersSignature, utils::hash_message};
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use skde::delay_encryption::{decrypt, encrypt, SkdeParams};
 use futures_util::future::BoxFuture;
 use tokio::task::JoinHandle;
+use async_trait::async_trait;
 
 pub mod config;
 pub use config::*;
@@ -22,6 +24,7 @@ mod key;
 
 #[derive(Clone)]
 pub struct DkgAppState {
+    rpc_client: Arc<RpcClient>, 
     leader_rpc_url: Option<String>,
     signer: PrivateKeySigner,
     skde_params: Option<SkdeParams>,
@@ -35,8 +38,9 @@ impl DkgAppState {
         signer: PrivateKeySigner,
         task_spawner: DkgExecutor,
         role: Role,
-    ) -> Self {
-        Self { leader_rpc_url, signer, skde_params: None, task_spawner, role }
+    ) -> Result<Self, Error> {
+        let rpc_client = RpcClient::new().map_err(Error::from)?;
+        Ok(Self { rpc_client: Arc::new(rpc_client), leader_rpc_url, signer, skde_params: None, task_spawner, role })
     }
 
     pub fn with_skde_params(&mut self, skde_params: SkdeParams) {
@@ -48,6 +52,7 @@ impl DkgAppState {
     }
 }
 
+#[async_trait]
 impl AppState for DkgAppState {
     type Address = Address;
     type SessionId = SessionId;
@@ -82,7 +87,7 @@ impl AppState for DkgAppState {
     }
 
     fn log_prefix(&self) -> String {
-        format!("[{}][{:?}]", self.role, self.address())
+        format!("{}", self.role)
     }
 
     fn sign<T: Serialize>(&self, message: &T) -> Result<Self::Signature, Self::Error> {
@@ -91,6 +96,28 @@ impl AppState for DkgAppState {
 
     fn task_spawner(&self) -> &Self::TaskSpawner {
         &self.task_spawner
+    }
+
+    async fn request<P, R>(&self, url: String, method: String, parameter: P) -> Result<R, Self::Error> 
+    where
+        P: Serialize + Send + Sync + 'static,
+        R: DeserializeOwned + Send + Sync + 'static,
+    {
+        let rpc_client = self.rpc_client.clone();
+        let res = rpc_client.request::<P, R>(url, method, parameter, Id::Null).await.map_err(Error::from)?;
+        return Ok(res);  
+    } 
+
+    fn multicast<P>(&self, urls: Vec<String>, method: String, parameter: P) 
+    where
+        P: Serialize + Send + Sync + 'static
+    {
+        let rpc_client = self.rpc_client.clone();
+        self.task_spawner().spawn_task(Box::pin(
+            async move {
+                let _ = rpc_client.multicast::<P>(urls, method, &parameter, Id::Null).await.map_err(Error::from);
+            }
+        ));
     }
 }
 
@@ -203,7 +230,7 @@ impl std::str::FromStr for Role {
             "solver" => Ok(Role::Solver),
             "verifier" => Ok(Role::Verifier),
             "authority" => Ok(Role::Authority),
-            _ => Err(format!("Unknown role: {}", s)),
+            _ => Err(format!("Unknown role. Might choose either: leader, committee, solver, verifier, authority")),
         }
     }
 }

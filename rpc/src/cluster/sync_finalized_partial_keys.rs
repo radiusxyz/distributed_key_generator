@@ -21,6 +21,12 @@ pub struct SyncFinalizedPartialKeys<Signature, Address> {
     pub payload: SyncFinalizedPartialKeysPayload<Signature, Address>,
 }
 
+impl<Signature, Address> SyncFinalizedPartialKeys<Signature, Address> {
+    pub fn new(signature: Signature, payload: SyncFinalizedPartialKeysPayload<Signature, Address>) -> Self {
+        Self { signature, payload }
+    }
+}
+
 impl<C: AppState> RpcParameter<C> for SyncFinalizedPartialKeys<C::Signature, C::Address> {
     type Response = ();
 
@@ -61,59 +67,36 @@ impl<C: AppState> RpcParameter<C> for SyncFinalizedPartialKeys<C::Signature, C::
 }
 
 async fn derive_and_submit_decryption_key<C: AppState>(
-    context: C,
+    ctx: C,
     session_id: SessionId,
     partial_keys: &[PartialKey],
 ) -> Result<(), RpcError> {
-    let prefix = context.log_prefix();
-
-    let aggregated_key = perform_randomized_aggregation(&context, session_id, &partial_keys);
-
-    let decryption_key: String = calculate_decryption_key(&context, session_id, &aggregated_key)
+    let aggregated_key = perform_randomized_aggregation(&ctx, session_id, &partial_keys);
+    let decryption_key: String = calculate_decryption_key(&ctx, session_id, &aggregated_key)
         .unwrap()
         .into();
-
     let encryption_key = aggregated_key.u;
-
-    verify_encryption_decryption_key_pair(
-        &context.skde_params(),
-        &encryption_key,
-        &decryption_key,
-        &prefix,
-    )?;
+    verify_encryption_decryption_key_pair(&ctx.skde_params(), &encryption_key, &decryption_key)?;
 
     DecryptionKey::new(decryption_key.clone()).put(session_id)?;
 
     let payload =
-        SubmitDecryptionKeyPayload::new(context.address(), decryption_key.clone(), session_id);
-
+        SubmitDecryptionKeyPayload::new(ctx.address(), decryption_key.clone(), session_id);
     let timestamp = payload.timestamp;
-    let signature = context.sign(&payload)?;
-    let request = SubmitDecryptionKey { signature, payload };
-
-    let rpc_client = RpcClient::new()?;
-    let leader_rpc_url = context.leader_rpc_url().ok_or(Error::InvalidParams("Leader RPC URL is not set".to_string()))?;
-    let response: DecryptionKeyResponse = rpc_client
+    let signature = ctx.sign(&payload)?;
+    let leader_rpc_url = ctx.leader_rpc_url().ok_or(Error::InvalidParams("Leader RPC URL is not set".to_string()))?;
+    // TODO: Handle Error?
+    let response: DecryptionKeyResponse = ctx
         .request(
-            &leader_rpc_url,
-            <SubmitDecryptionKey::<C::Signature, C::Address> as RpcParameter<C>>::method(),
-            &request,
-            Id::Null,
+            leader_rpc_url,
+            <SubmitDecryptionKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(),
+            SubmitDecryptionKey { signature, payload },
         )
         .await?;
-
     if response.success {
-        info!(
-            "{} Successfully submitted decryption key : session_id: {:?
-            }, timestamp: {}",
-            prefix, session_id, timestamp
-        );
+        info!("Successfully submitted decryption key : session_id: {:?}, timestamp: {}", session_id, timestamp);
     } else {
-        warn!(
-            "{} Submission acknowledged but not successful : session_id: {:?
-            }, timestamp: {}",
-            prefix, session_id, timestamp
-        );
+        warn!("Submission acknowledged but not successful : session_id: {:?}, timestamp: {}", session_id, timestamp);
     }
 
     Ok(())

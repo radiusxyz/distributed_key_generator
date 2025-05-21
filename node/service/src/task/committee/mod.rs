@@ -1,45 +1,41 @@
-use super::{AppState, SkdeParams, RpcClient, RpcClientError, Id, RpcParameter, DkgAppState, Config, Error};
-use crate::rpc::{default_internal_rpc_server, default_external_rpc_server, default_cluster_rpc_server};
-use dkg_rpc::{external::{GetSkdeParams, GetSkdeParamsResponse}, cluster::{GetKeyGeneratorList, GetKeyGeneratorRpcUrlListResponse}};
-use dkg_primitives::{KeyGeneratorList, TaskSpawner};
+use super::{AppState, SkdeParams, RpcParameter, DkgAppState, Config, Error};
+use crate::rpc::{default_external_rpc_server, default_cluster_rpc_server};
+use dkg_rpc::external::{GetSkdeParams, GetSkdeParamsResponse, AddKeyGenerator};
+use dkg_primitives::TaskSpawner;
+use tokio::task::JoinHandle;
 
-pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<(), Error> {
+pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<Vec<JoinHandle<()>>, Error> {
+    let mut handle: Vec<JoinHandle<()>> = Vec::new();
     let leader_rpc_url = ctx.leader_rpc_url().expect("Leader RPC URL not set");
     let skde_params = fetch_skde_params(ctx, &leader_rpc_url).await;
     ctx.with_skde_params(skde_params);
-    fetch_key_generator_list::<DkgAppState>(&leader_rpc_url).await?;
-
-    let internal_server = default_internal_rpc_server(ctx).await?;
-    let server_handle = internal_server.init(config.internal_rpc_url).await?;
-    ctx.task_spawner().spawn_task(Box::pin(async move {
-        server_handle.stopped().await;
-    }));
+    add_key_generator::<DkgAppState>(ctx, &config.cluster_rpc_url, &config.external_rpc_url, &leader_rpc_url);
 
     let external_server = default_external_rpc_server(ctx).await?;
-    let server_handle = external_server.init(config.external_rpc_url).await?;
-    ctx.task_spawner().spawn_task(Box::pin(async move {
+    let server_handle = external_server.init(&config.external_rpc_url).await?;
+    handle.push(ctx.task_spawner().spawn_task(Box::pin(async move {
         server_handle.stopped().await;
-    }));
+    })));
     
     let cluster_server = default_cluster_rpc_server(ctx).await?;
-    let server_handle = cluster_server.init(config.cluster_rpc_url).await?;
+    let server_handle = cluster_server.init(&config.cluster_rpc_url).await?;
     ctx.task_spawner().spawn_task(Box::pin(async move {
         server_handle.stopped().await;
     }));
 
-    Ok(())
+    tracing::info!("External RPC server: {}", config.external_rpc_url);
+    tracing::info!("Cluster RPC server: {}", config.cluster_rpc_url);
+
+    Ok(handle)
 }
 
 // TODO: REFACTOR ME!
 pub async fn fetch_skde_params<C: AppState>(ctx: &C, leader_rpc_url: &str) -> SkdeParams {
-    let client = RpcClient::new().unwrap();
     loop {
-        let result: Result<GetSkdeParamsResponse<C::Signature>, RpcClientError> = client
-            .request(
-                leader_rpc_url,
-                <GetSkdeParams as RpcParameter<C>>::method(),
-                &GetSkdeParams,
-                Id::Null,
+        let result: Result<GetSkdeParamsResponse<C::Signature>, C::Error> = ctx.request(
+                leader_rpc_url.to_string(),
+                <GetSkdeParams as RpcParameter<C>>::method().to_string(),
+                GetSkdeParams,
             )
             .await;
 
@@ -49,6 +45,7 @@ pub async fn fetch_skde_params<C: AppState>(ctx: &C, leader_rpc_url: &str) -> Sk
 
                 match ctx.verify_signature(&signed.signature, &signed.params, None) {
                     Ok(_signer_address) => {
+                        tracing::info!("Successfully fetched SKDE params from leader");
                         return signed.params
                     }
                     Err(e) => { panic!("Failed to verify SKDE params signature: {}", e) }
@@ -62,17 +59,16 @@ pub async fn fetch_skde_params<C: AppState>(ctx: &C, leader_rpc_url: &str) -> Sk
     }
 }
 
-pub async fn fetch_key_generator_list<C: AppState>(leader_rpc_url: &str) -> Result<(), Error> {
-    let rpc_client = RpcClient::new()?;
-    let response: GetKeyGeneratorRpcUrlListResponse = rpc_client
-        .request(
-            leader_rpc_url,
-            <GetKeyGeneratorList as RpcParameter<C>>::method(),
-            &GetKeyGeneratorList,
-            Id::Null,
-        )
-        .await?;
-    let key_generator_list: KeyGeneratorList<C::Address> = response.into();
-    key_generator_list.put()?;
-    Ok(())
+fn add_key_generator<C: AppState>(
+    ctx: &C,
+    cluster_rpc_url: &str, 
+    external_rpc_url: &str,
+    leader_rpc_url: &str,
+) {
+    let param = AddKeyGenerator::new(ctx.address(), cluster_rpc_url.to_string(), external_rpc_url.to_string());
+    ctx.multicast(
+        vec![leader_rpc_url.to_string()],
+        <AddKeyGenerator<C::Address> as RpcParameter<C>>::method().to_string(),
+        param,
+    )
 }

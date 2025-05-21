@@ -23,7 +23,6 @@ impl<C: AppState> RpcParameter<C> for SyncPartialKey<C::Signature, C::Address> {
     }
 
     async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
-        let prefix = context.log_prefix();
 
         // If partial_key_sender is node itself, ignore
         if self.payload.partial_key_sender() == &context.address() {
@@ -32,7 +31,7 @@ impl<C: AppState> RpcParameter<C> for SyncPartialKey<C::Signature, C::Address> {
 
         let _ = context.verify_signature(&self.signature, &self.payload, Some(&self.payload.sender()))?;
 
-        info!("{} {}", prefix, self.payload);
+        info!("{} {}", <Self as RpcParameter<C>>::method(), self.payload);
 
         PartialKeyAddressList::<C::Address>::initialize(self.payload.session_id)?;
         PartialKeyAddressList::apply(self.payload.session_id, |list| {
@@ -52,40 +51,22 @@ impl<C: AppState> RpcParameter<C> for SyncPartialKey<C::Signature, C::Address> {
 // Broadcast partial key acknowledgment from leader to the entire network
 pub fn broadcast_partial_key_ack<C>(
     partial_key_submission: PartialKeySubmission<C::Signature, C::Address>,
-    context: &C,
+    ctx: &C,
 ) -> Result<(), C::Error> 
 where
     C: AppState,
 {
-    let prefix = context.log_prefix();
+    info!("Broadcasting partial key acknowledgment from leader to the entire network");
     let key_generator_rpc_url_list =
         KeyGeneratorList::<C::Address>::get()
             .map_err(|e| C::Error::from(e))?
-            .get_other_key_generator_rpc_url_list(&context.address());
-
-    info!("{} {}", prefix, partial_key_submission);
-
+            .get_other_key_generator_rpc_url_list(&ctx.address());
     let payload = SyncPartialKeyPayload::new(
-        context.address(),
+        ctx.address(),
         partial_key_submission,
     );
-
-    let signature = context.sign(&payload)?;
-
-    let parameter = SyncPartialKey { signature, payload };
-
-    tokio::spawn(async move {
-        if let Ok(rpc_client) = RpcClient::new() {
-            let _ = rpc_client
-                .multicast(
-                    key_generator_rpc_url_list,
-                    <SyncPartialKey::<C::Signature, C::Address> as RpcParameter<C>>::method(),
-                    &parameter,
-                    Id::Null,
-                )
-                .await;
-        }
-    });
+    let signature = ctx.sign(&payload)?;
+    ctx.multicast(key_generator_rpc_url_list, <SyncPartialKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncPartialKey { signature, payload });
 
     Ok(())
 }

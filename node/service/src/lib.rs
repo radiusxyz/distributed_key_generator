@@ -1,7 +1,6 @@
-
 use dkg_node_primitives::{Config, DkgAppState, DkgExecutor, Role};
 use radius_sdk::{signature::{PrivateKeySigner, ChainType, Address}, kvstore::KvStoreBuilder};
-use dkg_primitives::{Error, KeyGeneratorList, SessionId};
+use dkg_primitives::{Error, KeyGeneratorList, SessionId, ConfigError};
 use std::{fs, path::PathBuf};
 
 mod task;
@@ -10,15 +9,17 @@ pub use task::*;
 #[cfg(feature = "experimental")]
 mod builder;
 
-fn create_app_state(config: &Config) -> DkgAppState {
+fn create_app_state(config: &Config) -> Result<DkgAppState, Error> {
     let signer = create_signer(&config.private_key_path, config.chain_type);
     let executor = DkgExecutor;
+    tracing::info!("Creating app state for: {:?}", config.role);
     DkgAppState::new(
         config.maybe_leader_rpc_url.clone(),
         signer,
         executor,
         config.role.clone(),
     )
+    .map_err(Error::from)
 }
 
 fn create_signer(path: &PathBuf, chain_type: ChainType) -> PrivateKeySigner {
@@ -26,7 +27,10 @@ fn create_signer(path: &PathBuf, chain_type: ChainType) -> PrivateKeySigner {
         Ok(key_string) => {
             let clean_key = key_string.trim().replace("\n", "").replace("\r", "");
             match PrivateKeySigner::from_str(chain_type, &clean_key) {
-                Ok(signer) => signer,
+                Ok(signer) => {
+                    tracing::info!("Created signer for: {:?}", path);
+                    signer
+                },
                 Err(err) => {
                     panic!("Invalid signing key in file: {}", err);
                 }
@@ -49,22 +53,33 @@ fn init_db(config: &Config) -> Result<(), Error> {
     Ok(())
 }
 
+// TODO: Refactor me! - Service Builder pattern
+// ```
+// let service_builder = ServiceBuilder::new();
+// service_builder.add_task(task1);
+// service_builder.add_task(task2);
+// let service = service_builder.build();
+// service.start();
+//```
 pub async fn build_node(config: Config) -> Result<(), Error> {
     // Run common service(e.g Open database)
     // Initialize the database
     init_db(&config)?;
-    let mut app_state = create_app_state(&config);
-    // TODO: Refactor me!
-    match config.role {
+    let mut app_state = create_app_state(&config)?;
+    if !config.validate() {
+        return Err(Error::Config(ConfigError::InvalidConfig));
+    }
+    let handles = match config.role {
         Role::Authority => authority::run_node(&mut app_state, config).await?,
         Role::Committee => committee::run_node(&mut app_state, config).await?,
         Role::Leader => leader::run_node(&mut app_state, config).await?,
         Role::Solver => solver::run_node(&mut app_state, config).await?,
         _ => panic!("Invalid role"),
-    }
+    };
 
-    // This will spawn all required tasks and return the handler
-    // Ok(service_builder.build())
+    for handle in handles {
+        handle.await.map_err(|e| Error::TaskJoinError(e))?;
+    }
 
     Ok(())
 }

@@ -7,10 +7,12 @@ use radius_sdk::{
     json_rpc::server::RpcServerError,
 };
 use skde::delay_encryption::SkdeParams;
-use futures_util::future::BoxFuture;
+use futures_util::future::{BoxFuture, Future};
 use tokio::task::JoinHandle;
 use serde::{Serialize, de::DeserializeOwned};
+use async_trait::async_trait;
 
+#[async_trait]
 pub trait AppState: Clone + Send + Sync + 'static {
     /// The address type that this app accepts
     type Address: Parameter + AddressT;
@@ -76,14 +78,27 @@ pub trait AppState: Clone + Send + Sync + 'static {
     fn task_spawner(&self) -> &Self::TaskSpawner;
 
     /// Helper function to spawn a task
-    fn spawn_task(&self, fut: BoxFuture<'static, ()>) -> JoinHandle<()> {
-        self.task_spawner().spawn_task(fut)
+    fn spawn_task(&self, fut: impl Future<Output = ()> + Send + 'static) -> JoinHandle<()> {
+        self.task_spawner().spawn_task(Box::pin(fut))
     }
 
     /// Helper function to spawn a blocking task
-    fn spawn_blocking(&self, fut: BoxFuture<'static, ()>) -> JoinHandle<()> {
-        self.task_spawner().spawn_blocking(fut)
+    fn spawn_blocking(&self, fut: impl Future<Output = ()> + Send + 'static) -> JoinHandle<()> {
+        self.task_spawner().spawn_blocking(Box::pin(fut))
     }
+
+    // TODO: REFACTOR ME! - RPC Worker should be a separate thread
+    /// API for RPC request 
+    async fn request<P, R>(&self, url: String, method: String, parameter: P) -> Result<R, Self::Error>
+    where
+        P: Serialize + Send + Sync + 'static,
+        R: DeserializeOwned + Send + Sync + 'static;
+
+    // TODO: REFACTOR ME! - RPC Worker should be a separate thread
+    /// API for RPC multicast
+    fn multicast<P>(&self, urls: Vec<String>, method: String, parameter: P)
+    where
+        P: Serialize + Send + Sync + 'static;
 }
 
 pub trait Verify<Signature, Address> {

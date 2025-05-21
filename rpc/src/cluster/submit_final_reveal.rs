@@ -38,43 +38,20 @@ impl<C: AppState> RpcParameter<C> for SubmitFinalReveal<C::Signature, C::Address
             self.payload.session_id,
             self.payload.partial_keys.len()
         );
-
         Ok(RevealResponse { success: true })
     }
 }
 
-// Broadcast final reveal information from leader
+// TODO: Verifier - Broadcast final reveal information from leader
 pub fn broadcast_final_reveal<C: AppState>(
     session_id: SessionId,
     partial_keys: Vec<SyncPartialKey<C::Signature, C::Address>>,
     sync_decryption_key: SyncDecryptionKey<C::Signature, C::Address>,
-    context: &C,
+    ctx: &C,
 ) -> Result<(), C::Error> {
-    let all_key_generator_rpc_url_list =
-        KeyGeneratorList::<C::Address>::get()?.get_all_key_generator_rpc_url_list();
-
-    let payload = FinalRevealPayload {
-        session_id,
-        partial_keys,
-        sync_decryption_key,
-    };
-
-    let signature = context.sign(&payload)?;
-
-    let parameter = SubmitFinalReveal { signature, payload };
-
-    tokio::spawn(async move {
-        if let Ok(rpc_client) = RpcClient::new() {
-            let _ = rpc_client
-                .multicast(
-                    all_key_generator_rpc_url_list,
-                    <SubmitFinalReveal::<C::Signature, C::Address> as RpcParameter<C>>::method(),
-                    &parameter,
-                    Id::Null,
-                )
-                .await;
-        }
-    });
-
+    let all_key_generator_rpc_url_list = KeyGeneratorList::<C::Address>::get()?.all_rpc_urls();
+    let payload = FinalRevealPayload { session_id, partial_keys, sync_decryption_key };
+    let signature = ctx.sign(&payload)?;
+    ctx.multicast(all_key_generator_rpc_url_list, <SubmitFinalReveal::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SubmitFinalReveal { signature, payload });
     Ok(())
 }

@@ -1,6 +1,6 @@
 use crate::Args;
 use dkg_node_primitives::Role;
-use dkg_node_primitives::config::{DEFAULT_TRUSTED_ADDRESS, DEFAULT_CHAIN_TYPE, DEFAULT_SESSION_CYCLE_MS};
+use dkg_node_primitives::config::{DEFAULT_TRUSTED_ADDRESS, DEFAULT_CHAIN_TYPE, DEFAULT_SESSION_CYCLE_MS, DEFAULT_THRESHOLD};
 
 #[derive(Debug, Args)]
 pub struct DkgArgs {
@@ -12,6 +12,8 @@ pub struct DkgArgs {
     pub chain_type: String,
     #[arg(long = "dkg.session-cycle", default_value_t = DEFAULT_SESSION_CYCLE_MS)]
     pub session_cycle: u64,
+    #[arg(long = "dkg.threshold", default_value_t = DEFAULT_THRESHOLD)]
+    pub threshold: u16,
 }
 
 impl Default for DkgArgs {
@@ -21,6 +23,7 @@ impl Default for DkgArgs {
             trusted_address: DEFAULT_TRUSTED_ADDRESS.to_string(),
             chain_type: DEFAULT_CHAIN_TYPE.to_string(),
             session_cycle: DEFAULT_SESSION_CYCLE_MS,
+            threshold: DEFAULT_THRESHOLD,
         }
     }
 }

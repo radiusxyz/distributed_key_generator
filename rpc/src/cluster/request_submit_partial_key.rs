@@ -26,7 +26,6 @@ impl<C: AppState> RpcParameter<C> for RequestSubmitPartialKey {
         );
         let (_, partial_key) = generate_partial_key(&context.skde_params()).unwrap();
         submit_partial_key_to_leader::<C>(self.session_id, partial_key, &context).await?;
-
         Ok(())
     }
 }
@@ -34,32 +33,13 @@ impl<C: AppState> RpcParameter<C> for RequestSubmitPartialKey {
 pub async fn submit_partial_key_to_leader<C: AppState>(
     session_id: SessionId,
     partial_key: SkdePartialKey,
-    context: &C,
+    ctx: &C,
 ) -> Result<(), RpcError> {
-    if let Some(leader_rpc_url) = context.leader_rpc_url() {
-        // Create payload with partial key and metadata
-        let payload = PartialKeyPayload::<C::Address>::new(context.address(), partial_key, session_id);
-
-        // Create signature for the payload
-        let signature = context.sign(&payload).map_err(|e| RpcError::from(e))?;
-
-        let parameter = SubmitPartialKey { signature, payload };
-
-        // Submit to leader
-        let rpc_client = RpcClient::new()?;
-
-        // Explicitly specify the type to prevent never type fallback issues
-        let _: () = rpc_client
-            .request::<SubmitPartialKey<C::Signature, C::Address>, ()>(
-                &leader_rpc_url,
-                <SubmitPartialKey::<C::Signature, C::Address> as RpcParameter<C>>::method(),
-                parameter,
-                Id::Null,
-            )
-            .await?;
-
+    if let Some(leader_rpc_url) = ctx.leader_rpc_url() {
+        let payload = PartialKeyPayload::<C::Address>::new(ctx.address(), partial_key, session_id);
+        let signature = ctx.sign(&payload).map_err(|e| RpcError::from(e))?;
+        ctx.multicast(vec![leader_rpc_url], <SubmitPartialKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SubmitPartialKey { signature, payload });
         return Ok(());
     }
-    // We don't do nothing if leader_rpc_url is not set
     Ok(())
 }

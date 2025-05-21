@@ -18,6 +18,7 @@ mod constants {
     pub const DEFAULT_TIME_PARAM_T: u32 = 4;
     pub const DEFAULT_GENERATOR: u32 = 4;
     pub const DEFAULT_MAX_SEQUENCER_NUMBER: u32 = 2;
+    pub const DEFAULT_THRESHOLD: u16 = 1;
 }
 
 #[derive(Clone)]
@@ -27,6 +28,7 @@ pub struct Config {
     pub cluster_rpc_url: String,
     pub maybe_authority_rpc_url: Option<String>,
     pub maybe_leader_rpc_url: Option<String>,
+    pub maybe_solver_rpc_url: Option<String>,
     pub role: Role,
     pub trusted_address: String,
     pub chain_type: ChainType,
@@ -34,6 +36,7 @@ pub struct Config {
     pub private_key_path: PathBuf,
     pub db_path: PathBuf,
     pub skde_path: Option<PathBuf>,
+    pub threshold: u16,
 }
 
 impl Config {
@@ -43,6 +46,7 @@ impl Config {
         cluster_rpc_url: String,
         maybe_authority_rpc_url: Option<String>,
         maybe_leader_rpc_url: Option<String>,
+        maybe_solver_rpc_url: Option<String>,
         role: Role,
         trusted_address: String,
         chain_type: ChainType,
@@ -50,6 +54,7 @@ impl Config {
         private_key_path: PathBuf,
         db_path: PathBuf,
         skde_path: Option<PathBuf>,
+        threshold: u16,
     ) -> Self {
         Self {
             external_rpc_url,
@@ -57,6 +62,7 @@ impl Config {
             cluster_rpc_url,
             maybe_authority_rpc_url,
             maybe_leader_rpc_url,
+            maybe_solver_rpc_url,
             role,
             trusted_address,
             chain_type,
@@ -64,6 +70,39 @@ impl Config {
             private_key_path,
             db_path,
             skde_path,
+            threshold,
+        }
+    }
+
+    pub fn skde_path(&self) -> PathBuf {
+        self.skde_path.clone().expect("SKDE path not set")
+    }
+
+    pub fn session_cycle(&self) -> u64 {
+        self.session_cycle
+    }
+
+    pub fn validate(&self) -> bool {
+        match self.role {
+            Role::Leader => {
+                if self.maybe_solver_rpc_url.is_none() || self.maybe_authority_rpc_url.is_none() {
+                    return false;
+                }
+                true
+            }
+            Role::Committee => {
+                if self.maybe_leader_rpc_url.is_none() {
+                    return false;
+                }
+                true
+            },
+            Role::Solver => {
+                if self.maybe_leader_rpc_url.is_none() {
+                    return false;
+                }
+                true
+            },
+            _ => true
         }
     }
 }
@@ -76,9 +115,9 @@ pub enum ConfigError {
     CreateConfigDirectory(std::io::Error),
     CreateConfigFile(std::io::Error),
     CreatePrivateKeyFile(std::io::Error),
-
     InvalidExternalPort,
     InvalidClusterPort,
+    InvalidConfig,
 }
 
 impl std::fmt::Display for ConfigError {

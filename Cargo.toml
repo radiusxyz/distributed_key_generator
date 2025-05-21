@@ -33,6 +33,7 @@ dkg-node-primitives = { path = "node/primitives" }
 skde = { git = "https://github.com/radiusxyz/skde", rev = "d6ef27d4f1e34b391eddb039cf0b9f994f7cc2fe" }
 radius-sdk = { path = "../radius-sdk-rs/radius-sdk", features = ["full"] }
 # External
+async-trait = "0.1.88"
 bincode = "1.3.3"
 tokio = { version = "1.37.0", features = ["full"] }
 serde = { version = "1.0.197", features = ["derive"] }
@@ -51,4 +52,5 @@ thiserror = "2.0.12"
 tempfile = "3.10.0"
 chrono = "0.4"
 futures-util = "0.3"
+futures = "0.3.31"
 dirs = "5.0"

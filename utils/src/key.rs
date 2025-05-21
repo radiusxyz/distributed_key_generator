@@ -177,7 +177,6 @@ pub fn verify_encryption_decryption_key_pair(
     skde_params: &SkdeParams,
     encryption_key: &str,
     decryption_key: &str,
-    prefix: &str,
 ) -> Result<(), KeyGenerationError> {
     let sample_message = "sample_message";
 
@@ -188,7 +187,7 @@ pub fn verify_encryption_decryption_key_pair(
     let decrypted_message = match decrypt(skde_params, &ciphertext, decryption_key) {
         Ok(message) => message,
         Err(err) => {
-            tracing::error!("{} Decryption failed: {}", prefix, err);
+            tracing::error!("Decryption failed: {}", err);
             return Err(KeyGenerationError::InternalError(
                 format!("Decryption failed: {}", err).into(),
             ));

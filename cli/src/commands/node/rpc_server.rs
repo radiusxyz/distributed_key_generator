@@ -24,6 +24,9 @@ pub struct RpcServerArgs {
     /// Args for leader node
     #[arg(long = "authority.rpc.url")]
     pub authority_rpc_url: Option<String>,
+    /// Args for solver node
+    #[arg(long = "solver.rpc.url")]
+    pub solver_rpc_url: Option<String>,
 }
 
 impl Default for RpcServerArgs {
@@ -37,20 +40,21 @@ impl Default for RpcServerArgs {
             cluster_rpc_port: DEFAULT_CLUSTER_RPC_PORT,
             leader_rpc_url: None,
             authority_rpc_url: None,
+            solver_rpc_url: None,
         }
     }
 }
 
 impl RpcServerArgs {
     pub fn external_rpc_url(&self) -> String {
-        format!("{}:{}", self.external_rpc_url, self.external_rpc_port)
+        format!("http://{}:{}", self.external_rpc_url, self.external_rpc_port)
     }
 
     pub fn internal_rpc_url(&self) -> String {
-        format!("{}:{}", self.internal_rpc_url, self.internal_rpc_port)
+        format!("http://{}:{}", self.internal_rpc_url, self.internal_rpc_port)
     }
 
     pub fn cluster_rpc_url(&self) -> String {
-        format!("{}:{}", self.cluster_rpc_url, self.cluster_rpc_port)
+        format!("http://{}:{}", self.cluster_rpc_url, self.cluster_rpc_port)
     }
 }

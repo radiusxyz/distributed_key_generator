@@ -72,8 +72,8 @@ impl<Address: AddressT> KeyGeneratorList<Address> {
         self.0.retain(|kg| kg != key_generator);
     }
 
-    pub fn contains(&self, key_generator: &KeyGenerator<Address>) -> bool {
-        self.0.contains(key_generator)
+    pub fn contains(&self, address: &Address) -> bool {
+        self.0.iter().any(|kg| kg.address == *address)
     }
 
     pub fn is_key_generator_in_cluster(&self, address: &Address) -> bool {
@@ -99,7 +99,7 @@ impl<Address: AddressT> KeyGeneratorList<Address> {
             .collect()
     }
 
-    pub fn get_all_key_generator_rpc_url_list(&self) -> Vec<String> {
+    pub fn all_rpc_urls(&self) -> Vec<String> {
         self.0
             .iter()
             .map(|key_generator| key_generator.cluster_rpc_url().to_owned())

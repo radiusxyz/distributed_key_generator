@@ -65,41 +65,20 @@ pub fn broadcast_decryption_key_ack<C: AppState>(
     session_id: SessionId,
     decryption_key: String,
     solve_timestamp: u128,
-    context: &C,
+    ctx: &C,
 ) -> Result<(), C::Error> {
-    let prefix = context.log_prefix();
-    let all_key_generator_rpc_url_list =
-        KeyGeneratorList::<C::Address>::get()?.get_all_key_generator_rpc_url_list();
+    let all_key_generator_rpc_url_list = KeyGeneratorList::<C::Address>::get()?.all_rpc_urls();
 
     debug!(
         target: "dkg-rpc",
-        "{} Broadcast decryption key - session_id: {:?}, all_dkg_list: {:?}",
-        prefix, session_id, all_key_generator_rpc_url_list
+        "Broadcast decryption key - session_id: {:?}, all_dkg_list: {:?}",
+        session_id, all_key_generator_rpc_url_list
     );
 
-    let payload = SyncDecryptionKeyPayload::new(
-        context.address(),
-        decryption_key,
-        session_id,
-        solve_timestamp,
-    );
-
-    let signature = context.sign(&payload)?;
-
-    let parameter = SyncDecryptionKey { signature, payload };
-
-    tokio::spawn(async move {
-        if let Ok(rpc_client) = RpcClient::new() {
-            let _ = rpc_client
-                .multicast(
-                    all_key_generator_rpc_url_list,
-                    <SyncDecryptionKey::<C::Signature, C::Address> as RpcParameter<C>>::method(),
-                    &parameter,
-                    Id::Null,
-                )
-                .await;
-        }
-    });
+    let payload = SyncDecryptionKeyPayload::new(ctx.address(), decryption_key, session_id, solve_timestamp);
+    let signature = ctx.sign(&payload)?;
+    
+    ctx.multicast(all_key_generator_rpc_url_list, <SyncDecryptionKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncDecryptionKey { signature, payload });
 
     Ok(())
 }

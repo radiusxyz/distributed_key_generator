@@ -1,7 +1,8 @@
 pub mod cluster;
+pub use cluster::*;
 pub mod external;
-pub mod internal;
+pub use external::*;
 
 mod primitives {
-    pub use radius_sdk::json_rpc::{server::{RpcParameter, RpcError}, client::{RpcClient, Id}};
+    pub use radius_sdk::json_rpc::server::{RpcParameter, RpcError};
 }

@@ -2,18 +2,26 @@ use crate::primitives::*;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use dkg_primitives::{AppState, KeyGenerator, KeyGeneratorList};
+use std::fmt::{Display, Debug};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncKeyGenerator<Address> {
     // signature: Signature, // TODO: Uncomment this code
-    message: SyncKeyGeneratorMessage<Address>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct SyncKeyGeneratorMessage<Address> {
     address: Address,
     cluster_rpc_url: String,
     external_rpc_url: String,
+}
+
+impl<Address: Clone> From<SyncKeyGenerator<Address>> for KeyGenerator<Address> {
+    fn from(value: SyncKeyGenerator<Address>) -> Self {
+        KeyGenerator::new(value.address, value.cluster_rpc_url, value.external_rpc_url)
+    }
+}
+
+impl<Address: Debug> Display for SyncKeyGenerator<Address> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "address: {:?}, cluster_rpc_url: {:?}, external_rpc_url: {:?}", self.address, self.cluster_rpc_url, self.external_rpc_url)
+    }
 }
 
 impl<C: AppState> RpcParameter<C> for SyncKeyGenerator<C::Address> {
@@ -23,15 +31,13 @@ impl<C: AppState> RpcParameter<C> for SyncKeyGenerator<C::Address> {
         "sync_key_generator"
     }
 
-    async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
-        let prefix = context.log_prefix();
-        info!(
-            "{} Sync key generator - address: {:?} / cluster_rpc_url: {:?} / external_rpc_url: {:?}",
-            prefix,
-            self.message.address,
-            self.message.cluster_rpc_url,
-            self.message.external_rpc_url
-        );
+    async fn handler(self, _context: C) -> Result<Self::Response, RpcError> {
+        info!("Sync key generator - {}", self);
+        let mut key_generator_list = KeyGeneratorList::get_mut()?;
+        if key_generator_list.contains(&self.address) {
+            tracing::warn!("Already synced key generator: {}", self);
+            return Ok(());
+        }
 
         // TODO: Uncomment this code
         // self.signature.verify_signature(
@@ -40,20 +46,8 @@ impl<C: AppState> RpcParameter<C> for SyncKeyGenerator<C::Address> {
         //     context.config().chain_type().clone(),
         // )?;
 
-        let key_generator = KeyGenerator::new(
-            self.message.address,
-            self.message.cluster_rpc_url.clone(),
-            self.message.external_rpc_url.clone(),
-        );
-
-        let key_generator_list = KeyGeneratorList::get()?;
-        if key_generator_list.contains(&key_generator) {
-            return Ok(());
-        }
-
-        KeyGeneratorList::apply(|key_generator_list| {
-            key_generator_list.insert(key_generator);
-        })?;
+        key_generator_list.insert(self.into());
+        key_generator_list.update()?;
 
         Ok(())
     }

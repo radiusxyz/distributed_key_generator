@@ -2415,6 +2415,7 @@ dependencies = [
 name = "dkg-node-primitives"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "bincode",
  "dkg-primitives",
  "ethers",
@@ -2436,6 +2437,7 @@ dependencies = [
  "dkg-primitives",
  "dkg-rpc",
  "ethers",
+ "futures",
  "futures-util",
  "radius-sdk",
  "serde",
@@ -2449,6 +2451,7 @@ dependencies = [
 name = "dkg-primitives"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "clap",
  "futures-util",
  "radius-sdk",

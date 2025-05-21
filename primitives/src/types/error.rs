@@ -42,6 +42,8 @@ pub enum Error {
     Arithmetic,
     /// Key not found for db
     NotFound,
+    /// Task join error
+    TaskJoinError(tokio::task::JoinError),
 }
 
 /// Error type for key generation process
@@ -151,6 +153,7 @@ pub enum ConfigError {
     InvalidExternalPort,
     InvalidClusterPort,
     AlreadyExists,
+    InvalidConfig,
 }
 
 impl std::fmt::Display for ConfigError {
