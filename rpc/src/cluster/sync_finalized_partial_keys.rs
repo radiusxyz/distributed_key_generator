@@ -1,5 +1,6 @@
+use crate::{primitives::*, DecryptionKeyResponse, SubmitDecryptionKey};
 use dkg_primitives::{
-    AppState, DecryptionKey, Error, PartialKeyAddressList, SessionId, SubmitDecryptionKeyPayload, SyncFinalizedPartialKeysPayload
+    AppState, DecryptionKey, Error, SubmitterList, SessionId, SubmitDecryptionKeyPayload, SyncFinalizedPartialKeysPayload
 };
 use dkg_utils::key::{
     calculate_decryption_key, perform_randomized_aggregation, verify_encryption_decryption_key_pair,
@@ -7,13 +8,6 @@ use dkg_utils::key::{
 use serde::{Deserialize, Serialize};
 use skde::key_generation::PartialKey;
 use tracing::{error, info, warn};
-
-use crate::{
-    primitives::*,
-    cluster::{
-        DecryptionKeyResponse, SubmitDecryptionKey,
-    },
-};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncFinalizedPartialKeys<Signature, Address> {
@@ -25,6 +19,10 @@ impl<Signature, Address> SyncFinalizedPartialKeys<Signature, Address> {
     pub fn new(signature: Signature, payload: SyncFinalizedPartialKeysPayload<Signature, Address>) -> Self {
         Self { signature, payload }
     }
+
+    fn session_id(&self) -> SessionId {
+        self.payload.session_id
+    }
 }
 
 impl<C: AppState> RpcParameter<C> for SyncFinalizedPartialKeys<C::Signature, C::Address> {
@@ -35,38 +33,45 @@ impl<C: AppState> RpcParameter<C> for SyncFinalizedPartialKeys<C::Signature, C::
     }
 
     async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
+        let session_id = self.session_id();
         if context.is_solver() {
-            PartialKeyAddressList::<C::Address>::initialize(self.payload.session_id)?;
+            SubmitterList::<C::Address>::initialize(session_id)?;
             let _ = context.verify_signature(&self.signature, &self.payload, Some(&self.payload.sender))?;
-            let partial_keys = process_partial_key_submissions::<C>(&context, &self.payload)?;
+            let partial_keys = get_partial_keys::<C>(&context, &self.payload)?;
             let cloned_context = context.clone();
             cloned_context.spawn_task(Box::pin(
                 async move {
                     if let Err(err) =
-                        derive_and_submit_decryption_key::<C>(context, self.payload.session_id, &partial_keys)
+                        derive_decryption_key::<C>(context, session_id, &partial_keys)
                             .await
                     {
                         error!(
                             "Solve failed for session {:?}: {:?}",
-                            self.payload.session_id, err
+                            session_id, err
                         );
                     } else {
                         info!(
                             "Solve completed successfully for session {:?}",
-                            self.payload.session_id
+                            session_id
                         );
                     }
                 }
             ));
         } else {
-            let partial_keys: Vec<skde::key_generation::PartialKey> = process_partial_key_submissions::<C>(&context, &self.payload)?;
-            perform_randomized_aggregation(&context, self.payload.session_id, &partial_keys);
+            let partial_keys = get_partial_keys::<C>(&context, &self.payload)?;
+            perform_randomized_aggregation(&context, session_id, &partial_keys);
         }
         Ok(())
     }
 }
 
-async fn derive_and_submit_decryption_key<C: AppState>(
+// TODO: Refactor 
+// ```
+// let dec_key = ctx.derive_dec_key()?;
+// ctx.request()?;
+// Ok(())
+// ```
+async fn derive_decryption_key<C: AppState>(
     ctx: C,
     session_id: SessionId,
     partial_keys: &[PartialKey],
@@ -94,49 +99,41 @@ async fn derive_and_submit_decryption_key<C: AppState>(
         )
         .await?;
     if response.success {
-        info!("Successfully submitted decryption key : session_id: {:?}, timestamp: {}", session_id, timestamp);
+        info!("Successfully submitted decryption key - session_id: {:?}, timestamp: {}", session_id, timestamp);
     } else {
-        warn!("Submission acknowledged but not successful : session_id: {:?}, timestamp: {}", session_id, timestamp);
+        warn!("Submission acknowledged but not successful - session_id: {:?}, timestamp: {}", session_id, timestamp);
     }
 
     Ok(())
 }
 
-pub fn process_partial_key_submissions<C: AppState>(
+pub fn get_partial_keys<C: AppState>(
     context: &C,
     payload: &SyncFinalizedPartialKeysPayload<C::Signature, C::Address>,
 ) -> Result<Vec<PartialKey>, RpcError> {
-    let SyncFinalizedPartialKeysPayload {
-        partial_key_submissions,
-        session_id,
-        ack_timestamp,
-        ..
-    } = payload;
+    let SyncFinalizedPartialKeysPayload { session_id, ack_timestamp, .. } = payload;
 
     info!(
-        "{} Received finalized partial keys - partial_key_submissions.len(): {:?}, session_id: {:?}, timestamp: {}",
-        context.log_prefix(),
-        partial_key_submissions.len(),
+        "Received finalized partial keys - num: {:?}, session_id: {:?}, timestamp: {}",
+        payload.len(),
         session_id,
         ack_timestamp
     );
 
-    let mut partial_keys = Vec::new();
-
     // TODO: Should use the proper index to order the partial keys
-    let mut sorted_submissions = partial_key_submissions.clone();
-    sorted_submissions.sort_by(|a, b| a.payload.partial_key.u.cmp(&b.payload.partial_key.u));
-
-    for pk_submission in sorted_submissions.iter() {
-        let signable_message = pk_submission.payload.clone();
-        let signer = context.verify_signature(&pk_submission.signature, &signable_message, Some(&pk_submission.sender()))?;
-        PartialKeyAddressList::<C::Address>::initialize(*session_id)?;
-        PartialKeyAddressList::apply(*session_id, |list| {
-            list.insert(signer.clone());
+    let partial_keys = payload
+        .partial_keys()
+        .iter()
+        .try_fold(Vec::new(), |mut acc, key| -> Result<Vec<PartialKey>, C::Error> {
+            let signer = context.verify_signature(&key.signature, &key.payload, Some(&key.sender()))?;
+            SubmitterList::<C::Address>::initialize(*session_id)?;
+            SubmitterList::apply(*session_id, |list| {
+                list.insert(signer.clone());
+            })?;
+            key.put(*session_id, signer)?;
+            acc.push(key.partial_key());
+            Ok(acc)
         })?;
-        pk_submission.clone().put(*session_id, signer)?;
-        partial_keys.push(pk_submission.payload.partial_key.clone());
-    }
 
     Ok(partial_keys)
 }

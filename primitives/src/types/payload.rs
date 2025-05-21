@@ -12,13 +12,24 @@ pub struct SyncFinalizedPartialKeysPayload<Signature, Address> {
     pub ack_timestamp: u128,
 }
 
-impl<Signature, Address> SyncFinalizedPartialKeysPayload<Signature, Address> {
+impl<Signature: Clone, Address: Clone> SyncFinalizedPartialKeysPayload<Signature, Address> {
     pub fn new(sender: Address, partial_key_submissions: Vec<PartialKeySubmission<Signature, Address>>, session_id: SessionId) -> Self {
         let ack_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis();
         Self { sender, partial_key_submissions, session_id, ack_timestamp }
+    }
+
+    pub fn len(&self) -> usize {
+        self.partial_key_submissions.len()
+    }
+
+    /// Get sorted partial keys
+    pub fn partial_keys(&self) -> Vec<PartialKeySubmission<Signature, Address>> {
+        let mut sorted = self.partial_key_submissions.clone();
+        sorted.sort_by(|a, b| a.payload.partial_key.u.cmp(&b.payload.partial_key.u));
+        sorted
     }
 }
 

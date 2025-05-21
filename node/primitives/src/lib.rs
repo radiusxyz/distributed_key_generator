@@ -2,7 +2,7 @@ pub use crate::Config;
 use std::sync::Arc;
 pub use dkg_primitives::{
     AppState, Verify, TaskSpawner, Error, TraceExt, KeyGenerationError, SessionId,
-    DecryptionKey, Parameter
+    DecryptionKey, Parameter, Event,
 };
 use radius_sdk::{signature::PrivateKeySigner, json_rpc::client::{RpcClient, Id}};
 pub use radius_sdk::signature::{Address, Signature, SignatureError};
@@ -10,7 +10,7 @@ use ethers::{types::Signature as EthersSignature, utils::hash_message};
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use skde::delay_encryption::{decrypt, encrypt, SkdeParams};
 use futures_util::future::BoxFuture;
-use tokio::task::JoinHandle;
+use tokio::{task::JoinHandle, sync::mpsc::Sender};
 use async_trait::async_trait;
 
 pub mod config;
@@ -30,6 +30,8 @@ pub struct DkgAppState {
     skde_params: Option<SkdeParams>,
     task_spawner: DkgExecutor,
     role: Role,
+    threshold: u16,
+    sender: Sender<Event<Signature, Address>>,
 }
 
 impl DkgAppState {
@@ -38,9 +40,11 @@ impl DkgAppState {
         signer: PrivateKeySigner,
         task_spawner: DkgExecutor,
         role: Role,
+        threshold: u16,
+        sender: Sender<Event<Signature, Address>>
     ) -> Result<Self, Error> {
         let rpc_client = RpcClient::new().map_err(Error::from)?;
-        Ok(Self { rpc_client: Arc::new(rpc_client), leader_rpc_url, signer, skde_params: None, task_spawner, role })
+        Ok(Self { rpc_client: Arc::new(rpc_client), leader_rpc_url, signer, skde_params: None, task_spawner, role, threshold, sender })
     }
 
     pub fn with_skde_params(&mut self, skde_params: SkdeParams) {
@@ -61,43 +65,40 @@ impl AppState for DkgAppState {
     type TaskSpawner = DkgExecutor;
     type Error = Error;
 
+    fn threshold(&self) -> u16 {
+        self.threshold
+    }
     fn is_leader(&self) -> bool {
         self.role == Role::Leader
     }
-
     fn is_solver(&self) -> bool {
         self.role == Role::Solver
     }
-
     fn leader_rpc_url(&self) -> Option<String> {
         self.leader_rpc_url.clone()
     }
-
     fn signer(&self) -> PrivateKeySigner {
         self.signer.clone()
     }
-
     fn address(&self) -> Address {
         self.signer.address().clone()
     }
-
     fn skde_params(&self) -> SkdeParams {
         // This should never be None
         self.skde_params.clone().expect("SKDE params not initialized")
     }
-
     fn log_prefix(&self) -> String {
         format!("{}", self.role)
     }
-
     fn sign<T: Serialize>(&self, message: &T) -> Result<Self::Signature, Self::Error> {
         self.signer().sign_message(message).map_err(Self::Error::from)
     }
-
     fn task_spawner(&self) -> &Self::TaskSpawner {
         &self.task_spawner
     }
-
+    async fn emit_event(&self, event: Event<Self::Signature, Self::Address>) -> Result<(), Self::Error> {
+        self.sender.send(event).await.map_err(|e| Error::from(e))
+    }
     async fn request<P, R>(&self, url: String, method: String, parameter: P) -> Result<R, Self::Error> 
     where
         P: Serialize + Send + Sync + 'static,
@@ -107,7 +108,6 @@ impl AppState for DkgAppState {
         let res = rpc_client.request::<P, R>(url, method, parameter, Id::Null).await.map_err(Error::from)?;
         return Ok(res);  
     } 
-
     fn multicast<P>(&self, urls: Vec<String>, method: String, parameter: P) 
     where
         P: Serialize + Send + Sync + 'static
@@ -151,7 +151,6 @@ impl Verify<Signature, Address> for DkgVerify {
         skde_params: &skde::delay_encryption::SkdeParams,
         encryption_key: String,
         decryption_key: String,
-        prefix: &str,
     ) -> Result<(), dkg_primitives::KeyGenerationError> {
         let sample_message = "sample_message";
         let ciphertext = encrypt(skde_params, sample_message, &encryption_key, true)
@@ -160,7 +159,7 @@ impl Verify<Signature, Address> for DkgVerify {
         let decrypted_message = match decrypt(skde_params, &ciphertext, &decryption_key) {
             Ok(message) => message,
             Err(err) => {
-                tracing::error!("{} Decryption failed: {}", prefix, err);
+                tracing::error!("Decryption failed: {}", err);
                 return Err(KeyGenerationError::InternalError(
                     format!("Decryption failed: {}", err).into(),
                 ));

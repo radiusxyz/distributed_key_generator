@@ -1,6 +1,6 @@
 use super::{AppState, SkdeParams, RpcParameter, DkgAppState, Config, Error};
 use crate::rpc::{default_external_rpc_server, default_cluster_rpc_server};
-use dkg_rpc::external::{GetSkdeParams, GetSkdeParamsResponse, AddKeyGenerator};
+use dkg_rpc::external::{GetSkdeParams, GetSkdeParamsResponse, AddKeyGenerator, RequestSubmitPartialKey};
 use dkg_primitives::TaskSpawner;
 use tokio::task::JoinHandle;
 
@@ -12,7 +12,10 @@ pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<Vec<JoinH
     add_key_generator::<DkgAppState>(ctx, &config.cluster_rpc_url, &config.external_rpc_url, &leader_rpc_url);
 
     let external_server = default_external_rpc_server(ctx).await?;
-    let server_handle = external_server.init(&config.external_rpc_url).await?;
+    let server_handle = external_server
+        .register_rpc_method::<RequestSubmitPartialKey>()?
+        .init(&config.external_rpc_url)
+        .await?;
     handle.push(ctx.task_spawner().spawn_task(Box::pin(async move {
         server_handle.stopped().await;
     })));

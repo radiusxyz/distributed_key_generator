@@ -49,9 +49,6 @@ impl<C: AppState> RpcParameter<C> for GetKeyGeneratorList {
                 })
             })
             .collect();
-
-        Ok(GetKeyGeneratorRpcUrlListResponse {
-            key_generator_rpc_url_list,
-        })
+        Ok(GetKeyGeneratorRpcUrlListResponse { key_generator_rpc_url_list })
     }
 }

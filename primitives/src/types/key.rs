@@ -4,6 +4,7 @@ use radius_sdk::kvstore::{KvStoreError, Model};
 use crate::traits::{AddressT, Parameter};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use skde::key_aggregation::AggregatedKey as SkdeAggregatedKey;
+use skde::key_generation::PartialKey;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
 #[kvstore(key(session_id: SessionId, address: Address))]
@@ -20,6 +21,10 @@ impl<Signature, Address> PartialKeySubmission<Signature, Address> {
     pub fn sender(&self) -> &Address {
         &self.payload.sender
     }
+
+    pub fn partial_key(&self) -> PartialKey {
+        self.payload.partial_key.clone()
+    }
 }
 
 impl<Signature, Address: Debug> Display for PartialKeySubmission<Signature, Address> {
@@ -34,9 +39,10 @@ impl<Signature, Address: Debug> Display for PartialKeySubmission<Signature, Addr
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Model)]
 #[kvstore(key(session_id: SessionId))]
-pub struct PartialKeyAddressList<Address>(Vec<Address>);
+/// List of partial key submitters
+pub struct SubmitterList<Address>(Vec<Address>);
 
-impl<Address: Parameter + AddressT> PartialKeyAddressList<Address> {
+impl<Address: Parameter + AddressT> SubmitterList<Address> {
 
     pub fn new() -> Self {
         Self(Vec::new())
@@ -66,22 +72,23 @@ impl<Address: Parameter + AddressT> PartialKeyAddressList<Address> {
         Self(Vec::new()).put(session_id)
     }
 
-    pub fn get_partial_key_list<C: AppState>(
+    pub fn get_partial_keys<C: AppState>(
         &self,
         session_id: SessionId,
     ) -> Result<Vec<PartialKeySubmission<C::Signature, C::Address>>, KvStoreError> 
     where
         C::Address: From<Address>,
     {
-        let partial_key_submissions: Result<Vec<PartialKeySubmission<C::Signature, C::Address>>, _> = self
+        self
             .0
             .iter()
-            .map(|address| {
+            .try_fold(Vec::new(), |mut acc, address| -> Result<Vec<PartialKeySubmission<C::Signature, C::Address>>, KvStoreError> {
                 PartialKeySubmission::<C::Signature, C::Address>::get(session_id, C::Address::from(address.clone()))
-            })
-            .collect();
-
-        partial_key_submissions?
+                    .map(|partial_key_submission| {
+                        acc.push(partial_key_submission);
+                        acc
+                    })
+            })?
             .into_iter()
             .map(|partial_key_submission| Ok(partial_key_submission))
             .collect()

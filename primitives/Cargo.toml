@@ -19,3 +19,4 @@ futures-util.workspace = true
 sha2.workspace = true
 sha3.workspace = true
 async-trait.workspace = true
+thiserror.workspace = true

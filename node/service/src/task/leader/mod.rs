@@ -2,19 +2,23 @@ use super::{AppState, SkdeParams, RpcParameter, DkgAppState, Config, Error};
 use crate::{DkgWorker, run_dkg_worker};
 use crate::rpc::{default_external_rpc_server, default_cluster_rpc_server};
 use dkg_node_primitives::{Address, Signature};
-use dkg_rpc::{SubmitDecryptionKey, GetSkdeParams, GetSkdeParamsResponse};
+use dkg_primitives::Event;
+use dkg_rpc::{SubmitDecryptionKey, SubmitPartialKey, GetSkdeParams, GetSkdeParamsResponse};
 use dkg_primitives::TaskSpawner;
 use tokio::task::JoinHandle;
 use tracing::{info, error};
+use tokio::sync::mpsc::Receiver;
 
-pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<Vec<JoinHandle<()>>, Error> {
+pub async fn run_node(ctx: &mut DkgAppState, config: Config, rx: Receiver<Event<Signature, Address>>) -> Result<Vec<JoinHandle<()>>, Error> {
     let mut handle: Vec<JoinHandle<()>> = vec![];
     let authority_rpc_url = config.maybe_authority_rpc_url.clone().expect("Authority RPC URL not set");
+    let solver_rpc_url = config.maybe_solver_rpc_url.clone().expect("Solver RPC URL not set");
     let skde_params = fetch_skde_params(ctx, &authority_rpc_url).await;
     ctx.with_skde_params(skde_params);
 
     let external_server = default_external_rpc_server(ctx).await?;
     let server_handle = external_server
+        .register_rpc_method::<SubmitPartialKey<Signature, Address>>()?
         .register_rpc_method::<SubmitDecryptionKey<Signature, Address>>()?
         .init(config.external_rpc_url.clone())
         .await?;
@@ -31,10 +35,10 @@ pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<Vec<JoinH
     info!("External RPC server: {}", config.external_rpc_url);
     info!("Cluster RPC server: {}", config.cluster_rpc_url);
 
-    let key_generator_worker = DkgWorker::new(config.cluster_rpc_url.clone(), config.session_cycle, config.threshold);
+    let mut key_generator_worker = DkgWorker::new(solver_rpc_url, config.session_cycle, rx);
     let cloned_ctx = ctx.clone();
     let worker_handle = ctx.spawn_task(async move {
-        if let Err(e) = run_dkg_worker(&cloned_ctx, key_generator_worker).await {
+        if let Err(e) = run_dkg_worker(&cloned_ctx, &mut key_generator_worker).await {
             // TODO: Spawn critical task to start DKG worker
             panic!("Error running DKG worker: {}", e);
         }

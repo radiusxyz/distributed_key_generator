@@ -21,8 +21,6 @@ impl<C: AppState> RpcParameter<C> for GetDecryptionKey {
     }
 
     async fn handler(self, _context: C) -> Result<Self::Response, RpcError> {
-        Ok(GetDecryptionKeyResponse {
-            decryption_key: DecryptionKey::get(self.session_id)?.into(),
-        })
+        Ok(GetDecryptionKeyResponse { decryption_key: DecryptionKey::get(self.session_id)?.into() })
     }
 }

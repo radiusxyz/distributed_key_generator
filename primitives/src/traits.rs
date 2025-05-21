@@ -1,4 +1,4 @@
-use crate::KeyGenerationError;
+use crate::{KeyGenerationError, Event};
 use std::{hash::Hash, fmt::Debug};
 use radius_sdk::{
     signature::{PrivateKeySigner, SignatureError}, 
@@ -35,6 +35,8 @@ pub trait AppState: Clone + Send + Sync + 'static {
         + Sync 
         + 'static;
 
+    /// Get the threshold for the key generator
+    fn threshold(&self) -> u16;
     /// Check if the node is a leader
     fn is_leader(&self) -> bool;
     /// Check if the node is a solver
@@ -69,9 +71,8 @@ pub trait AppState: Clone + Send + Sync + 'static {
         skde_params: &SkdeParams,
         encryption_key: String,
         decryption_key: String,
-        prefix: &str,
     ) -> Result<(), KeyGenerationError> {
-        Self::Verify::verify_decryption_key(skde_params, encryption_key, decryption_key, prefix)
+        Self::Verify::verify_decryption_key(skde_params, encryption_key, decryption_key)
     }
 
     /// Helper function to get task spawner. This should not be used outside of the task module.
@@ -86,6 +87,9 @@ pub trait AppState: Clone + Send + Sync + 'static {
     fn spawn_blocking(&self, fut: impl Future<Output = ()> + Send + 'static) -> JoinHandle<()> {
         self.task_spawner().spawn_blocking(Box::pin(fut))
     }
+
+    /// Helper function to emit an event
+    async fn emit_event(&self, event: Event<Self::Signature, Self::Address>) -> Result<(), Self::Error>;
 
     // TODO: REFACTOR ME! - RPC Worker should be a separate thread
     /// API for RPC request 
@@ -109,7 +113,6 @@ pub trait Verify<Signature, Address> {
         skde_params: &SkdeParams,
         encryption_key: String,
         decryption_key: String,
-        prefix: &str,
     ) -> Result<(), KeyGenerationError>;
 }
 

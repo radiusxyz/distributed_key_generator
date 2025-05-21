@@ -1,18 +1,26 @@
 use crate::primitives::*;
 use serde::{Deserialize, Serialize};
 use tracing::info;
-use dkg_primitives::{
-    AppState,
-    KeyGeneratorList,
-    PartialKeyAddressList,
-    PartialKeySubmission,
-    SyncPartialKeyPayload,
-};
+use dkg_primitives::{SessionId, AppState, KeyGeneratorList, SubmitterList, PartialKeySubmission, SyncPartialKeyPayload};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncPartialKey<Signature, Address> {
     pub signature: Signature,
     pub payload: SyncPartialKeyPayload<Signature, Address>,
+}
+
+impl<Signature: Clone, Address: Clone> SyncPartialKey<Signature, Address> {
+    fn session_id(&self) -> SessionId {
+        self.payload.session_id
+    }
+
+    fn partial_key_sender(&self) -> Address {
+        self.payload.partial_key_submission.sender().clone()
+    }
+
+    fn partial_key(&self) -> PartialKeySubmission<Signature, Address> {
+        self.payload.partial_key_submission.clone()
+    }
 }
 
 impl<C: AppState> RpcParameter<C> for SyncPartialKey<C::Signature, C::Address> {
@@ -22,27 +30,18 @@ impl<C: AppState> RpcParameter<C> for SyncPartialKey<C::Signature, C::Address> {
         "sync_partial_key"
     }
 
-    async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
-
+    async fn handler(self, context: C) -> Result<Self::Response, RpcError> { 
+        info!("Received partial key from {:?}", self.payload.sender());
         // If partial_key_sender is node itself, ignore
-        if self.payload.partial_key_sender() == &context.address() {
-            return Ok(());
-        }
-
+        let session_id = self.session_id();
+        if self.payload.partial_key_sender() == &context.address() { return Ok(()); }
         let _ = context.verify_signature(&self.signature, &self.payload, Some(&self.payload.sender()))?;
 
-        info!("{} {}", <Self as RpcParameter<C>>::method(), self.payload);
-
-        PartialKeyAddressList::<C::Address>::initialize(self.payload.session_id)?;
-        PartialKeyAddressList::apply(self.payload.session_id, |list| {
-            list.insert(self.payload.partial_key_sender().clone());
+        SubmitterList::<C::Address>::initialize(session_id)?;
+        SubmitterList::apply(session_id, |list| {
+            list.insert(self.partial_key_sender());
         })?;
-
-        let partial_key_submission = self.payload.partial_key_submission.clone();
-        partial_key_submission.put(
-            self.payload.session_id,
-            self.payload.partial_key_sender().clone()
-        )?;
+        self.partial_key().put(session_id, self.partial_key_sender())?;
 
         Ok(())
     }
@@ -56,17 +55,17 @@ pub fn broadcast_partial_key_ack<C>(
 where
     C: AppState,
 {
-    info!("Broadcasting partial key acknowledgment from leader to the entire network");
-    let key_generator_rpc_url_list =
+    let committee_urls =
         KeyGeneratorList::<C::Address>::get()
             .map_err(|e| C::Error::from(e))?
-            .get_other_key_generator_rpc_url_list(&ctx.address());
-    let payload = SyncPartialKeyPayload::new(
-        ctx.address(),
-        partial_key_submission,
-    );
+            .into_iter()
+            .filter(|kg| kg.address() != ctx.address())
+            .map(|kg| kg.cluster_rpc_url().to_owned())
+            .collect();
+    info!("Broadcasting partial key ack to {:?}", committee_urls);
+    let payload = SyncPartialKeyPayload::new(ctx.address(), partial_key_submission);
     let signature = ctx.sign(&payload)?;
-    ctx.multicast(key_generator_rpc_url_list, <SyncPartialKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncPartialKey { signature, payload });
+    ctx.multicast(committee_urls, <SyncPartialKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncPartialKey { signature, payload });
 
     Ok(())
 }

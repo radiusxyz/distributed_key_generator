@@ -76,33 +76,19 @@ impl<Address: AddressT> KeyGeneratorList<Address> {
         self.0.iter().any(|kg| kg.address == *address)
     }
 
-    pub fn is_key_generator_in_cluster(&self, address: &Address) -> bool {
-        for key_generator in self.0.iter() {
-            if key_generator.address() == *address {
-                return true;
-            }
-        }
-
-        false
-    }
-
-    pub fn get_other_key_generator_rpc_url_list(&self, my_address: &Address) -> Vec<String> {
+    /// Returns all RPC URLs of the key generators.
+    /// If `is_sync` is true, it returns the RPC URLs of the key generators in the cluster.
+    /// Otherwise, it returns the external RPC URLs of all key generators.
+    pub fn all_rpc_urls(&self, is_sync: bool) -> Vec<String> {
         self.0
             .iter()
-            .filter_map(|key_generator| {
-                if key_generator.address() == *my_address {
-                    None
+            .map(|key_generator| {
+                if is_sync {
+                    key_generator.cluster_rpc_url().to_owned()
                 } else {
-                    Some(key_generator.cluster_rpc_url().to_owned())
+                    key_generator.external_rpc_url().to_owned()
                 }
             })
-            .collect()
-    }
-
-    pub fn all_rpc_urls(&self) -> Vec<String> {
-        self.0
-            .iter()
-            .map(|key_generator| key_generator.cluster_rpc_url().to_owned())
             .collect()
     }
 }

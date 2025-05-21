@@ -1,7 +1,8 @@
 use dkg_node_primitives::{Config, DkgAppState, DkgExecutor, Role};
-use radius_sdk::{signature::{PrivateKeySigner, ChainType, Address}, kvstore::KvStoreBuilder};
-use dkg_primitives::{Error, KeyGeneratorList, SessionId, ConfigError};
+use radius_sdk::{signature::{PrivateKeySigner, ChainType, Signature, Address}, kvstore::KvStoreBuilder};
+use dkg_primitives::{Error, KeyGeneratorList, SessionId, ConfigError, Event};
 use std::{fs, path::PathBuf};
+use tokio::sync::mpsc::{channel, Sender};
 
 mod task;
 pub use task::*;
@@ -9,7 +10,7 @@ pub use task::*;
 #[cfg(feature = "experimental")]
 mod builder;
 
-fn create_app_state(config: &Config) -> Result<DkgAppState, Error> {
+fn create_app_state(config: &Config, tx: Sender<Event<Signature, Address>>) -> Result<DkgAppState, Error> {
     let signer = create_signer(&config.private_key_path, config.chain_type);
     let executor = DkgExecutor;
     tracing::info!("Creating app state for: {:?}", config.role);
@@ -18,6 +19,8 @@ fn create_app_state(config: &Config) -> Result<DkgAppState, Error> {
         signer,
         executor,
         config.role.clone(),
+        config.threshold,
+        tx,
     )
     .map_err(Error::from)
 }
@@ -65,14 +68,15 @@ pub async fn build_node(config: Config) -> Result<(), Error> {
     // Run common service(e.g Open database)
     // Initialize the database
     init_db(&config)?;
-    let mut app_state = create_app_state(&config)?;
+    let (tx, rx) = channel(10);
+    let mut app_state = create_app_state(&config, tx)?;
     if !config.validate() {
         return Err(Error::Config(ConfigError::InvalidConfig));
     }
     let handles = match config.role {
         Role::Authority => authority::run_node(&mut app_state, config).await?,
         Role::Committee => committee::run_node(&mut app_state, config).await?,
-        Role::Leader => leader::run_node(&mut app_state, config).await?,
+        Role::Leader => leader::run_node(&mut app_state, config, rx).await?,
         Role::Solver => solver::run_node(&mut app_state, config).await?,
         _ => panic!("Invalid role"),
     };

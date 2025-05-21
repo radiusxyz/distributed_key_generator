@@ -52,7 +52,7 @@ impl<C: AppState> RpcParameter<C> for AddKeyGenerator<C::Address> {
         let mut new: Vec<String> = vec![];
         KeyGeneratorList::apply(|key_generator_list| {
             key_generator_list.insert(self.clone().into());
-            new = key_generator_list.all_rpc_urls();
+            new = key_generator_list.all_rpc_urls(true);
         })?;
         ctx.multicast(new, <SyncKeyGenerator::<C::Address> as RpcParameter<C>>::method().into(), self);
 

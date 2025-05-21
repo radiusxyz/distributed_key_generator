@@ -1,5 +1,4 @@
-use super::{SyncDecryptionKey, SyncPartialKey};
-use crate::primitives::*;
+use crate::{primitives::*, SyncDecryptionKey, SyncPartialKey};
 use dkg_primitives::{AppState, SessionId, KeyGeneratorList};
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -49,9 +48,9 @@ pub fn broadcast_final_reveal<C: AppState>(
     sync_decryption_key: SyncDecryptionKey<C::Signature, C::Address>,
     ctx: &C,
 ) -> Result<(), C::Error> {
-    let all_key_generator_rpc_url_list = KeyGeneratorList::<C::Address>::get()?.all_rpc_urls();
+    let committee_urls = KeyGeneratorList::<C::Address>::get()?.all_rpc_urls(false);
     let payload = FinalRevealPayload { session_id, partial_keys, sync_decryption_key };
     let signature = ctx.sign(&payload)?;
-    ctx.multicast(all_key_generator_rpc_url_list, <SubmitFinalReveal::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SubmitFinalReveal { signature, payload });
+    ctx.multicast(committee_urls, <SubmitFinalReveal::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SubmitFinalReveal { signature, payload });
     Ok(())
 }

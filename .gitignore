@@ -3,6 +3,8 @@
 # Ignore all under /data
 /data/**
 
+/tmp/**
+
 # Unignore directories that lead to the file
 !data/
 !data/authority/

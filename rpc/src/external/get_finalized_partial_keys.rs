@@ -1,6 +1,6 @@
 use crate::primitives::*;
 use dkg_primitives::{
-    AppState, SessionId, PartialKeySubmission, PartialKeyAddressList, KeyGenerationError
+    AppState, SessionId, PartialKeySubmission, SubmitterList, KeyGenerationError
 };
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +12,7 @@ pub struct GetFinalizedPartialKeys {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetFinalizedPartialKeysResponse<Signature, Address> {
-    pub partial_key_submissions: Vec<PartialKeySubmission<Signature, Address>>,
+    pub partial_keys: Vec<PartialKeySubmission<Signature, Address>>,
 }
 
 impl<C: AppState> RpcParameter<C> for GetFinalizedPartialKeys {
@@ -24,16 +24,13 @@ impl<C: AppState> RpcParameter<C> for GetFinalizedPartialKeys {
 
     async fn handler(self, _context: C) -> Result<Self::Response, RpcError> {
         let session_id = self.session_id;
-        let partial_key_submissions = PartialKeyAddressList::<C::Address>::get(session_id)?
-            .get_partial_key_list::<C>(session_id)
+        let partial_keys = SubmitterList::<C::Address>::get(session_id)?
+            .get_partial_keys::<C>(session_id)
             .map_err(|err| {
                 RpcError::from(KeyGenerationError::InternalError(
                     format!("Failed to get partial key list: {:?}", err).into(),
                 ))
             })?;
-
-        Ok(GetFinalizedPartialKeysResponse {
-            partial_key_submissions,
-        })
+        Ok(GetFinalizedPartialKeysResponse { partial_keys })
     }
 }

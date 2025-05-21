@@ -45,6 +45,7 @@ pub fn run_setup_skde_params<C: AppState>(ctx: &C, config: &Config) -> PathBuf {
 }
 
 pub fn fetch_skde_params<C: AppState>(ctx: &C, path: PathBuf) -> SkdeParams {
+    info!("Fetching SKDE params from {:?}", path);
     match fs::read_to_string(&path) {
         Ok(data) => {
             match serde_json::from_str::<SignedSkdeParams<C::Signature>>(&data) {

@@ -2460,6 +2460,7 @@ dependencies = [
  "sha2",
  "sha3 0.10.8",
  "skde",
+ "thiserror 2.0.12",
  "tokio",
  "toml",
  "tracing",

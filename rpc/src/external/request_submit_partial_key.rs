@@ -19,18 +19,14 @@ impl<C: AppState> RpcParameter<C> for RequestSubmitPartialKey {
     }
 
     async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
-        info!(
-            "{} Submitted partial key to leader on session {:?}",
-            context.log_prefix(),
-            self.session_id
-        );
+        info!("Submitted partial key to leader on session {:?}", self.session_id);
         let (_, partial_key) = generate_partial_key(&context.skde_params()).unwrap();
-        submit_partial_key_to_leader::<C>(self.session_id, partial_key, &context).await?;
+        submit_partial_key::<C>(self.session_id, partial_key, &context).await?;
         Ok(())
     }
 }
 
-pub async fn submit_partial_key_to_leader<C: AppState>(
+pub async fn submit_partial_key<C: AppState>(
     session_id: SessionId,
     partial_key: SkdePartialKey,
     ctx: &C,

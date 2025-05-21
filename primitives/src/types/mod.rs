@@ -6,6 +6,7 @@ mod skde;
 mod payload;
 mod hash;
 mod primitives;
+mod event;
 
 pub use skde::*;
 pub use key::*;
@@ -14,4 +15,5 @@ pub use error::*;
 pub use payload::*;
 pub use primitives::*;
 pub use hash::*;
+pub use event::*;
 

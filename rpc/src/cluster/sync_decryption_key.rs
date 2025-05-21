@@ -1,18 +1,8 @@
-use crate::{
-    primitives::*,
-    cluster::request_submit_partial_key::submit_partial_key_to_leader
-};
-use dkg_primitives::{
-    AppState,
-    SessionId, 
-    SyncDecryptionKeyPayload,
-    KeyGeneratorList, 
-    AggregatedKey, 
-    DecryptionKey,
-};
+use crate::{primitives::*, submit_partial_key};
+use dkg_primitives::{AppState, SessionId, SyncDecryptionKeyPayload, KeyGeneratorList, AggregatedKey, DecryptionKey};
 use serde::{Deserialize, Serialize};
 use skde::key_generation::generate_partial_key;
-use tracing::debug;
+use tracing::{info, debug};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncDecryptionKey<Signature, Address> {
@@ -29,7 +19,7 @@ impl<C: AppState> RpcParameter<C> for SyncDecryptionKey<C::Signature, C::Address
     }
 
     async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
-        let prefix = context.log_prefix();
+        info!("Received decryption key from {:?}", self.payload.sender);
         let _ = context.verify_signature(
             &self.signature, 
             &self.payload, 
@@ -45,16 +35,15 @@ impl<C: AppState> RpcParameter<C> for SyncDecryptionKey<C::Signature, C::Address
             &skde_params,
             encryption_key,
             decryption_key.clone().into(),
-            &prefix,
         )?;
 
         decryption_key.put(session_id)?;
 
         let (_, partial_key) = generate_partial_key(&skde_params).unwrap();
         let next_session_id = session_id.next().unwrap(); //TODO: Remove unwrap
-        submit_partial_key_to_leader(next_session_id, partial_key, &context.clone()).await?;
+        submit_partial_key(next_session_id, partial_key, &context.clone()).await?;
 
-        debug!(target: "dkg-rpc", "{} Completed submitting partial key", prefix);
+        info!("Completed submitting partial key");
 
         Ok(())
     }
@@ -67,18 +56,14 @@ pub fn broadcast_decryption_key_ack<C: AppState>(
     solve_timestamp: u128,
     ctx: &C,
 ) -> Result<(), C::Error> {
-    let all_key_generator_rpc_url_list = KeyGeneratorList::<C::Address>::get()?.all_rpc_urls();
+    let committee_urls = KeyGeneratorList::<C::Address>::get()?.all_rpc_urls(true);
 
-    debug!(
-        target: "dkg-rpc",
-        "Broadcast decryption key - session_id: {:?}, all_dkg_list: {:?}",
-        session_id, all_key_generator_rpc_url_list
-    );
+    info!("Broadcast decryption key - session_id: {:?}, all_dkg_list: {:?}", session_id, committee_urls);
 
     let payload = SyncDecryptionKeyPayload::new(ctx.address(), decryption_key, session_id, solve_timestamp);
     let signature = ctx.sign(&payload)?;
-    
-    ctx.multicast(all_key_generator_rpc_url_list, <SyncDecryptionKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncDecryptionKey { signature, payload });
+
+    ctx.multicast(committee_urls, <SyncDecryptionKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncDecryptionKey { signature, payload });
 
     Ok(())
 }

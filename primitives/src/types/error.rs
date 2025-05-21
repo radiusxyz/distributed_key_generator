@@ -1,17 +1,18 @@
+use super::Event;
 use std::io::Error as IoError;
-
 use radius_sdk::{
     json_rpc::{
         client::RpcClientError,
         server::{RpcError, RpcServerError},
     },
     kvstore::KvStoreError,
-    signature::SignatureError,
+    signature::{SignatureError, Signature, Address},
 };
 use toml::de::Error as TomlError;
+use thiserror::Error;
 
 /// Main error type used throughout the application
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     /// External library errors
     Config(ConfigError),
@@ -44,6 +45,9 @@ pub enum Error {
     NotFound,
     /// Task join error
     TaskJoinError(tokio::task::JoinError),
+    /// Event emission error
+    #[error(transparent)]
+    EventError(#[from] tokio::sync::mpsc::error::SendError<Event<Signature, Address>>),
 }
 
 /// Error type for key generation process
@@ -78,8 +82,6 @@ impl std::fmt::Display for Error {
         write!(f, "{:?}", self)
     }
 }
-
-impl std::error::Error for Error {}
 
 impl From<SignatureError> for Error {
     fn from(value: SignatureError) -> Self {
