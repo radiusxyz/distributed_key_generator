@@ -1,17 +1,14 @@
 use std::marker::PhantomData;
-
-use dkg_primitives::{
-    AppState, DecKey, EncKey, Hasher, KeyGenerationError, SessionId, TraceExt, Error
-};
+use dkg_primitives::{DecKey, EncKey, Error, Hasher, KeyGenerationError, SecureBlock, SessionId, TraceExt};
 use skde::{
     delay_encryption::{decrypt, encrypt, solve_time_lock_puzzle, SkdeParams},
-    key_aggregation::{aggregate_key, AggregatedKey},
+    key_aggregation::aggregate_key,
     key_generation::{generate_uv_pair, PartialKey},
     BigUint,
 };
-use tracing::info;
 
-struct Skde<H> {
+#[derive(Clone)]
+pub struct Skde<H> {
     params: SkdeParams,
     _phantom: PhantomData<H>,
 }
@@ -25,8 +22,8 @@ where
         Self { params, _phantom: Default::default() }
     }
 
-    pub fn get_enc_key(&self, session_id: SessionId, partial_key_list: &Vec<PartialKey>) -> Result<EncKey, Error> {
-        let mut selected_keys = self.select_random_partial_keys(&partial_key_list, session_id)?;
+    pub fn enc_key(&self, session_id: SessionId, metadata: Vec<PartialKey>) -> Result<EncKey, Error> {
+        let mut selected_keys = self.select_random_partial_keys(&metadata, session_id)?;
         let derived_key = self.derive_partial_key(&selected_keys)?;
         selected_keys.push(derived_key);
         let enc_key: EncKey = aggregate_key(&self.params, &selected_keys).into();
@@ -34,9 +31,9 @@ where
         Ok(enc_key)
     }
 
-    pub fn get_dec_key(&self, session_id: SessionId, enc_key: &AggregatedKey) -> Result<DecKey, Error> {
+    pub fn dec_key(&self, session_id: SessionId, enc_key: &EncKey) -> Result<DecKey, Error> {
         // TODO: Timeout
-        let secure_key = solve_time_lock_puzzle(&self.params, enc_key).map_err(|err| {
+        let secure_key = solve_time_lock_puzzle(&self.params, &enc_key.inner()).map_err(|err| {
             KeyGenerationError::InternalError(format!("Failed to solve time lock puzzle: {:?}", err))
         })?;
     
@@ -49,14 +46,14 @@ where
         Ok(dec_key)
     }
 
-    pub fn verify_key_pair(&self, encryption_key: &str, decryption_key: &str) -> Result<(), KeyGenerationError> {
+    pub fn verify_key_pair(&self, enc_key: String, dec_key: String) -> Result<(), KeyGenerationError> {
         let sample_message = "sample_message";
 
-        let ciphertext = encrypt(&self.params, sample_message, encryption_key, true)
+        let ciphertext = encrypt(&self.params, sample_message, &enc_key, true)
             .ok_or_trace()
             .ok_or_else(|| KeyGenerationError::InternalError("Encryption failed".into()))?;
 
-        let decrypted_message = match decrypt(&self.params, &ciphertext, decryption_key) {
+        let decrypted_message = match decrypt(&self.params, &ciphertext, &dec_key) {
             Ok(message) => message,
             Err(err) => {
                 tracing::error!("Decryption failed: {}", err);
@@ -158,6 +155,43 @@ where
             generate_uv_pair(&self.params, &k_h, &r_h).expect("Failed to generate YW pair for partial key");
 
         Ok(PartialKey {u: uv_pair.u, v: uv_pair.v, y: yw_pair.u, w: yw_pair.v})
+    }
+}
+
+impl<H> SecureBlock for Skde<H> 
+where 
+    H: Hasher,
+    H::Output: AsRef<[u8]>,
+{
+    type EncKey = EncKey;
+    type DecKey = DecKey;
+    type TrustedSetUp = SkdeParams;
+    type Metadata = Vec<PartialKey>;
+    type Error = Error; 
+
+    fn get_enc_key(&self, _session_id: SessionId) -> Result<Self::EncKey, Self::Error> {
+        unimplemented!("Not implemented")
+    }       
+
+    fn get_dec_key(&self, session_id: SessionId) -> Result<Self::DecKey, Self::Error> {
+        Ok(DecKey::get(session_id)?)
+    }
+
+    fn get_trusted_setup(&self) -> Self::TrustedSetUp {
+        self.params.clone()
+    }
+
+    fn generate_enc_key(&self, session_id: SessionId, metadata: Self::Metadata) -> Result<Self::EncKey, Self::Error> {
+        self.enc_key(session_id, metadata)
+    }
+
+    fn generate_dec_key(&self, session_id: SessionId, enc_key: &EncKey) -> Result<Self::DecKey, Self::Error> {
+        self.dec_key(session_id, enc_key)
+    }
+
+    fn verify_key_pair(&self, enc_key: EncKey, dec_key: DecKey) -> Result<(), Self::Error> {
+        self.verify_key_pair(enc_key.key(), dec_key.into())?;
+        Ok(())
     }
 }
 

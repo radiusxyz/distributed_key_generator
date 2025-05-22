@@ -1,6 +1,6 @@
 pub use crate::Config;
 use std::sync::Arc;
-use dkg_primitives::{DecKey, EncKey};
+use dkg_primitives::Sha3Hasher;
 pub use dkg_primitives::{AppState, Verify, AsyncTask, Error, TraceExt, KeyGenerationError, SessionId, Parameter, Event, SecureBlock};
 use radius_sdk::{signature::{PrivateKeySigner, Address, Signature, SignatureError}, json_rpc::client::{RpcClient, Id}};
 use ethers::{types::Signature as EthersSignature, utils::hash_message};
@@ -30,6 +30,7 @@ pub struct DkgAppState {
     task_spawner: DkgExecutor,
     role: Role,
     threshold: u16,
+    skde: Option<Skde<Sha3Hasher>>,
 }
 
 impl DkgAppState {
@@ -40,11 +41,12 @@ impl DkgAppState {
         role: Role,
         threshold: u16,
     ) -> Result<Self, Error> {
-        Ok(Self { leader_rpc_url, signer, skde_params: None, task_spawner, role, threshold })
+        Ok(Self { leader_rpc_url, signer, skde_params: None, task_spawner, role, threshold, skde: None })
     }
 
     pub fn with_skde_params(&mut self, skde_params: SkdeParams) {
-        self.skde_params = Some(skde_params);
+        self.skde_params = Some(skde_params.clone());
+        self.skde = Some(Skde::new(skde_params));
     }
 
     pub fn task_spawner(&self) -> &DkgExecutor {
@@ -52,11 +54,11 @@ impl DkgAppState {
     }
 }
 
-#[async_trait]
 impl AppState for DkgAppState {
     type Address = Address;
     type Signature = Signature;
     type Verify = DkgVerify;
+    type SecureBlock = Skde<Sha3Hasher>;
     type AsyncTask = DkgExecutor;
     type Error = Error;
 
@@ -69,6 +71,7 @@ impl AppState for DkgAppState {
     fn skde_params(&self) -> SkdeParams { self.skde_params.clone().expect("SKDE params not initialized") }
     fn log_prefix(&self) -> String { format!("{}", self.role) }
     fn sign<T: Serialize>(&self, message: &T) -> Result<Self::Signature, Self::Error> { self.signer().sign_message(message).map_err(Self::Error::from) }
+    fn secure_block(&self) -> &Self::SecureBlock { &self.skde.as_ref().expect("SKDE not initialized") }
     fn async_task(&self) -> &Self::AsyncTask { &self.task_spawner }
 }
 

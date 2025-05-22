@@ -6,6 +6,27 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use skde::key_aggregation::AggregatedKey;
 use skde::key_generation::PartialKey;
 
+pub fn get_partial_keys<C: AppState>(
+    ctx: &C,
+    session_id: SessionId,
+    submission_list: &Vec<PartialKeySubmission<C::Signature, C::Address>>,
+) -> Result<Vec<PartialKey>, C::Error> {
+    let partial_keys = submission_list
+        .iter()
+        .try_fold(Vec::new(), |mut acc, key| -> Result<Vec<PartialKey>, C::Error> {
+            let signer = ctx.verify_signature(&key.signature, &key.payload, Some(&key.sender()))?;
+            SubmitterList::<C::Address>::initialize(session_id)?;
+            SubmitterList::apply(session_id, |list| {
+                list.insert(signer.clone());
+            })?;
+            key.put(session_id, signer)?;
+            acc.push(key.partial_key());
+            Ok(acc)
+        })?;
+
+    Ok(partial_keys)
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
 #[kvstore(key(session_id: SessionId, address: Address))]
 pub struct PartialKeySubmission<Signature, Address> {

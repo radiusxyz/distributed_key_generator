@@ -1,6 +1,7 @@
 use crate::Hasher;
 use sha3::{digest::{ExtendableOutput, Update, XofReader}, Shake256, Sha3_256, Digest};
 
+#[derive(Clone)]
 pub struct Sha3Hasher;
 
 impl Hasher for Sha3Hasher {

@@ -2418,6 +2418,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "dkg-primitives",
+ "dkg-rpc",
  "ethers",
  "futures-util",
  "radius-sdk",

@@ -1,34 +1,34 @@
 use crate::primitives::*;
 use serde::{Deserialize, Serialize};
-use dkg_primitives::{AppState, SessionId, EncKey, Error};
+use dkg_primitives::{AppState, SessionId, Error, EncKeyFor, SecureBlock};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetEncKey;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct GetEncKeyResponse {
+pub struct GetEncKeyResponse<EncKey> {
     session_id: SessionId,
-    key: String,
+    key: EncKey,
 }
 
-impl GetEncKeyResponse {
-    pub fn new(session_id: SessionId, key: String) -> Self {
+impl<EncKey> GetEncKeyResponse<EncKey> {
+    pub fn new(session_id: SessionId, key: EncKey) -> Self {
         Self { session_id, key }
     }
 }
 
 impl<C: AppState> RpcParameter<C> for GetEncKey {
-    type Response = GetEncKeyResponse;
+    type Response = GetEncKeyResponse<EncKeyFor<C>>;
 
     fn method() -> &'static str {
         "get_encryption_key"
     }
 
-    async fn handler(self, _context: C) -> Result<Self::Response, RpcError> {
+    async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
         let session_id = SessionId::get()?;
         loop {
             if let Some(prev) = session_id.prev() {
-                match EncKey::get(prev) {
-                    Ok(enc_key) => return Ok(GetEncKeyResponse::new(session_id, enc_key.key())),
+                match ctx.secure_block().get_enc_key(prev) {
+                    Ok(enc_key) => return Ok(GetEncKeyResponse::new(session_id, enc_key)),
                     Err(_) => continue,
                 }
             } else {

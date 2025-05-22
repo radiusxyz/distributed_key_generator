@@ -1,5 +1,5 @@
 use crate::{primitives::*, SubmitDecKeyResponse, SubmitDecKey};
-use dkg_primitives::{AppState, DecKey, Error, SubmitterList, SessionId, SubmitDecKeyPayload, SyncFinalizedPartialKeysPayload, AsyncTask};
+use dkg_primitives::{AppState, DecKey, Error, SubmitterList, SessionId, SubmitDecKeyPayload, SyncFinalizedPartialKeysPayload, SecureBlock, AsyncTask, get_partial_keys};
 use dkg_utils::key::{get_dec_key, get_enc_key, verify_key_pair};
 use serde::{Deserialize, Serialize};
 use skde::key_generation::PartialKey;
@@ -30,10 +30,10 @@ impl<C: AppState> RpcParameter<C> for SyncFinalizedPartialKeys<C::Signature, C::
 
     async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
         let session_id = self.session_id();
+        let partial_keys = get_partial_keys::<C>(&ctx, session_id, &self.payload.partial_keys())?;
         if ctx.is_solver() {
             SubmitterList::<C::Address>::initialize(session_id)?;
             let _ = ctx.verify_signature(&self.signature, &self.payload, Some(&self.payload.sender))?;
-            let partial_keys = get_partial_keys::<C>(&ctx, &self.payload)?;
             let cloned_ctx = ctx.clone();
             cloned_ctx.async_task().spawn_task(Box::pin(
                 async move {
@@ -54,7 +54,6 @@ impl<C: AppState> RpcParameter<C> for SyncFinalizedPartialKeys<C::Signature, C::
                 }
             ));
         } else {
-            let partial_keys = get_partial_keys::<C>(&ctx, &self.payload)?;
             let _ = get_enc_key(&ctx, session_id, &partial_keys)?;
         }
         Ok(())
@@ -99,34 +98,4 @@ async fn derive_decryption_key<C: AppState>(
     }
 
     Ok(())
-}
-
-pub fn get_partial_keys<C: AppState>(
-    ctx: &C,
-    payload: &SyncFinalizedPartialKeysPayload<C::Signature, C::Address>,
-) -> Result<Vec<PartialKey>, RpcError> {
-    let SyncFinalizedPartialKeysPayload { session_id, ack_timestamp, .. } = payload;
-
-    info!(
-        "Received finalized partial keys - num: {:?}, session_id: {:?}, timestamp: {}",
-        payload.len(),
-        session_id,
-        ack_timestamp
-    );
-
-    let partial_keys = payload
-        .partial_keys()
-        .iter()
-        .try_fold(Vec::new(), |mut acc, key| -> Result<Vec<PartialKey>, C::Error> {
-            let signer = ctx.verify_signature(&key.signature, &key.payload, Some(&key.sender()))?;
-            SubmitterList::<C::Address>::initialize(*session_id)?;
-            SubmitterList::apply(*session_id, |list| {
-                list.insert(signer.clone());
-            })?;
-            key.put(*session_id, signer)?;
-            acc.push(key.partial_key());
-            Ok(acc)
-        })?;
-
-    Ok(partial_keys)
 }

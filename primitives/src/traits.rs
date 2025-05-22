@@ -22,6 +22,8 @@ pub trait AppState: Clone + Send + Sync + 'static {
     type Signature: Parameter + Debug;
     /// Verifier for the signature
     type Verify: Verify<Self::Signature, Self::Address>;
+    /// Type that secures the data
+    type SecureBlock: SecureBlock;
     /// Type that spawns tasks
     type AsyncTask: AsyncTask<Self::Signature, Self::Address, Self::Error>;
     /// The error type of this app
@@ -47,6 +49,7 @@ pub trait AppState: Clone + Send + Sync + 'static {
     fn signer(&self) -> PrivateKeySigner;
     /// Get the node's address which is used for creating payload
     fn address(&self) -> Self::Address;
+    // TODO: REMOVE ME!
     /// Get pre-set skde parameter
     fn skde_params(&self) -> SkdeParams;
     /// Helper function to get log prefix
@@ -73,6 +76,7 @@ pub trait AppState: Clone + Send + Sync + 'static {
     ) -> Result<(), KeyGenerationError> {
         Self::Verify::verify_decryption_key(skde_params, encryption_key, decryption_key)
     }
+    fn secure_block(&self) -> &Self::SecureBlock;
     /// Helper function to get task spawner. This should not be used outside of the task module.
     fn async_task(&self) -> &Self::AsyncTask;
 }
@@ -89,15 +93,30 @@ pub trait Verify<Signature, Address> {
 }
 
 pub trait SecureBlock {
+    
     type EncKey: Parameter;
     type DecKey: Parameter;
+    type TrustedSetUp: Parameter;
+    type Metadata: Parameter;
     type Error: std::error::Error + Send + Sync + 'static;
 
+    /// Query the encryption key for a given session
     fn get_enc_key(&self, session_id: SessionId) -> Result<Self::EncKey, Self::Error>;
 
+    /// Query the decryption key for a given session
     fn get_dec_key(&self, session_id: SessionId) -> Result<Self::DecKey, Self::Error>;
 
-    fn verify_key_pair(&self) -> Result<(), Self::Error>;
+    /// Get the trusted setup for this app
+    fn get_trusted_setup(&self) -> Self::TrustedSetUp;
+
+    /// Derive encryption key from metadata for a given session
+    fn generate_enc_key(&self, session_id: SessionId, metadata: Self::Metadata) -> Result<Self::EncKey, Self::Error>;
+
+    /// Derive decryption key from encryption key for a given session
+    fn generate_dec_key(&self, session_id: SessionId, enc_key: &Self::EncKey) -> Result<Self::DecKey, Self::Error>;
+
+    /// Verify the given key pair
+    fn verify_key_pair(&self, enc_key: Self::EncKey, dec_key: Self::DecKey) -> Result<(), Self::Error>;
 }
 
 #[async_trait]
@@ -193,4 +212,8 @@ pub trait Hasher {
 
     /// Hash function which size would be dependent on the given input size
     fn hash(input: &[u8], size: Option<usize>) -> Self::Output;
+}
+
+pub trait Get<T> {
+    fn get() -> T;
 }
