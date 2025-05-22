@@ -7,6 +7,7 @@ use dkg_primitives::{
     SubmitterList,
     PartialKeySubmission,
     Event,
+    AsyncTask,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{info, error};
@@ -25,8 +26,8 @@ impl<C: AppState> RpcParameter<C> for SubmitPartialKey<C::Signature, C::Address>
         "submit_partial_key"
     }
 
-    async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
-        let sender_address = context.verify_signature(
+    async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
+        let sender_address = ctx.verify_signature(
             &self.signature, 
             &self.payload, 
             Some(&self.payload.sender)
@@ -53,7 +54,7 @@ impl<C: AppState> RpcParameter<C> for SubmitPartialKey<C::Signature, C::Address>
 
         SubmitterList::<C::Address>::apply(session_id, |list| {
             list.insert(sender_address.clone());
-            if list.len() >= context.threshold() as usize {
+            if list.len() >= ctx.threshold() as usize {
                 info!("Threshold met for session {:?}", session_id);
                 is_threshold_met = true;
                 partial_key_list = match list.get_partial_keys::<C>(session_id) {
@@ -67,13 +68,13 @@ impl<C: AppState> RpcParameter<C> for SubmitPartialKey<C::Signature, C::Address>
             }
         })?;
         if is_threshold_met {
-            context.emit_event(Event::ThresholdMet(partial_key_list)).await.map_err(|e| {
+            ctx.async_task().emit_event(Event::ThresholdMet(partial_key_list)).await.map_err(|e| {
                 error!("Error emitting event: {:?}", e);
                 RpcError::from(e)
             })?;
         }
 
-        let _ = broadcast_partial_key_ack(partial_key_submission, &context);
+        let _ = broadcast_partial_key_ack(partial_key_submission, &ctx);
 
         Ok(())
     }

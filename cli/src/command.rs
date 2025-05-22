@@ -16,7 +16,7 @@ fn run_node_inner(cli: Box<NodeCommand>) -> Result<(), Error> {
     let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     let config = create_configuration(cli);
     // TODO: handle the result
-    runtime.block_on(dkg_node_service::build_node(config))
+    runtime.block_on(dkg_node_service::run_node(config))
 }
 
 fn create_configuration(cli: Box<NodeCommand>) -> Config {

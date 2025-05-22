@@ -1,6 +1,6 @@
 use super::SubmitPartialKey;
 use crate::primitives::*;
-use dkg_primitives::{AppState, PartialKeyPayload, SessionId};
+use dkg_primitives::{AppState, PartialKeyPayload, SessionId, AsyncTask};
 use serde::{Deserialize, Serialize};
 use skde::key_generation::{generate_partial_key, PartialKey as SkdePartialKey};
 use tracing::info;
@@ -18,10 +18,10 @@ impl<C: AppState> RpcParameter<C> for RequestSubmitPartialKey {
         "request_submit_partial_key"
     }
 
-    async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
+    async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
         info!("Submitted partial key to leader on session {:?}", self.session_id);
-        let (_, partial_key) = generate_partial_key(&context.skde_params()).unwrap();
-        submit_partial_key::<C>(self.session_id, partial_key, &context).await?;
+        let (_, partial_key) = generate_partial_key(&ctx.skde_params()).unwrap();
+        submit_partial_key::<C>(self.session_id, partial_key, &ctx).await?;
         Ok(())
     }
 }
@@ -34,7 +34,7 @@ pub async fn submit_partial_key<C: AppState>(
     if let Some(leader_rpc_url) = ctx.leader_rpc_url() {
         let payload = PartialKeyPayload::<C::Address>::new(ctx.address(), partial_key, session_id);
         let signature = ctx.sign(&payload).map_err(|e| RpcError::from(e))?;
-        ctx.multicast(vec![leader_rpc_url], <SubmitPartialKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SubmitPartialKey { signature, payload });
+        ctx.async_task().multicast(vec![leader_rpc_url], <SubmitPartialKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SubmitPartialKey { signature, payload });
         return Ok(());
     }
     Ok(())

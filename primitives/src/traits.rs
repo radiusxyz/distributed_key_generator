@@ -1,5 +1,5 @@
 use crate::{KeyGenerationError, Event};
-use std::{hash::Hash, fmt::Debug};
+use std::{hash::Hash, fmt::Debug, time::Duration};
 use radius_sdk::{
     signature::{PrivateKeySigner, SignatureError}, 
     kvstore::KvStoreError,
@@ -7,7 +7,9 @@ use radius_sdk::{
     json_rpc::server::RpcServerError,
 };
 use skde::delay_encryption::SkdeParams;
-use futures_util::future::{BoxFuture, Future};
+use futures::future::{select, Either};
+use futures_util::{pin_mut, future::Future};
+use futures_timer::Delay;
 use tokio::task::JoinHandle;
 use serde::{Serialize, de::DeserializeOwned};
 use async_trait::async_trait;
@@ -23,7 +25,7 @@ pub trait AppState: Clone + Send + Sync + 'static {
     /// Verifier for the signature
     type Verify: Verify<Self::Signature, Self::Address>;
     /// Type that spawns tasks
-    type TaskSpawner: TaskSpawner;
+    type AsyncTask: AsyncTask<Self::Signature, Self::Address, Self::Error>;
     /// The error type of this app
     type Error: std::error::Error 
         + From<SignatureError>
@@ -64,7 +66,6 @@ pub trait AppState: Clone + Send + Sync + 'static {
         }
         Ok(signer)
     }
-
     /// Helper function to verify decryption key
     fn verify_decryption_key(
         &self,
@@ -74,35 +75,8 @@ pub trait AppState: Clone + Send + Sync + 'static {
     ) -> Result<(), KeyGenerationError> {
         Self::Verify::verify_decryption_key(skde_params, encryption_key, decryption_key)
     }
-
     /// Helper function to get task spawner. This should not be used outside of the task module.
-    fn task_spawner(&self) -> &Self::TaskSpawner;
-
-    /// Helper function to spawn a task
-    fn spawn_task(&self, fut: impl Future<Output = ()> + Send + 'static) -> JoinHandle<()> {
-        self.task_spawner().spawn_task(Box::pin(fut))
-    }
-
-    /// Helper function to spawn a blocking task
-    fn spawn_blocking(&self, fut: impl Future<Output = ()> + Send + 'static) -> JoinHandle<()> {
-        self.task_spawner().spawn_blocking(Box::pin(fut))
-    }
-
-    /// Helper function to emit an event
-    async fn emit_event(&self, event: Event<Self::Signature, Self::Address>) -> Result<(), Self::Error>;
-
-    // TODO: REFACTOR ME! - RPC Worker should be a separate thread
-    /// API for RPC request 
-    async fn request<P, R>(&self, url: String, method: String, parameter: P) -> Result<R, Self::Error>
-    where
-        P: Serialize + Send + Sync + 'static,
-        R: DeserializeOwned + Send + Sync + 'static;
-
-    // TODO: REFACTOR ME! - RPC Worker should be a separate thread
-    /// API for RPC multicast
-    fn multicast<P>(&self, urls: Vec<String>, method: String, parameter: P)
-    where
-        P: Serialize + Send + Sync + 'static;
+    fn async_task(&self) -> &Self::AsyncTask;
 }
 
 pub trait Verify<Signature, Address> {
@@ -142,10 +116,51 @@ pub trait Selector<SessionId> {
     fn select(len: usize, session_id: SessionId) -> Vec<usize>;
 }
 
-pub trait TaskSpawner: Send + Sync + Unpin {
-    fn spawn_task(&self, fut: BoxFuture<'static, ()>) -> JoinHandle<()>;
+#[async_trait]
+pub trait AsyncTask<Signature, Address, Error>: Send + Sync + Unpin + 'static 
+where
+    Error: std::error::Error + Send + Sync + 'static,
+{
+    fn spawn_task<Fut>(&self, fut: Fut) -> JoinHandle<()>
+    where
+        Fut: Future<Output = ()> + Send + 'static;
 
-    fn spawn_blocking(&self, fut: BoxFuture<'static, ()>) -> JoinHandle<()>; 
+    fn spawn_blocking<Fut>(&self, fut: Fut) -> JoinHandle<()>
+    where
+        Fut: Future<Output = ()> + Send + 'static;
+
+    /// Helper function to spawn a task with a timeout
+    async fn spawn_with_timeout<Fut, R>(&self, fut: Fut, timeout: Duration) -> Option<R>
+    where
+        Fut: Future<Output = Result<R, Error>> + Send + 'static,
+    {
+        let delay = Delay::new(timeout);
+        pin_mut!(fut);
+        match select(fut, delay).await {
+            Either::Left((Ok(res), _)) => Some(res),
+            Either::Left((Err(e), _)) => {
+                tracing::error!("{:?}", e);
+                None
+            }
+            Either::Right(_) => None,
+        }
+    }
+
+    /// Helper function to emit an event
+    async fn emit_event(&self, event: Event<Signature, Address>) -> Result<(), Error>;
+
+    // TODO: REFACTOR ME! - RPC Worker should be a separate thread
+    /// API for RPC request which waits for the response
+    async fn request<P, R>(&self, url: String, method: String, parameter: P) -> Result<R, Error>
+    where
+        P: Serialize + Send + Sync + 'static,
+        R: DeserializeOwned + Send + Sync + 'static;
+
+    // TODO: REFACTOR ME! - RPC Worker should be a separate thread
+    /// API for RPC multicast which does not wait for the response
+    fn multicast<P>(&self, urls: Vec<String>, method: String, parameter: P)
+    where
+        P: Serialize + Send + Sync + 'static;
 }
 
 /// Using unwrap() inside the task block is caught by tracing::error!().

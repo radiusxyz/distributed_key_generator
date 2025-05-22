@@ -1,5 +1,5 @@
 use crate::{primitives::*, cluster::SyncKeyGenerator};
-use dkg_primitives::{AppState, KeyGenerator, KeyGeneratorList};
+use dkg_primitives::{AppState, KeyGenerator, KeyGeneratorList, AsyncTask};
 use tracing::{info, warn};
 use serde::{Serialize, Deserialize};
 use std::fmt::{Debug, Display};
@@ -54,7 +54,7 @@ impl<C: AppState> RpcParameter<C> for AddKeyGenerator<C::Address> {
             key_generator_list.insert(self.clone().into());
             new = key_generator_list.all_rpc_urls(true);
         })?;
-        ctx.multicast(new, <SyncKeyGenerator::<C::Address> as RpcParameter<C>>::method().into(), self);
+        ctx.async_task().multicast(new, <SyncKeyGenerator::<C::Address> as RpcParameter<C>>::method().into(), self);
 
         Ok(())
     }

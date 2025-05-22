@@ -1,5 +1,5 @@
 use std::{fs, path::PathBuf};
-use dkg_primitives::SignedSkdeParams;
+use dkg_primitives::{SignedSkdeParams, AsyncTask};
 use dkg_node_primitives::{DEFAULT_GENERATOR, DEFAULT_MAX_SEQUENCER_NUMBER, DEFAULT_TIME_PARAM_T};
 use dkg_rpc::external::GetSkdeParams;
 use skde::delay_encryption::setup;
@@ -20,7 +20,7 @@ pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<Vec<JoinH
 
     info!("RPC server runs at {}", config.external_rpc_url);
 
-    let handle = ctx.spawn_task(Box::pin(async move { rpc_server.stopped().await; }));
+    let handle = ctx.async_task().spawn_task(Box::pin(async move { rpc_server.stopped().await; }));
 
     Ok(vec![handle])
 }

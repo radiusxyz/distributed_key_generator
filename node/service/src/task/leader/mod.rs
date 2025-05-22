@@ -1,10 +1,8 @@
 use super::{AppState, SkdeParams, RpcParameter, DkgAppState, Config, Error};
-use crate::{DkgWorker, run_dkg_worker};
-use crate::rpc::{default_external_rpc_server, default_cluster_rpc_server};
-use dkg_node_primitives::{Address, Signature};
-use dkg_primitives::Event;
+use crate::{DkgWorker, run_dkg_worker, rpc::{default_external_rpc_server, default_cluster_rpc_server}};
+use dkg_primitives::{Event, AsyncTask};
 use dkg_rpc::{SubmitDecryptionKey, SubmitPartialKey, GetSkdeParams, GetSkdeParamsResponse};
-use dkg_primitives::TaskSpawner;
+use radius_sdk::signature::{Address, Signature};
 use tokio::task::JoinHandle;
 use tracing::{info, error};
 use tokio::sync::mpsc::Receiver;
@@ -22,22 +20,18 @@ pub async fn run_node(ctx: &mut DkgAppState, config: Config, rx: Receiver<Event<
         .register_rpc_method::<SubmitDecryptionKey<Signature, Address>>()?
         .init(config.external_rpc_url.clone())
         .await?;
-    handle.push(ctx.task_spawner().spawn_task(Box::pin(async move {
-        server_handle.stopped().await;
-    })));
+    handle.push(ctx.async_task().spawn_task(Box::pin(async move { server_handle.stopped().await; })));
     
     let cluster_server = default_cluster_rpc_server(ctx).await?;
     let server_handle = cluster_server.init(&config.cluster_rpc_url).await?;
-    handle.push(ctx.task_spawner().spawn_task(Box::pin(async move {
-        server_handle.stopped().await;
-    })));
+    handle.push(ctx.async_task().spawn_task(Box::pin(async move { server_handle.stopped().await; })));
 
     info!("External RPC server: {}", config.external_rpc_url);
     info!("Cluster RPC server: {}", config.cluster_rpc_url);
 
     let mut key_generator_worker = DkgWorker::new(solver_rpc_url, config.session_cycle, rx);
     let cloned_ctx = ctx.clone();
-    let worker_handle = ctx.spawn_task(async move {
+    let worker_handle = ctx.async_task().spawn_task(async move {
         if let Err(e) = run_dkg_worker(&cloned_ctx, &mut key_generator_worker).await {
             // TODO: Spawn critical task to start DKG worker
             panic!("Error running DKG worker: {}", e);
@@ -52,7 +46,9 @@ pub async fn run_node(ctx: &mut DkgAppState, config: Config, rx: Receiver<Event<
 pub async fn fetch_skde_params<C: AppState>(ctx: &C, authority_url: &str) -> SkdeParams {
     info!("Fetching SKDE params from authority: {}", authority_url);
     loop {
-        let result: Result<GetSkdeParamsResponse<C::Signature>, C::Error> = ctx.request(
+        let result: Result<GetSkdeParamsResponse<C::Signature>, C::Error> = ctx
+            .async_task()
+            .request(
             authority_url.to_string(),
             <GetSkdeParams as RpcParameter<C>>::method().to_string(),
             GetSkdeParams,

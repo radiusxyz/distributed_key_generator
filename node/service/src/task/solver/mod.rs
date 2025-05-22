@@ -1,7 +1,7 @@
 use super::{AppState, SkdeParams, RpcParameter, DkgAppState, Config, Error};
 use crate::rpc::{default_external_rpc_server, default_cluster_rpc_server};
 use dkg_rpc::external::{GetSkdeParams, GetSkdeParamsResponse, GetKeyGeneratorList, GetKeyGeneratorRpcUrlListResponse};
-use dkg_primitives::{KeyGeneratorList, TaskSpawner};
+use dkg_primitives::{KeyGeneratorList, AsyncTask};
 use tokio::task::JoinHandle;
 
 pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<Vec<JoinHandle<()>>, Error> {
@@ -13,15 +13,11 @@ pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<Vec<JoinH
 
     let external_server = default_external_rpc_server(ctx).await?;
     let server_handle = external_server.init(&config.external_rpc_url).await?;
-    handle.push(ctx.task_spawner().spawn_task(Box::pin(async move {
-        server_handle.stopped().await;
-    })));
+    handle.push(ctx.async_task().spawn_task(Box::pin(async move { server_handle.stopped().await; })));
     
     let cluster_server = default_cluster_rpc_server(ctx).await?;
     let server_handle = cluster_server.init(&config.cluster_rpc_url).await?;
-    handle.push(ctx.task_spawner().spawn_task(Box::pin(async move {
-        server_handle.stopped().await;
-    })));
+    handle.push(ctx.async_task().spawn_task(Box::pin(async move { server_handle.stopped().await; })));
 
     tracing::info!("External RPC server: {}", config.external_rpc_url);
     tracing::info!("Cluster RPC server: {}", config.cluster_rpc_url);
@@ -32,7 +28,9 @@ pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<Vec<JoinH
 // TODO: REFACTOR ME!
 pub async fn fetch_skde_params<C: AppState>(ctx: &C, leader_rpc_url: &str) -> SkdeParams {
     loop {
-        let result: Result<GetSkdeParamsResponse<C::Signature>, C::Error> = ctx.request(
+        let result: Result<GetSkdeParamsResponse<C::Signature>, C::Error> = ctx
+            .async_task()
+            .request(
                 leader_rpc_url.to_string(),
                 <GetSkdeParams as RpcParameter<C>>::method().to_string(),
                 GetSkdeParams,
@@ -58,6 +56,7 @@ pub async fn fetch_skde_params<C: AppState>(ctx: &C, leader_rpc_url: &str) -> Sk
 
 pub async fn fetch_key_generator_list<C: AppState>(ctx: &C, leader_rpc_url: &str) -> Result<(), C::Error> {
     let response: GetKeyGeneratorRpcUrlListResponse = ctx
+        .async_task()
         .request(
             leader_rpc_url.into(),
             <GetKeyGeneratorList as RpcParameter<C>>::method().into(),

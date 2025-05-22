@@ -53,6 +53,7 @@ pub fn calculate_decryption_key<C: AppState>(
 ) -> Result<DecryptionKey, KeyGenerationError> {
     let skde_params = context.skde_params();
 
+    // TODO: Timeout
     let secure_key = solve_time_lock_puzzle(&skde_params, skde_aggregated_key).map_err(|err| {
         KeyGenerationError::InternalError(format!("Failed to solve time lock puzzle: {:?}", err))
     })?;
@@ -160,8 +161,8 @@ pub fn select_ordered_indices(n: usize, randomness: &[u8]) -> Vec<usize> {
     indices[..k].to_vec()
 }
 
-pub fn get_randomness(current_session_id: SessionId) -> Vec<u8> {
-    match current_session_id.prev() {
+pub fn get_randomness(session_id: SessionId) -> Vec<u8> {
+    match session_id.prev() {
         Some(prev) => match DecryptionKey::get(prev) {
             Ok(key) => key.to_bytes(),
             Err(_) => b"default-randomness".to_vec(),

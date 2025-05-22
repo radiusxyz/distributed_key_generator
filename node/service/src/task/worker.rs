@@ -1,6 +1,6 @@
 use super::{AppState, Error, RpcParameter};
 use dkg_rpc::{RequestSubmitPartialKey, SyncFinalizedPartialKeys};
-use dkg_primitives::{SessionId, SubmitterList, KeyGeneratorList, SyncFinalizedPartialKeysPayload, PartialKeySubmission, Event};
+use dkg_primitives::{SessionId, SubmitterList, KeyGeneratorList, SyncFinalizedPartialKeysPayload, PartialKeySubmission, Event, AsyncTask};
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{info, warn, error};
@@ -45,6 +45,7 @@ impl<C: AppState> DkgWorker<C> {
         }
         if !has_submit {
             info!("Rrequesting partial keys from committee");
+            // 0.5s timeout
             request_submit_partial_key(context, committee_urls, *session_id);
             return Ok(());
         } else {
@@ -75,7 +76,7 @@ pub fn request_submit_partial_key<C: AppState>(
     session_id: SessionId,
 ) {
     let parameter = RequestSubmitPartialKey { session_id };
-    context.multicast(committee_urls, <RequestSubmitPartialKey as RpcParameter<C>>::method().to_string(), parameter);
+    context.async_task().multicast(committee_urls, <RequestSubmitPartialKey as RpcParameter<C>>::method().to_string(), parameter);
 }
 
 pub async fn broadcast_finalized_partial_keys<C: AppState>(
@@ -94,7 +95,7 @@ pub async fn broadcast_finalized_partial_keys<C: AppState>(
     let message = SyncFinalizedPartialKeys { signature, payload };
     committee_urls.push(solver_url);
     info!("Broadcasting finalized partial keys to {:?}", committee_urls);
-    ctx.multicast(committee_urls.clone(), <SyncFinalizedPartialKeys<C::Signature, C::Address> as RpcParameter<C>>::method().to_string(), message);
+    ctx.async_task().multicast(committee_urls.clone(), <SyncFinalizedPartialKeys<C::Signature, C::Address> as RpcParameter<C>>::method().to_string(), message);
     Ok(())
 }
 

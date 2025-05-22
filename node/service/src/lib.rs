@@ -1,4 +1,5 @@
 use dkg_node_primitives::{Config, DkgAppState, DkgExecutor, Role};
+use futures::future::join_all;
 use radius_sdk::{signature::{PrivateKeySigner, ChainType, Signature, Address}, kvstore::KvStoreBuilder};
 use dkg_primitives::{Error, KeyGeneratorList, SessionId, ConfigError, Event};
 use std::{fs, path::PathBuf};
@@ -12,7 +13,7 @@ mod builder;
 
 fn create_app_state(config: &Config, tx: Sender<Event<Signature, Address>>) -> Result<DkgAppState, Error> {
     let signer = create_signer(&config.private_key_path, config.chain_type);
-    let executor = DkgExecutor;
+    let executor = DkgExecutor::new(tx)?;
     tracing::info!("Creating app state for: {:?}", config.role);
     DkgAppState::new(
         config.maybe_leader_rpc_url.clone(),
@@ -20,7 +21,6 @@ fn create_app_state(config: &Config, tx: Sender<Event<Signature, Address>>) -> R
         executor,
         config.role.clone(),
         config.threshold,
-        tx,
     )
     .map_err(Error::from)
 }
@@ -64,9 +64,8 @@ fn init_db(config: &Config) -> Result<(), Error> {
 // let service = service_builder.build();
 // service.start();
 //```
-pub async fn build_node(config: Config) -> Result<(), Error> {
-    // Run common service(e.g Open database)
-    // Initialize the database
+pub async fn run_node(config: Config) -> Result<(), Error> {
+
     init_db(&config)?;
     let (tx, rx) = channel(10);
     let mut app_state = create_app_state(&config, tx)?;
@@ -81,9 +80,7 @@ pub async fn build_node(config: Config) -> Result<(), Error> {
         _ => panic!("Invalid role"),
     };
 
-    for handle in handles {
-        handle.await.map_err(|e| Error::TaskJoinError(e))?;
-    }
+    join_all(handles).await;
 
     Ok(())
 }

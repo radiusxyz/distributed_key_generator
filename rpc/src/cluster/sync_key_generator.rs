@@ -6,7 +6,7 @@ use std::fmt::{Display, Debug};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncKeyGenerator<Address> {
-    // signature: Signature, // TODO: Uncomment this code
+    // signature: Signature, // TODO: Auth 
     address: Address,
     cluster_rpc_url: String,
     external_rpc_url: String,
@@ -39,7 +39,7 @@ impl<C: AppState> RpcParameter<C> for SyncKeyGenerator<C::Address> {
             return Ok(());
         }
 
-        // TODO: Uncomment this code
+        // TODO: Auth
         // self.signature.verify_signature(
         //     serialize_to_bincode(&self.message)?.as_slice(),
         //     context.config().radius_foundation_address().as_slice(),

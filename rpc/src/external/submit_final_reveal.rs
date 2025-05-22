@@ -1,5 +1,5 @@
 use crate::{primitives::*, SyncDecryptionKey, SyncPartialKey};
-use dkg_primitives::{AppState, SessionId, KeyGeneratorList};
+use dkg_primitives::{AppState, SessionId, KeyGeneratorList, AsyncTask};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -29,8 +29,8 @@ impl<C: AppState> RpcParameter<C> for SubmitFinalReveal<C::Signature, C::Address
         "submit_final_reveal"
     }
 
-    async fn handler(self, context: C) -> Result<Self::Response, RpcError> {
-        let prefix = context.log_prefix();
+    async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
+        let prefix = ctx.log_prefix();
         info!(
             "{} Received final reveal - session_id: {:?}, partial_keys: {}",
             prefix,
@@ -51,6 +51,6 @@ pub fn broadcast_final_reveal<C: AppState>(
     let committee_urls = KeyGeneratorList::<C::Address>::get()?.all_rpc_urls(false);
     let payload = FinalRevealPayload { session_id, partial_keys, sync_decryption_key };
     let signature = ctx.sign(&payload)?;
-    ctx.multicast(committee_urls, <SubmitFinalReveal::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SubmitFinalReveal { signature, payload });
+    ctx.async_task().multicast(committee_urls, <SubmitFinalReveal::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SubmitFinalReveal { signature, payload });
     Ok(())
 }
