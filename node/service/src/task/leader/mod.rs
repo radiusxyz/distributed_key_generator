@@ -1,7 +1,7 @@
 use super::{AppState, SkdeParams, RpcParameter, DkgAppState, Config, Error};
 use crate::{DkgWorker, run_dkg_worker, rpc::{default_external_rpc_server, default_cluster_rpc_server}};
 use dkg_primitives::{Event, AsyncTask};
-use dkg_rpc::{SubmitDecryptionKey, SubmitPartialKey, GetSkdeParams, GetSkdeParamsResponse};
+use dkg_rpc::{SubmitDecKey, SubmitPartialKey, GetSkdeParams, GetSkdeParamsResponse};
 use radius_sdk::signature::{Address, Signature};
 use tokio::task::JoinHandle;
 use tracing::{info, error};
@@ -17,7 +17,7 @@ pub async fn run_node(ctx: &mut DkgAppState, config: Config, rx: Receiver<Event<
     let external_server = default_external_rpc_server(ctx).await?;
     let server_handle = external_server
         .register_rpc_method::<SubmitPartialKey<Signature, Address>>()?
-        .register_rpc_method::<SubmitDecryptionKey<Signature, Address>>()?
+        .register_rpc_method::<SubmitDecKey<Signature, Address>>()?
         .init(config.external_rpc_url.clone())
         .await?;
     handle.push(ctx.async_task().spawn_task(Box::pin(async move { server_handle.stopped().await; })));
@@ -57,12 +57,12 @@ pub async fn fetch_skde_params<C: AppState>(ctx: &C, authority_url: &str) -> Skd
 
         match result {
             Ok(response) => {
-                let signed = response.signed_skde_params;
+                let GetSkdeParamsResponse { skde_params, signature } = response;
 
-                match ctx.verify_signature(&signed.signature, &signed.params, None) {
+                match ctx.verify_signature(&signature, &skde_params, None) {
                     Ok(_signer_address) => { 
                         info!("Successfully fetched SKDE params from authority");
-                        return signed.params
+                        return skde_params;
                     }
                     Err(e) => { panic!("Failed to verify SKDE params signature: {}", e) }
                 }

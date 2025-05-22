@@ -1,4 +1,4 @@
-use dkg_primitives::{DecryptionKey, SessionId, Error, Selector, Sha256Hasher, FixedHasher, Aggregator};
+use dkg_primitives::{DecKey, SessionId, Error, Selector, Sha256Hasher, FixedHasher, Aggregator};
 use skde::{delay_encryption::SkdeParams, key_generation::PartialKey, key_aggregation::{AggregatedKey, aggregate_key}};
 
 pub struct DkgAggregator;
@@ -29,7 +29,7 @@ impl Selector<SessionId> for DkgRandomness {
 
     fn get_randomness(session_id: SessionId) -> Vec<u8> {
         match session_id.prev() {
-            Some(prev) => match DecryptionKey::get(prev) {
+            Some(prev) => match DecKey::get(prev) {
                 Ok(key) => key.to_bytes(),
                 Err(_) => b"default-randomness".to_vec(),
             },

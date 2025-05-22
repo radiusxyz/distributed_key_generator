@@ -1,4 +1,4 @@
-use crate::{primitives::*, SyncDecryptionKey, SyncPartialKey};
+use crate::{primitives::*, SyncDecKey, SyncPartialKey};
 use dkg_primitives::{AppState, SessionId, KeyGeneratorList, AsyncTask};
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -14,7 +14,7 @@ pub struct SubmitFinalReveal<Signature, Address> {
 pub struct FinalRevealPayload<Signature, Address> {
     pub session_id: SessionId,
     pub partial_keys: Vec<SyncPartialKey<Signature, Address>>,
-    pub sync_decryption_key: SyncDecryptionKey<Signature, Address>,
+    pub sync_decryption_key: SyncDecKey<Signature, Address>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -42,10 +42,10 @@ impl<C: AppState> RpcParameter<C> for SubmitFinalReveal<C::Signature, C::Address
 }
 
 // TODO: Verifier - Broadcast final reveal information from leader
-pub fn broadcast_final_reveal<C: AppState>(
+pub fn _broadcast_final_reveal<C: AppState>(
     session_id: SessionId,
     partial_keys: Vec<SyncPartialKey<C::Signature, C::Address>>,
-    sync_decryption_key: SyncDecryptionKey<C::Signature, C::Address>,
+    sync_decryption_key: SyncDecKey<C::Signature, C::Address>,
     ctx: &C,
 ) -> Result<(), C::Error> {
     let committee_urls = KeyGeneratorList::<C::Address>::get()?.all_rpc_urls(false);

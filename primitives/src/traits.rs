@@ -1,4 +1,4 @@
-use crate::{KeyGenerationError, Event};
+use crate::{KeyGenerationError, Event, SessionId};
 use std::{hash::Hash, fmt::Debug, time::Duration};
 use radius_sdk::{
     signature::{PrivateKeySigner, SignatureError}, 
@@ -18,8 +18,6 @@ use async_trait::async_trait;
 pub trait AppState: Clone + Send + Sync + 'static {
     /// The address type that this app accepts
     type Address: Parameter + AddressT;
-    /// Period of creating a new decryption key
-    type SessionId: Parameter + Debug;
     /// The signature type that this app accepts
     type Signature: Parameter + Debug;
     /// Verifier for the signature
@@ -90,30 +88,16 @@ pub trait Verify<Signature, Address> {
     ) -> Result<(), KeyGenerationError>;
 }
 
-pub trait Aggregator<SessionId, Error> {
-    
-    type PartialKey: Parameter;
-    type AggregatedKey: Parameter;
-    type Selector: Selector<SessionId>;
+pub trait SecureBlock {
+    type EncKey: Parameter;
+    type DecKey: Parameter;
+    type Error: std::error::Error + Send + Sync + 'static;
 
-    /// Finalizes the given partial keys
-    fn finalize(&self, session_id: SessionId, partial_keys: Vec<Self::PartialKey>) -> Result<Self::AggregatedKey, Error>;
+    fn get_enc_key(&self, session_id: SessionId) -> Result<Self::EncKey, Self::Error>;
 
-    /// Derives a partial key from which `Self::Selector` selects
-    fn derive_partial_key(&self, selected_keys: &Vec<Self::PartialKey>, params: &SkdeParams) -> Self::PartialKey;
+    fn get_dec_key(&self, session_id: SessionId) -> Result<Self::DecKey, Self::Error>;
 
-    fn calculate_decryption_key<Hasher>(partial_keys: Vec<Self::PartialKey>) -> Result<String, Error>;
-}
-
-pub trait Selector<SessionId> {
-
-    type Hasher: FixedHasher;
-
-    /// Gets the randomness for the given session id
-    fn get_randomness(session_id: SessionId) -> Vec<u8>;
-
-    /// Selects a subset of the given partial keys based on the randomness
-    fn select(len: usize, session_id: SessionId) -> Vec<usize>;
+    fn verify_key_pair(&self) -> Result<(), Self::Error>;
 }
 
 #[async_trait]
@@ -202,17 +186,11 @@ pub trait AddressT: Hash + Eq + PartialEq + Clone + Debug + Into<String> + From<
 
 impl<T> AddressT for T where T: Hash + Eq + PartialEq + Clone + Debug + Into<String> + From<String> {}
 
-pub trait FixedHasher {
-    type Output: AsRef<[u8]>;
+/// A trait for types that can be used as a hasher
+pub trait Hasher {
+    type Output;
     const LENGTH: usize;
 
-    /// Hashes the input and returns a vector of the given `LENGTH`
-    fn hash(input: &[u8]) -> Self::Output;
-}
-
-pub trait VariableHasher {
-    type Output;
-
-    /// Hashes the input and returns a vector of the given `size`
-    fn hash(input: &[u8], size: usize) -> Self::Output;
+    /// Hash function which size would be dependent on the given input size
+    fn hash(input: &[u8], size: Option<usize>) -> Self::Output;
 }

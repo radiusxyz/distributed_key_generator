@@ -9,7 +9,7 @@ use tracing::info;
 use crate::{
     rpc::common::{GetSkdeParams, GetSkdeParamsResponse},
     tests::utils::{
-        cleanup_existing_processes, get_decryption_key, get_encryption_key,
+        cleanup_existing_processes, get_dec_key, get_enc_key,
         get_finalized_partial_keys, get_latest_session_id, init_test_environment,
         mock_get_randomness, register_nodes, start_node, TEST_SESSION_CYCLE_MS,
     },
@@ -112,7 +112,7 @@ async fn verify_all_keys_in_session(
 
     // Verify encryption and decryption key pair
     let prefix = format!("[Test Verifier]");
-    match crate::utils::key::verify_encryption_decryption_key_pair(
+    match crate::utils::key::verify_key_pair(
         skde_params,
         &encryption_key,
         &decryption_key,

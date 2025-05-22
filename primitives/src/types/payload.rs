@@ -89,14 +89,14 @@ impl<Signature, Address: Debug> Display for SyncPartialKeyPayload<Signature, Add
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SubmitDecryptionKeyPayload<Address> {
+pub struct SubmitDecKeyPayload<Address> {
     pub sender: Address,
     pub decryption_key: String,
     pub session_id: SessionId,
     pub timestamp: u128,
 }
 
-impl<Address> SubmitDecryptionKeyPayload<Address> {
+impl<Address> SubmitDecKeyPayload<Address> {
     pub fn new(sender: Address, decryption_key: String, session_id: SessionId) -> Self {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -107,7 +107,7 @@ impl<Address> SubmitDecryptionKeyPayload<Address> {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SyncDecryptionKeyPayload<Address> {
+pub struct SyncDecKeyPayload<Address> {
     pub sender: Address,
     pub decryption_key: String,
     pub session_id: SessionId,
@@ -115,7 +115,7 @@ pub struct SyncDecryptionKeyPayload<Address> {
     pub ack: u128,
 }
 
-impl<Address> SyncDecryptionKeyPayload<Address> {
+impl<Address> SyncDecKeyPayload<Address> {
     pub fn new(sender: Address, decryption_key: String, session_id: SessionId, solve_timestamp: u128) -> Self {
         let ack = SystemTime::now()
             .duration_since(UNIX_EPOCH)

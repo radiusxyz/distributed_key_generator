@@ -1,6 +1,6 @@
-use crate::{primitives::*, DecryptionKeyResponse, SubmitDecryptionKey};
-use dkg_primitives::{AppState, DecryptionKey, Error, SubmitterList, SessionId, SubmitDecryptionKeyPayload, SyncFinalizedPartialKeysPayload, AsyncTask};
-use dkg_utils::key::{calculate_decryption_key, perform_randomized_aggregation, verify_encryption_decryption_key_pair};
+use crate::{primitives::*, SubmitDecKeyResponse, SubmitDecKey};
+use dkg_primitives::{AppState, DecKey, Error, SubmitterList, SessionId, SubmitDecKeyPayload, SyncFinalizedPartialKeysPayload, AsyncTask};
+use dkg_utils::key::{get_dec_key, get_enc_key, verify_key_pair};
 use serde::{Deserialize, Serialize};
 use skde::key_generation::PartialKey;
 use tracing::{error, info, warn};
@@ -55,7 +55,7 @@ impl<C: AppState> RpcParameter<C> for SyncFinalizedPartialKeys<C::Signature, C::
             ));
         } else {
             let partial_keys = get_partial_keys::<C>(&ctx, &self.payload)?;
-            perform_randomized_aggregation(&ctx, session_id, &partial_keys);
+            let _ = get_enc_key(&ctx, session_id, &partial_keys)?;
         }
         Ok(())
     }
@@ -72,27 +72,24 @@ async fn derive_decryption_key<C: AppState>(
     session_id: SessionId,
     partial_keys: &[PartialKey],
 ) -> Result<(), RpcError> {
-    let aggregated_key = perform_randomized_aggregation(&ctx, session_id, &partial_keys);
-    let decryption_key: String = calculate_decryption_key(&ctx, session_id, &aggregated_key)
-        .unwrap()
-        .into();
-    let encryption_key = aggregated_key.u;
-    verify_encryption_decryption_key_pair(&ctx.skde_params(), &encryption_key, &decryption_key)?;
+    let enc_key = get_enc_key(&ctx, session_id, &partial_keys)?;
+    let decryption_key: String = get_dec_key(&ctx, session_id, &enc_key.inner())?.into();
+    verify_key_pair(&ctx.skde_params(), &enc_key.key(), &decryption_key)?;
 
-    DecryptionKey::new(decryption_key.clone()).put(session_id)?;
+    DecKey::new(decryption_key.clone()).put(session_id)?;
 
     let payload =
-        SubmitDecryptionKeyPayload::new(ctx.address(), decryption_key.clone(), session_id);
+        SubmitDecKeyPayload::new(ctx.address(), decryption_key.clone(), session_id);
     let timestamp = payload.timestamp;
     let signature = ctx.sign(&payload)?;
     let leader_rpc_url = ctx.leader_rpc_url().ok_or(Error::InvalidParams("Leader RPC URL is not set".to_string()))?;
     // TODO: Handle Error
-    let response: DecryptionKeyResponse = ctx
+    let response: SubmitDecKeyResponse = ctx
         .async_task()
         .request(
             leader_rpc_url,
-            <SubmitDecryptionKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(),
-            SubmitDecryptionKey { signature, payload },
+            <SubmitDecKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(),
+            SubmitDecKey { signature, payload },
         )
         .await?;
     if response.success {

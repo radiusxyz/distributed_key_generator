@@ -1,6 +1,7 @@
 pub use crate::Config;
 use std::sync::Arc;
-pub use dkg_primitives::{AppState, Verify, AsyncTask, Error, TraceExt, KeyGenerationError, SessionId, DecryptionKey, Parameter, Event};
+use dkg_primitives::{DecKey, EncKey};
+pub use dkg_primitives::{AppState, Verify, AsyncTask, Error, TraceExt, KeyGenerationError, SessionId, Parameter, Event, SecureBlock};
 use radius_sdk::{signature::{PrivateKeySigner, Address, Signature, SignatureError}, json_rpc::client::{RpcClient, Id}};
 use ethers::{types::Signature as EthersSignature, utils::hash_message};
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
@@ -11,6 +12,9 @@ use async_trait::async_trait;
 
 pub mod config;
 pub use config::*;
+
+mod sbb;
+pub use sbb::*;
 
 #[cfg(feature = "experimental")]
 mod randomness;
@@ -51,7 +55,6 @@ impl DkgAppState {
 #[async_trait]
 impl AppState for DkgAppState {
     type Address = Address;
-    type SessionId = SessionId;
     type Signature = Signature;
     type Verify = DkgVerify;
     type AsyncTask = DkgExecutor;
@@ -96,7 +99,7 @@ impl Verify<Signature, Address> for DkgVerify {
     }
 
     fn verify_decryption_key(
-        skde_params: &skde::delay_encryption::SkdeParams,
+        skde_params: &SkdeParams,
         encryption_key: String,
         decryption_key: String,
     ) -> Result<(), dkg_primitives::KeyGenerationError> {

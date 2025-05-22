@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display};
 use radius_sdk::kvstore::{KvStoreError, Model};
 use crate::traits::{AddressT, Parameter};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use skde::key_aggregation::AggregatedKey as SkdeAggregatedKey;
+use skde::key_aggregation::AggregatedKey;
 use skde::key_generation::PartialKey;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
@@ -97,34 +97,48 @@ impl<Address: Parameter + AddressT> SubmitterList<Address> {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Model)]
 #[kvstore(key(session_id: SessionId))]
-pub struct DecryptionKey(String);
+/// Type of the decryption key 
+pub struct DecKey(String);
 
-impl Into<String> for DecryptionKey {
+impl Into<String> for DecKey {
     fn into(self) -> String {
         self.0
     }
 }
 
-impl DecryptionKey {
-    pub fn new(decryption_key: String) -> Self {
-        Self(decryption_key)
+impl DecKey {
+    pub fn new(dec_key: String) -> Self {
+        Self(dec_key)
     }
+}
 
-    pub fn to_bytes(self) -> Vec<u8> {
-        self.0.into_bytes()
+impl From<DecKey> for Vec<u8> {
+    fn from(value: DecKey) -> Self {
+        value.0.into_bytes()
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
 #[kvstore(key(session_id: SessionId))]
-pub struct AggregatedKey(SkdeAggregatedKey);
+/// Type of the encryption key 
+pub struct EncKey(AggregatedKey);
 
-impl AggregatedKey {
-    pub fn new(aggregated_key: SkdeAggregatedKey) -> Self {
-        Self(aggregated_key)
+impl EncKey {
+    pub fn new(enc_key: AggregatedKey) -> Self {
+        Self(enc_key)
     }
 
-    pub fn enc_key(self) -> String {
-        self.0.u
+    pub fn inner(&self) -> AggregatedKey {
+        self.0.clone()
+    }
+
+    pub fn key(&self) -> String {
+        self.0.u.clone()
+    }
+}
+
+impl From<AggregatedKey> for EncKey {
+    fn from(value: AggregatedKey) -> Self {
+        Self(value)
     }
 }

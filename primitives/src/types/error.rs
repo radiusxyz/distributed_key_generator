@@ -48,6 +48,8 @@ pub enum Error {
     /// Event emission error
     #[error(transparent)]
     EventError(#[from] tokio::sync::mpsc::error::SendError<Event<Signature, Address>>),
+    /// Conversion error
+    ConvertError(String),
 }
 
 /// Error type for key generation process

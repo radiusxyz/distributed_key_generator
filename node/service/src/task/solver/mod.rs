@@ -39,10 +39,10 @@ pub async fn fetch_skde_params<C: AppState>(ctx: &C, leader_rpc_url: &str) -> Sk
 
         match result {
             Ok(response) => {
-                let signed = response.signed_skde_params;
+                let GetSkdeParamsResponse { skde_params, signature } = response;
 
-                match ctx.verify_signature(&signed.signature, &signed.params, None) {
-                    Ok(_signer_address) => { return signed.params }
+                match ctx.verify_signature(&signature, &skde_params, None) {
+                    Ok(_signer_address) => { return skde_params }
                     Err(e) => { panic!("Failed to verify SKDE params signature: {}", e) }
                 }
             }

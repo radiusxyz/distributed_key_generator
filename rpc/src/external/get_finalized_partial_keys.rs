@@ -4,19 +4,19 @@ use dkg_primitives::{
 };
 use serde::{Deserialize, Serialize};
 
-/// Get finalized partial keys for a specified session ID
+/// Get finalized partial keys at session id
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetFinalizedPartialKeys {
     pub session_id: SessionId,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct GetFinalizedPartialKeysResponse<Signature, Address> {
+pub struct Response<Signature, Address> {
     pub partial_keys: Vec<PartialKeySubmission<Signature, Address>>,
 }
 
 impl<C: AppState> RpcParameter<C> for GetFinalizedPartialKeys {
-    type Response = GetFinalizedPartialKeysResponse<C::Signature, C::Address>;
+    type Response = Response<C::Signature, C::Address>;
 
     fn method() -> &'static str {
         "get_finalized_partial_keys"
@@ -31,6 +31,6 @@ impl<C: AppState> RpcParameter<C> for GetFinalizedPartialKeys {
                     format!("Failed to get partial key list: {:?}", err).into(),
                 ))
             })?;
-        Ok(GetFinalizedPartialKeysResponse { partial_keys })
+        Ok(Response { partial_keys })
     }
 }

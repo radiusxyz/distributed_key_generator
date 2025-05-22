@@ -1,76 +1,60 @@
 use dkg_primitives::{
-    AggregatedKey, AppState, DecryptionKey, KeyGenerationError, SessionId, TraceExt,
+    EncKey, DecKey, AppState, KeyGenerationError, SessionId, TraceExt,
 };
 use sha2::{Digest, Sha256};
 use sha3::{digest::{ExtendableOutput, Update, XofReader}, Shake256};
 use skde::{
     delay_encryption::{decrypt, encrypt, solve_time_lock_puzzle, SkdeParams},
-    key_aggregation::{aggregate_key, AggregatedKey as SkdeAggregatedKey},
-    key_generation::{generate_uv_pair, PartialKey as SkdePartialKey},
+    key_aggregation::{aggregate_key, AggregatedKey},
+    key_generation::{generate_uv_pair, PartialKey},
     BigUint,
 };
 use tracing::info;
 
-pub fn aggregate_partial_keys_from_partial_key_list(
-    skde_params: &SkdeParams,
+// TODO: A more robust mechanism to handle delayed or missing solve operations should be designed.
+pub fn get_enc_key<C: AppState>(
+    context: &C,
     session_id: SessionId,
-    partial_key_list: &[SkdePartialKey],
-) -> SkdeAggregatedKey {
+    partial_key_list: &[PartialKey],
+) -> Result<EncKey, C::Error> {
+    let skde_params = context.skde_params().clone();
     let randomness = get_randomness(session_id);
     let mut selected_keys = select_random_partial_keys(partial_key_list, &randomness);
     let derived_key = derive_partial_key(&selected_keys, &skde_params);
     selected_keys.push(derived_key);
-    aggregate_key(&skde_params, &selected_keys)
+    let enc_key: EncKey = aggregate_key(&skde_params, &selected_keys).into();
+    enc_key.put(session_id)?;
+
+    info!("Completed to generate encryption key - session id: {:?}",session_id);
+
+    Ok(enc_key)
 }
 
-// TODO: A more robust mechanism to handle delayed or missing solve operations should be designed.
-pub fn perform_randomized_aggregation<C: AppState>(
+pub fn get_dec_key<C: AppState>(
     context: &C,
     session_id: SessionId,
-    partial_key_list: &[SkdePartialKey],
-) -> SkdeAggregatedKey {
-    let skde_params = context.skde_params().clone();
-
-    let skde_aggregated_key =
-        aggregate_partial_keys_from_partial_key_list(&skde_params, session_id, partial_key_list);
-
-    AggregatedKey::new(skde_aggregated_key.clone())
-        .put(session_id)
-        .unwrap();
-
-    info!(
-        "{} Completed to generate encryption key - session id: {:?}",
-        context.log_prefix(), session_id,
-    );
-
-    skde_aggregated_key
-}
-
-pub fn calculate_decryption_key<C: AppState>(
-    context: &C,
-    session_id: SessionId,
-    skde_aggregated_key: &SkdeAggregatedKey,
-) -> Result<DecryptionKey, KeyGenerationError> {
+    enc_key: &AggregatedKey,
+) -> Result<DecKey, C::Error> {
     let skde_params = context.skde_params();
 
     // TODO: Timeout
-    let secure_key = solve_time_lock_puzzle(&skde_params, skde_aggregated_key).map_err(|err| {
+    let secure_key = solve_time_lock_puzzle(&skde_params, enc_key).map_err(|err| {
         KeyGenerationError::InternalError(format!("Failed to solve time lock puzzle: {:?}", err))
     })?;
 
-    let decryption_key = DecryptionKey::new(secure_key.sk.clone());
+    let dec_key = DecKey::new(secure_key.sk.clone());
 
-    decryption_key.put(session_id).map_err(|err| {
+    dec_key.put(session_id).map_err(|err| {
         KeyGenerationError::InvalidPartialKey(format!("Failed to store decryption key: {:?}", err))
     })?;
 
-    Ok(decryption_key)
+    Ok(dec_key)
 }
 
 pub fn select_random_partial_keys(
-    partial_keys: &[SkdePartialKey],
+    partial_keys: &[PartialKey],
     randomness: &[u8],
-) -> Vec<SkdePartialKey> {
+) -> Vec<PartialKey> {
     let indices = select_ordered_indices(partial_keys.len(), randomness);
     indices.iter().map(|&i| partial_keys[i].clone()).collect()
 }
@@ -89,9 +73,9 @@ pub fn shake256_to_biguint(input: &[u8], size: usize) -> BigUint {
 
 // Derives a partial key from selected partial keys
 pub fn derive_partial_key(
-    selected_keys: &Vec<SkdePartialKey>,
+    selected_keys: &Vec<PartialKey>,
     params: &SkdeParams,
-) -> SkdePartialKey {
+) -> PartialKey {
     let n = BigUint::parse_bytes(params.n.as_bytes(), 10).unwrap();
     let max_sequencer_number =
         BigUint::parse_bytes(params.max_sequencer_number.as_bytes(), 10).unwrap();
@@ -122,7 +106,7 @@ pub fn derive_partial_key(
     let yw_pair =
         generate_uv_pair(params, &k_h, &r_h).expect("Failed to generate YW pair for partial key");
 
-    SkdePartialKey {
+    PartialKey {
         u: uv_pair.u,
         v: uv_pair.v,
         y: yw_pair.u,
@@ -163,8 +147,8 @@ pub fn select_ordered_indices(n: usize, randomness: &[u8]) -> Vec<usize> {
 
 pub fn get_randomness(session_id: SessionId) -> Vec<u8> {
     match session_id.prev() {
-        Some(prev) => match DecryptionKey::get(prev) {
-            Ok(key) => key.to_bytes(),
+        Some(prev) => match DecKey::get(prev) {
+            Ok(key) => key.into(),
             Err(_) => b"default-randomness".to_vec(),
         },
         None => {
@@ -174,7 +158,7 @@ pub fn get_randomness(session_id: SessionId) -> Vec<u8> {
     }
 }
 
-pub fn verify_encryption_decryption_key_pair(
+pub fn verify_key_pair(
     skde_params: &SkdeParams,
     encryption_key: &str,
     decryption_key: &str,

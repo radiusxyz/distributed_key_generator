@@ -2,30 +2,30 @@ use crate::{
     cluster::broadcast_decryption_key_ack, 
     primitives::*
 };
-use dkg_primitives::{AppState, SubmitDecryptionKeyPayload};
+use dkg_primitives::{AppState, SubmitDecKeyPayload};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use std::fmt::Display;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SubmitDecryptionKey<Signature, Address> {
+pub struct SubmitDecKey<Signature, Address> {
     pub signature: Signature,
-    pub payload: SubmitDecryptionKeyPayload<Address>,
+    pub payload: SubmitDecKeyPayload<Address>,
 }
 
-impl<Signature, Address> Display for SubmitDecryptionKey<Signature, Address> {
+impl<Signature, Address> Display for SubmitDecKey<Signature, Address> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "🔑 Received decryption key at {:?} on session {:?}", self.payload.timestamp, self.payload.session_id)
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct DecryptionKeyResponse {
+pub struct Response {
     pub success: bool,
 }
 
-impl<C: AppState> RpcParameter<C> for SubmitDecryptionKey<C::Signature, C::Address> {
-    type Response = DecryptionKeyResponse;
+impl<C: AppState> RpcParameter<C> for SubmitDecKey<C::Signature, C::Address> {
+    type Response = Response;
 
     fn method() -> &'static str {
         "submit_decryption_key"
@@ -43,6 +43,6 @@ impl<C: AppState> RpcParameter<C> for SubmitDecryptionKey<C::Signature, C::Addre
             &context,
         )?;
 
-        Ok(DecryptionKeyResponse { success: true })
+        Ok(Response { success: true })
     }
 }

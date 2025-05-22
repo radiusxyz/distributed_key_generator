@@ -14,14 +14,14 @@ pub struct KeyGeneratorRpcInfo {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct GetKeyGeneratorRpcUrlListResponse {
-    pub key_generator_rpc_url_list: Vec<KeyGeneratorRpcInfo>,
+pub struct Response {
+    pub urls: Vec<KeyGeneratorRpcInfo>,
 }
 
-impl<Address: AddressT> From<GetKeyGeneratorRpcUrlListResponse> for KeyGeneratorList<Address> {
-    fn from(value: GetKeyGeneratorRpcUrlListResponse) -> Self {
+impl<Address: AddressT> From<Response> for KeyGeneratorList<Address> {
+    fn from(value: Response) -> Self {
         let mut key_generator_list = KeyGeneratorList::<Address>::default();
-        let key_generator_rpc_url_list = value.key_generator_rpc_url_list;
+        let key_generator_rpc_url_list = value.urls;
         for key_generator_rpc_info in key_generator_rpc_url_list {
             key_generator_list.insert(KeyGenerator::new(key_generator_rpc_info.address.into(), key_generator_rpc_info.cluster_rpc_url, key_generator_rpc_info.external_rpc_url));
         }
@@ -30,7 +30,7 @@ impl<Address: AddressT> From<GetKeyGeneratorRpcUrlListResponse> for KeyGenerator
 }
 
 impl<C: AppState> RpcParameter<C> for GetKeyGeneratorList {
-    type Response = GetKeyGeneratorRpcUrlListResponse;
+    type Response = Response;
 
     fn method() -> &'static str {
         "get_key_generator_list"
@@ -39,7 +39,7 @@ impl<C: AppState> RpcParameter<C> for GetKeyGeneratorList {
     async fn handler(self, _context: C) -> Result<Self::Response, RpcError> {
         let key_generator_list = KeyGeneratorList::<C::Address>::get()?;
 
-        let key_generator_rpc_url_list: Vec<KeyGeneratorRpcInfo> = key_generator_list
+        let urls: Vec<KeyGeneratorRpcInfo> = key_generator_list
             .into_iter()
             .filter_map(|key_generator| {
                 Some(KeyGeneratorRpcInfo {
@@ -49,6 +49,6 @@ impl<C: AppState> RpcParameter<C> for GetKeyGeneratorList {
                 })
             })
             .collect();
-        Ok(GetKeyGeneratorRpcUrlListResponse { key_generator_rpc_url_list })
+        Ok(Response { urls })
     }
 }
