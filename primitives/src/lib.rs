@@ -1,12 +1,13 @@
 mod traits;
 mod types;
+mod consensus;
 
 use std::marker::PhantomData;
 
 pub use traits::*;
 pub use types::*;
+pub use consensus::*;
 
-pub type EncKeyFor<C> = <<C as AppState>::SecureBlock as SecureBlock>::EncKey;
-pub type DecKeyFor<C> = <<C as AppState>::SecureBlock as SecureBlock>::DecKey;
+pub type TrustedSetupFor<C> = <<C as AppState>::SecureBlock as SecureBlock>::TrustedSetUp;
 
 pub struct Either<A, B>(PhantomData<(A, B)>);

@@ -1,21 +1,11 @@
 use crate::{primitives::*, SyncDecKey, SyncPartialKey};
-use dkg_primitives::{AppState, SessionId, KeyGeneratorList, AsyncTask};
+use dkg_primitives::{AppState, SessionId, KeyGeneratorList, AsyncTask, SignedCommitment};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
 // TODO: Add handler to submit partial keys and decryption key from leader to a verifier
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SubmitFinalReveal<Signature, Address> {
-    pub signature: Signature,
-    pub payload: FinalRevealPayload<Signature, Address>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct FinalRevealPayload<Signature, Address> {
-    pub session_id: SessionId,
-    pub partial_keys: Vec<SyncPartialKey<Signature, Address>>,
-    pub sync_decryption_key: SyncDecKey<Signature, Address>,
-}
+pub struct SubmitFinalReveal<Signature, Address>(SignedCommitment<Signature, Address>);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RevealResponse {

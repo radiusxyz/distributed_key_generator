@@ -7,6 +7,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+dkg-utils.workspace = true
 radius-sdk.workspace = true
 tokio.workspace = true
 skde.workspace = true

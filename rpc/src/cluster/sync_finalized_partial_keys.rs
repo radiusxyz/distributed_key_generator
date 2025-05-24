@@ -1,101 +1,87 @@
-use crate::{primitives::*, SubmitDecKeyResponse, SubmitDecKey};
-use dkg_primitives::{AppState, DecKey, Error, SubmitterList, SessionId, SubmitDecKeyPayload, SyncFinalizedPartialKeysPayload, SecureBlock, AsyncTask, get_partial_keys};
-use dkg_utils::key::{get_dec_key, get_enc_key, verify_key_pair};
+use crate::{primitives::*, SubmitDecKeyResponse, SubmitDecKey, DecKeyPayload, FinalizedEncKeyPayload};
+use dkg_primitives::{AppState, AsyncTask, Commitment, DecKey, EncKey, Payload, SecureBlock, SessionId, SignedCommitment, SubmitterList};
 use serde::{Deserialize, Serialize};
-use skde::key_generation::PartialKey;
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SyncFinalizedPartialKeys<Signature, Address> {
-    pub signature: Signature,
-    pub payload: SyncFinalizedPartialKeysPayload<Signature, Address>,
+pub struct SyncFinalizedEncKeys<Signature, Address>(pub SignedCommitment<Signature, Address>);
+
+impl<Signature, Address: Clone> SyncFinalizedEncKeys<Signature, Address> {
+    fn get_session_id(&self) -> SessionId { self.0.session_id() }
+
+    fn payload(&self) -> Payload { self.0.commitment.payload.clone() }
 }
 
-impl<Signature, Address> SyncFinalizedPartialKeys<Signature, Address> {
-    pub fn new(signature: Signature, payload: SyncFinalizedPartialKeysPayload<Signature, Address>) -> Self {
-        Self { signature, payload }
-    }
-
-    fn session_id(&self) -> SessionId {
-        self.payload.session_id
-    }
-}
-
-impl<C: AppState> RpcParameter<C> for SyncFinalizedPartialKeys<C::Signature, C::Address> {
+impl<C: AppState> RpcParameter<C> for SyncFinalizedEncKeys<C::Signature, C::Address> {
     type Response = ();
 
     fn method() -> &'static str {
-        "sync_finalized_partial_keys"
+        "sync_finalized_enc_keys"
     }
 
     async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
-        let session_id = self.session_id();
-        let partial_keys = get_partial_keys::<C>(&ctx, session_id, &self.payload.partial_keys())?;
+        let session_id = self.get_session_id();
+        SubmitterList::<C::Address>::initialize(session_id)?;
+        let enc_keys = self.payload()
+            .decode::<FinalizedEncKeyPayload<C::Signature, C::Address>>()
+            .map_err(|e| RpcError::from(e))?
+            .inner()
+            .iter()
+            .map(|key| {
+                let signer = ctx.verify_signature(&key.inner().signature, &key.inner().commitment, key.inner().commitment.sender.clone())?;
+                SubmitterList::<C::Address>::apply(session_id, |list| { list.insert(signer.clone()); })?;
+                key.put(&session_id, &signer)?;
+                key.inner().commitment.payload.decode::<EncKey>().map_err(|e| RpcError::from(e)).map(|enc_key| enc_key.inner())
+            })
+            .collect::<Result<Vec<Vec<u8>>, RpcError>>()?;
         if ctx.is_solver() {
-            SubmitterList::<C::Address>::initialize(session_id)?;
-            let _ = ctx.verify_signature(&self.signature, &self.payload, Some(&self.payload.sender))?;
+            let _ = ctx.verify_signature(&self.0.signature, &self.payload(), self.0.commitment.sender.clone())?;
             let cloned_ctx = ctx.clone();
             cloned_ctx.async_task().spawn_task(Box::pin(
                 async move {
-                    if let Err(err) =
-                        derive_decryption_key::<C>(ctx, session_id, &partial_keys)
-                            .await
-                    {
-                        error!(
-                            "Solve failed for session {:?}: {:?}",
-                            session_id, err
-                        );
-                    } else {
-                        info!(
-                            "Solve completed successfully for session {:?}",
-                            session_id
-                        );
+                    match solve::<C>(&ctx, session_id, enc_keys) {
+                        Ok(payload) => {
+                            let bytes = serde_json::to_vec(&payload).unwrap();
+                            let commitment = Commitment::new(bytes.into(), Some(ctx.address()), session_id);
+                            let signature = ctx.sign(&commitment).unwrap();
+                            let leader_rpc_url = ctx.leader_rpc_url().unwrap();
+                            
+                            // TODO: Handle Error
+                            let response: SubmitDecKeyResponse = ctx
+                                .async_task()
+                                .request(
+                                    leader_rpc_url,
+                                    <SubmitDecKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(),
+                                    SubmitDecKey(SignedCommitment { signature, commitment }),
+                                )
+                                .await.unwrap();
+                            if !response.0 {
+                                // TODO: SHOULD HANDLE ERROR
+                                warn!("Submission acknowledged but not successful - session_id: {:?}", session_id);
+                            }
+                        },
+                        Err(e) => {
+                            error!("Solve failed for session {:?}: {:?}", session_id, e);
+                        }
                     }
                 }
             ));
         } else {
-            let _ = get_enc_key(&ctx, session_id, &partial_keys)?;
+            let key = ctx.secure_block().gen_enc_key(ctx.randomness(session_id), Some(enc_keys))?;
+            EncKey::new(key).put(session_id)?;
         }
         Ok(())
     }
 }
 
-// TODO: Refactor 
-// ```
-// let dec_key = ctx.derive_dec_key()?;
-// ctx.request()?;
-// Ok(())
-// ```
-async fn derive_decryption_key<C: AppState>(
-    ctx: C,
+fn solve<C: AppState>(
+    ctx: &C,
     session_id: SessionId,
-    partial_keys: &[PartialKey],
-) -> Result<(), RpcError> {
-    let enc_key = get_enc_key(&ctx, session_id, &partial_keys)?;
-    let decryption_key: String = get_dec_key(&ctx, session_id, &enc_key.inner())?.into();
-    verify_key_pair(&ctx.skde_params(), &enc_key.key(), &decryption_key)?;
-
-    DecKey::new(decryption_key.clone()).put(session_id)?;
-
-    let payload =
-        SubmitDecKeyPayload::new(ctx.address(), decryption_key.clone(), session_id);
-    let timestamp = payload.timestamp;
-    let signature = ctx.sign(&payload)?;
-    let leader_rpc_url = ctx.leader_rpc_url().ok_or(Error::InvalidParams("Leader RPC URL is not set".to_string()))?;
-    // TODO: Handle Error
-    let response: SubmitDecKeyResponse = ctx
-        .async_task()
-        .request(
-            leader_rpc_url,
-            <SubmitDecKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(),
-            SubmitDecKey { signature, payload },
-        )
-        .await?;
-    if response.success {
-        info!("Successfully submitted decryption key - session_id: {:?}, timestamp: {}", session_id, timestamp);
-    } else {
-        warn!("Submission acknowledged but not successful - session_id: {:?}, timestamp: {}", session_id, timestamp);
-    }
-
-    Ok(())
+    enc_keys: Vec<Vec<u8>>,
+) -> Result<DecKeyPayload, RpcError> {
+    let enc_key = ctx.secure_block().gen_enc_key(ctx.randomness(session_id), Some(enc_keys)).map_err(|e| RpcError::from(e))?;
+    let (dec_key, solve_at) = ctx.secure_block().gen_dec_key(&enc_key).map_err(|e| RpcError::from(e))?;
+    ctx.secure_block().verify_dec_key(&enc_key, &dec_key).map_err(|e| RpcError::from(e))?;
+    DecKey::new(dec_key.clone()).put(session_id).map_err(|e| RpcError::from(e))?;
+    Ok(DecKeyPayload::new(dec_key, solve_at))
 }

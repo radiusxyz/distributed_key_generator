@@ -1,18 +1,17 @@
 use crate::{KeyGenerationError, Event, SessionId};
 use std::{hash::Hash, fmt::Debug, time::Duration};
-use radius_sdk::{
-    signature::{PrivateKeySigner, SignatureError}, 
-    kvstore::KvStoreError,
-    json_rpc::client::RpcClientError,
-    json_rpc::server::RpcServerError,
-};
-use skde::delay_encryption::SkdeParams;
 use futures::future::{select, Either};
 use futures_util::{pin_mut, future::Future};
 use futures_timer::Delay;
 use tokio::task::JoinHandle;
 use serde::{Serialize, de::DeserializeOwned};
 use async_trait::async_trait;
+use radius_sdk::{
+    signature::{PrivateKeySigner, SignatureError}, 
+    kvstore::KvStoreError,
+    json_rpc::client::RpcClientError,
+    json_rpc::server::RpcServerError,
+};
 
 #[async_trait]
 pub trait AppState: Clone + Send + Sync + 'static {
@@ -33,6 +32,7 @@ pub trait AppState: Clone + Send + Sync + 'static {
         + From<KeyGenerationError>
         + From<RpcServerError>
         + From<RpcClientError>
+        + From<serde_json::Error>
         + Send 
         + Sync 
         + 'static;
@@ -49,32 +49,22 @@ pub trait AppState: Clone + Send + Sync + 'static {
     fn signer(&self) -> PrivateKeySigner;
     /// Get the node's address which is used for creating payload
     fn address(&self) -> Self::Address;
-    // TODO: REMOVE ME!
-    /// Get pre-set skde parameter
-    fn skde_params(&self) -> SkdeParams;
     /// Helper function to get log prefix
     fn log_prefix(&self) -> String;
     /// Helper function to get signature
     fn sign<T: Serialize>(&self, message: &T) -> Result<Self::Signature, Self::Error>;
+    /// Get the randomness for a given session id
+    fn randomness(&self, session_id: SessionId) -> Vec<u8>;
     /// Helper function to verify signature. Verification will be handled by `Self::VerifySignature` type
-    fn verify_signature<T: Serialize>(&self, signature: &Self::Signature, message: &T, maybe_signer: Option<&Self::Address>) -> Result<Self::Address, Self::Error> {
+    fn verify_signature<T: Serialize>(&self, signature: &Self::Signature, message: &T, maybe_signer: Option<Self::Address>) -> Result<Self::Address, Self::Error> {
         let signer = Self::Verify::verify_signature(signature, message)
             .map_err(|e| Self::Error::from(e))?;
         if let Some(address) = maybe_signer {
-            if signer != *address {
+            if signer != address {
                 return Err(Self::Error::from(KeyGenerationError::InvalidSignature));
             }
         }
         Ok(signer)
-    }
-    /// Helper function to verify decryption key
-    fn verify_decryption_key(
-        &self,
-        skde_params: &SkdeParams,
-        encryption_key: String,
-        decryption_key: String,
-    ) -> Result<(), KeyGenerationError> {
-        Self::Verify::verify_decryption_key(skde_params, encryption_key, decryption_key)
     }
     fn secure_block(&self) -> &Self::SecureBlock;
     /// Helper function to get task spawner. This should not be used outside of the task module.
@@ -84,39 +74,28 @@ pub trait AppState: Clone + Send + Sync + 'static {
 pub trait Verify<Signature, Address> {
 
     fn verify_signature<T: Serialize>(signature: &Signature, message: &T) -> Result<Address, SignatureError>;
-
-    fn verify_decryption_key(
-        skde_params: &SkdeParams,
-        encryption_key: String,
-        decryption_key: String,
-    ) -> Result<(), KeyGenerationError>;
 }
 
 pub trait SecureBlock {
     
-    type EncKey: Parameter;
-    type DecKey: Parameter;
     type TrustedSetUp: Parameter;
     type Metadata: Parameter;
     type Error: std::error::Error + Send + Sync + 'static;
 
-    /// Query the encryption key for a given session
-    fn get_enc_key(&self, session_id: SessionId) -> Result<Self::EncKey, Self::Error>;
-
-    /// Query the decryption key for a given session
-    fn get_dec_key(&self, session_id: SessionId) -> Result<Self::DecKey, Self::Error>;
+    /// Create new instance of the secure block with the trusted setup
+    fn setup() -> Self;
 
     /// Get the trusted setup for this app
     fn get_trusted_setup(&self) -> Self::TrustedSetUp;
 
     /// Derive encryption key from metadata for a given session
-    fn generate_enc_key(&self, session_id: SessionId, metadata: Self::Metadata) -> Result<Self::EncKey, Self::Error>;
+    fn gen_enc_key(&self, randomness: Vec<u8>, maybe_enc_keys: Option<Vec<Vec<u8>>>) -> Result<Vec<u8>, Self::Error>;
 
-    /// Derive decryption key from encryption key for a given session
-    fn generate_dec_key(&self, session_id: SessionId, enc_key: &Self::EncKey) -> Result<Self::DecKey, Self::Error>;
+    /// Generate decryption key from encryption key
+    fn gen_dec_key(&self, enc_key: &Vec<u8>) -> Result<(Vec<u8>, u128), Self::Error>;
 
-    /// Verify the given key pair
-    fn verify_key_pair(&self, enc_key: Self::EncKey, dec_key: Self::DecKey) -> Result<(), Self::Error>;
+    /// Verify the given decryption key for a given session 
+    fn verify_dec_key(&self, enc_key: &Vec<u8>, dec_key: &Vec<u8>) -> Result<(), Self::Error>;
 }
 
 #[async_trait]

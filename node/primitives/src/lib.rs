@@ -1,20 +1,18 @@
 pub use crate::Config;
 use std::sync::Arc;
-use dkg_primitives::Sha3Hasher;
-pub use dkg_primitives::{AppState, Verify, AsyncTask, Error, TraceExt, KeyGenerationError, SessionId, Parameter, Event, SecureBlock};
+pub use dkg_primitives::{AppState, DecKey, Verify, AsyncTask, Error, TraceExt, KeyGenerationError, SessionId, Parameter, Event, SecureBlock, TrustedSetupFor};
 use radius_sdk::{signature::{PrivateKeySigner, Address, Signature, SignatureError}, json_rpc::client::{RpcClient, Id}};
 use ethers::{types::Signature as EthersSignature, utils::hash_message};
-use serde::{Serialize, Deserialize, de::DeserializeOwned};
-use skde::delay_encryption::{decrypt, encrypt, SkdeParams};
+use serde::{Serialize, de::DeserializeOwned};
 use futures_util::future::Future;
 use tokio::{task::JoinHandle, sync::mpsc::Sender};
 use async_trait::async_trait;
 
+mod secure_block;
+pub use secure_block::*;
+
 pub mod config;
 pub use config::*;
-
-mod sbb;
-pub use sbb::*;
 
 #[cfg(feature = "experimental")]
 mod randomness;
@@ -23,17 +21,16 @@ mod key;
 
 
 #[derive(Clone)]
-pub struct DkgAppState {
+pub struct DkgAppState<SB> {
     leader_rpc_url: Option<String>,
     signer: PrivateKeySigner,
-    skde_params: Option<SkdeParams>,
     task_spawner: DkgExecutor,
     role: Role,
     threshold: u16,
-    skde: Option<Skde<Sha3Hasher>>,
+    secure_block: SB,
 }
 
-impl DkgAppState {
+impl<SB: SecureBlock> DkgAppState<SB> {
     pub fn new(
         leader_rpc_url: Option<String>,
         signer: PrivateKeySigner,
@@ -41,12 +38,8 @@ impl DkgAppState {
         role: Role,
         threshold: u16,
     ) -> Result<Self, Error> {
-        Ok(Self { leader_rpc_url, signer, skde_params: None, task_spawner, role, threshold, skde: None })
-    }
-
-    pub fn with_skde_params(&mut self, skde_params: SkdeParams) {
-        self.skde_params = Some(skde_params.clone());
-        self.skde = Some(Skde::new(skde_params));
+        let secure_block = SB::setup();
+        Ok(Self { leader_rpc_url, signer, task_spawner, role, threshold, secure_block })
     }
 
     pub fn task_spawner(&self) -> &DkgExecutor {
@@ -54,11 +47,11 @@ impl DkgAppState {
     }
 }
 
-impl AppState for DkgAppState {
+impl<SB: SecureBlock + Parameter> AppState for DkgAppState<SB> {
     type Address = Address;
     type Signature = Signature;
     type Verify = DkgVerify;
-    type SecureBlock = Skde<Sha3Hasher>;
+    type SecureBlock = SB;
     type AsyncTask = DkgExecutor;
     type Error = Error;
 
@@ -68,10 +61,21 @@ impl AppState for DkgAppState {
     fn leader_rpc_url(&self) -> Option<String> { self.leader_rpc_url.clone() }
     fn signer(&self) -> PrivateKeySigner { self.signer.clone() }
     fn address(&self) -> Address { self.signer.address().clone() }
-    fn skde_params(&self) -> SkdeParams { self.skde_params.clone().expect("SKDE params not initialized") }
     fn log_prefix(&self) -> String { format!("{}", self.role) }
+    fn randomness(&self, session_id: SessionId) -> Vec<u8> {
+        match session_id.prev() {
+            Some(prev) => match DecKey::get(prev) {
+                Ok(key) => key.into(),
+                Err(_) => b"default-randomness".to_vec(),
+            },
+            None => {
+                // Underflow means `initial session`
+                return b"initial-randomness".to_vec();
+            }
+        }
+    }
     fn sign<T: Serialize>(&self, message: &T) -> Result<Self::Signature, Self::Error> { self.signer().sign_message(message).map_err(Self::Error::from) }
-    fn secure_block(&self) -> &Self::SecureBlock { &self.skde.as_ref().expect("SKDE not initialized") }
+    fn secure_block(&self) -> &Self::SecureBlock { &self.secure_block }
     fn async_task(&self) -> &Self::AsyncTask { &self.task_spawner }
 }
 
@@ -99,34 +103,6 @@ impl Verify<Signature, Address> for DkgVerify {
         })?;
 
         Ok(Address::from(recovered_pubkey.as_bytes().to_vec()))
-    }
-
-    fn verify_decryption_key(
-        skde_params: &SkdeParams,
-        encryption_key: String,
-        decryption_key: String,
-    ) -> Result<(), dkg_primitives::KeyGenerationError> {
-        let sample_message = "sample_message";
-        let ciphertext = encrypt(skde_params, sample_message, &encryption_key, true)
-            .ok_or_trace()
-            .ok_or_else(|| KeyGenerationError::InternalError("Encryption failed".into()))?;
-        let decrypted_message = match decrypt(skde_params, &ciphertext, &decryption_key) {
-            Ok(message) => message,
-            Err(err) => {
-                tracing::error!("Decryption failed: {}", err);
-                return Err(KeyGenerationError::InternalError(
-                    format!("Decryption failed: {}", err).into(),
-                ));
-            }
-        };
-
-        if decrypted_message.as_str() != sample_message {
-            return Err(KeyGenerationError::InternalError(
-                "Decryption failed: message mismatch".into(),
-            ));
-        }
-
-        Ok(())
     }
 }
 
@@ -185,47 +161,5 @@ impl AsyncTask<Signature, Address, Error> for DkgExecutor {
                 let _ = rpc_client.multicast::<P>(urls, method, &parameter, Id::Null).await.map_err(Error::from);
             }
         ));
-    }
-}
-
-/// Node roles in the DKG network
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub enum Role {
-    /// Leader node responsible for collecting partial keys and coordinating
-    Leader,
-    /// Committee node that generates partial keys
-    Committee,
-    /// Solver node that computes decryption keys
-    Solver,
-    /// Verifier node that monitors the network for Byzantine behavior
-    Verifier,
-    /// Authority node that conducts the secure skde parameter setup
-    Authority,
-}
-
-impl std::fmt::Display for Role {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Role::Leader => write!(f, "leader"),
-            Role::Committee => write!(f, "committee"),
-            Role::Solver => write!(f, "solver"),
-            Role::Verifier => write!(f, "verifier"),
-            Role::Authority => write!(f, "authority"),
-        }
-    }
-}
-
-impl std::str::FromStr for Role {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "leader" => Ok(Role::Leader),
-            "committee" => Ok(Role::Committee),
-            "solver" => Ok(Role::Solver),
-            "verifier" => Ok(Role::Verifier),
-            "authority" => Ok(Role::Authority),
-            _ => Err(format!("Unknown role. Might choose either: leader, committee, solver, verifier, authority")),
-        }
     }
 }

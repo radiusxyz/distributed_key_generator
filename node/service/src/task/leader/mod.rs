@@ -1,23 +1,21 @@
-use super::{AppState, SkdeParams, RpcParameter, DkgAppState, Config, Error};
+use super::{AppState, RpcParameter, Config};
 use crate::{DkgWorker, run_dkg_worker, rpc::{default_external_rpc_server, default_cluster_rpc_server}};
-use dkg_primitives::{Event, AsyncTask};
-use dkg_rpc::{SubmitDecKey, SubmitPartialKey, GetSkdeParams, GetSkdeParamsResponse};
-use radius_sdk::signature::{Address, Signature};
+use dkg_primitives::{Event, AsyncTask, TrustedSetupFor};
+use dkg_rpc::{SubmitDecKey, SubmitEncKey, GetTrustedSetup, GetTrustedSetupResponse};
 use tokio::task::JoinHandle;
 use tracing::{info, error};
 use tokio::sync::mpsc::Receiver;
 
-pub async fn run_node(ctx: &mut DkgAppState, config: Config, rx: Receiver<Event<Signature, Address>>) -> Result<Vec<JoinHandle<()>>, Error> {
+pub async fn run_node<C: AppState>(ctx: &mut C, config: Config, rx: Receiver<Event<C::Signature, C::Address>>) -> Result<Vec<JoinHandle<()>>, C::Error> {
     let mut handle: Vec<JoinHandle<()>> = vec![];
     let authority_rpc_url = config.maybe_authority_rpc_url.clone().expect("Authority RPC URL not set");
     let solver_rpc_url = config.maybe_solver_rpc_url.clone().expect("Solver RPC URL not set");
-    let skde_params = fetch_skde_params(ctx, &authority_rpc_url).await;
-    ctx.with_skde_params(skde_params);
+    fetch_trusted_setup::<C>(ctx, &authority_rpc_url).await;
 
     let external_server = default_external_rpc_server(ctx).await?;
     let server_handle = external_server
-        .register_rpc_method::<SubmitPartialKey<Signature, Address>>()?
-        .register_rpc_method::<SubmitDecKey<Signature, Address>>()?
+        .register_rpc_method::<SubmitEncKey<C::Signature, C::Address>>()?
+        .register_rpc_method::<SubmitDecKey<C::Signature, C::Address>>()?
         .init(config.external_rpc_url.clone())
         .await?;
     handle.push(ctx.async_task().spawn_task(Box::pin(async move { server_handle.stopped().await; })));
@@ -29,7 +27,7 @@ pub async fn run_node(ctx: &mut DkgAppState, config: Config, rx: Receiver<Event<
     info!("External RPC server: {}", config.external_rpc_url);
     info!("Cluster RPC server: {}", config.cluster_rpc_url);
 
-    let mut key_generator_worker = DkgWorker::new(solver_rpc_url, config.session_cycle, rx);
+    let mut key_generator_worker = DkgWorker::<C>::new(solver_rpc_url, config.session_cycle, rx);
     let cloned_ctx = ctx.clone();
     let worker_handle = ctx.async_task().spawn_task(async move {
         if let Err(e) = run_dkg_worker(&cloned_ctx, &mut key_generator_worker).await {
@@ -43,26 +41,26 @@ pub async fn run_node(ctx: &mut DkgAppState, config: Config, rx: Receiver<Event<
 }
 
 // TODO: REFACTOR ME!
-pub async fn fetch_skde_params<C: AppState>(ctx: &C, authority_url: &str) -> SkdeParams {
+pub async fn fetch_trusted_setup<C: AppState>(ctx: &C, authority_url: &str) {
     info!("Fetching SKDE params from authority: {}", authority_url);
     loop {
-        let result: Result<GetSkdeParamsResponse<C::Signature>, C::Error> = ctx
+        let result: Result<GetTrustedSetupResponse<C::Signature, TrustedSetupFor<C>>, C::Error> = ctx
             .async_task()
             .request(
             authority_url.to_string(),
-            <GetSkdeParams as RpcParameter<C>>::method().to_string(),
-            GetSkdeParams,
+            <GetTrustedSetup as RpcParameter<C>>::method().to_string(),
+            GetTrustedSetup,
             )
             .await;
 
         match result {
             Ok(response) => {
-                let GetSkdeParamsResponse { skde_params, signature } = response;
+                let GetTrustedSetupResponse { trusted_setup, signature } = response;
 
-                match ctx.verify_signature(&signature, &skde_params, None) {
+                match ctx.verify_signature(&signature, &trusted_setup, None) {
                     Ok(_signer_address) => { 
                         info!("Successfully fetched SKDE params from authority");
-                        return skde_params;
+                        return;
                     }
                     Err(e) => { panic!("Failed to verify SKDE params signature: {}", e) }
                 }

@@ -1,7 +1,7 @@
-use crate::Role;
 use std::path::PathBuf;
 use radius_sdk::signature::ChainType;
 pub use constants::*;
+use serde::{Deserialize, Serialize};
 
 mod constants {
     pub const DEFAULT_HOME_PATH: &str = ".radius";
@@ -15,9 +15,6 @@ mod constants {
     pub const DEFAULT_TRUSTED_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
     pub const DEFAULT_SESSION_CYCLE_MS: u64 = 500;
     pub const DEFAULT_CHAIN_TYPE: &str = "ethereum";
-    pub const DEFAULT_TIME_PARAM_T: u32 = 4;
-    pub const DEFAULT_GENERATOR: u32 = 4;
-    pub const DEFAULT_MAX_SEQUENCER_NUMBER: u32 = 2;
     pub const DEFAULT_THRESHOLD: u16 = 1;
 }
 
@@ -127,3 +124,45 @@ impl std::fmt::Display for ConfigError {
 }
 
 impl std::error::Error for ConfigError {}
+
+/// Node roles in the DKG network
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub enum Role {
+    /// Leader node responsible for collecting partial keys and coordinating
+    Leader,
+    /// Committee node that generates partial keys
+    Committee,
+    /// Solver node that computes decryption keys
+    Solver,
+    /// Verifier node that monitors the network for Byzantine behavior
+    Verifier,
+    /// Authority node that conducts the secure skde parameter setup
+    Authority,
+}
+
+impl std::fmt::Display for Role {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Role::Leader => write!(f, "leader"),
+            Role::Committee => write!(f, "committee"),
+            Role::Solver => write!(f, "solver"),
+            Role::Verifier => write!(f, "verifier"),
+            Role::Authority => write!(f, "authority"),
+        }
+    }
+}
+
+impl std::str::FromStr for Role {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "leader" => Ok(Role::Leader),
+            "committee" => Ok(Role::Committee),
+            "solver" => Ok(Role::Solver),
+            "verifier" => Ok(Role::Verifier),
+            "authority" => Ok(Role::Authority),
+            _ => Err(format!("Unknown role. Might choose either: leader, committee, solver, verifier, authority")),
+        }
+    }
+}

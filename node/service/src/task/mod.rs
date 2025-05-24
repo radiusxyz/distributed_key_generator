@@ -7,7 +7,13 @@ pub mod committee;
 pub mod leader;
 pub mod solver;
 
-use skde::delay_encryption::SkdeParams;
 use dkg_primitives::{AppState, Error};
-use dkg_node_primitives::{DkgAppState, Config};
+use dkg_node_primitives::Config;
 use radius_sdk::json_rpc::server::{RpcParameter, RpcServer};
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignedTrustedSetup<Signature, TrustedSetup> {
+    pub trusted_setup: TrustedSetup,
+    pub signature: Signature,
+}

@@ -1,7 +1,7 @@
-use dkg_node_primitives::{Config, DkgAppState, DkgExecutor, Role};
+use dkg_node_primitives::{Config, DkgAppState, DkgExecutor, Role, Skde};
 use futures::future::join_all;
 use radius_sdk::{signature::{PrivateKeySigner, ChainType, Signature, Address}, kvstore::KvStoreBuilder};
-use dkg_primitives::{Error, KeyGeneratorList, SessionId, ConfigError, Event};
+use dkg_primitives::{ConfigError, Error, Event, KeyGeneratorList, SecureBlock, SessionId, Sha3Hasher};
 use std::{fs, path::PathBuf};
 use tokio::sync::mpsc::{channel, Sender};
 
@@ -11,11 +11,11 @@ pub use task::*;
 #[cfg(feature = "experimental")]
 mod builder;
 
-fn create_app_state(config: &Config, tx: Sender<Event<Signature, Address>>) -> Result<DkgAppState, Error> {
+fn create_app_state<SB: SecureBlock>(config: &Config, tx: Sender<Event<Signature, Address>>) -> Result<DkgAppState<SB>, Error> {
     let signer = create_signer(&config.private_key_path, config.chain_type);
     let executor = DkgExecutor::new(tx)?;
     tracing::info!("Creating app state for: {:?}", config.role);
-    DkgAppState::new(
+    DkgAppState::<SB>::new(
         config.maybe_leader_rpc_url.clone(),
         signer,
         executor,
@@ -68,7 +68,7 @@ pub async fn run_node(config: Config) -> Result<(), Error> {
 
     init_db(&config)?;
     let (tx, rx) = channel(10);
-    let mut app_state = create_app_state(&config, tx)?;
+    let mut app_state = create_app_state::<Skde<Sha3Hasher>>(&config, tx)?;
     if !config.validate() {
         return Err(Error::Config(ConfigError::InvalidConfig));
     }

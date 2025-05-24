@@ -1,6 +1,6 @@
 use crate::primitives::*;
 use serde::{Deserialize, Serialize};
-use dkg_primitives::{AppState, SessionId, DecKeyFor, SecureBlock};   
+use dkg_primitives::{AppState, SessionId, DecKey};   
 
 /// 09/05
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -9,18 +9,19 @@ pub struct GetDecKey {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Response<DecKey> {
-    key: DecKey,
+pub struct Response {
+    key: Vec<u8>,
 }
 
 impl<C: AppState> RpcParameter<C> for GetDecKey {
-    type Response = Response<DecKeyFor<C>>;
+    type Response = Response;
 
     fn method() -> &'static str {
         "get_decryption_key"
     }
 
-    async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
-        Ok(Response { key: ctx.secure_block().get_dec_key(self.session_id)? })
+    async fn handler(self, _ctx: C) -> Result<Self::Response, RpcError> {
+        let dec_key = DecKey::get(self.session_id)?;
+        Ok(Response { key: dec_key.inner() })
     }
 }

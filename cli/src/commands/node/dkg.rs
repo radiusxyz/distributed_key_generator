@@ -1,6 +1,5 @@
 use crate::Args;
-use dkg_node_primitives::Role;
-use dkg_node_primitives::config::{DEFAULT_TRUSTED_ADDRESS, DEFAULT_CHAIN_TYPE, DEFAULT_SESSION_CYCLE_MS, DEFAULT_THRESHOLD};
+use dkg_node_primitives::config::{Role, DEFAULT_TRUSTED_ADDRESS, DEFAULT_CHAIN_TYPE, DEFAULT_SESSION_CYCLE_MS, DEFAULT_THRESHOLD};
 
 #[derive(Debug, Args)]
 pub struct DkgArgs {

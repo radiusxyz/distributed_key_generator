@@ -33,8 +33,8 @@ impl<C: AppState> RpcParameter<C> for SyncKeyGenerator<C::Address> {
 
     async fn handler(self, _context: C) -> Result<Self::Response, RpcError> {
         info!("Sync key generator - {}", self);
-        let mut key_generator_list = KeyGeneratorList::get_mut()?;
-        if key_generator_list.contains(&self.address) {
+        let mut key_generators = KeyGeneratorList::get_mut()?;
+        if key_generators.contains(&self.address) {
             tracing::warn!("Already synced key generator: {}", self);
             return Ok(());
         }
@@ -46,8 +46,8 @@ impl<C: AppState> RpcParameter<C> for SyncKeyGenerator<C::Address> {
         //     context.config().chain_type().clone(),
         // )?;
 
-        key_generator_list.insert(self.into());
-        key_generator_list.update()?;
+        key_generators.insert(self.into());
+        key_generators.update()?;
 
         Ok(())
     }

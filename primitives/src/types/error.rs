@@ -1,4 +1,5 @@
 use super::Event;
+use crate::ConsensusError;
 use std::io::Error as IoError;
 use radius_sdk::{
     json_rpc::{
@@ -50,22 +51,35 @@ pub enum Error {
     EventError(#[from] tokio::sync::mpsc::error::SendError<Event<Signature, Address>>),
     /// Conversion error
     ConvertError(String),
+    /// Consensus error
+    #[error(transparent)]
+    Consensus(#[from] ConsensusError),
+    #[error(transparent)]
+    SerializeError(#[from] serde_json::Error),
+    #[error(transparent)]
+    SecureBlockError(#[from] Box<dyn std::error::Error>),
 }
 
 /// Error type for key generation process
 #[derive(Debug)]
 pub enum KeyGenerationError {
-    NotRegisteredGenerator(String),
+    NotRegistered(String),
     InvalidPartialKey(String),
     InternalError(String),
     InvalidSignature,
+}
+
+impl From<KeyGenerationError> for Error {
+    fn from(value: KeyGenerationError) -> Self {
+        Self::KeyGeneration(value)
+    }
 }
 
 // Implement Display trait for KeyGenerationError
 impl std::fmt::Display for KeyGenerationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            KeyGenerationError::NotRegisteredGenerator(msg) => {
+            KeyGenerationError::NotRegistered(msg) => {
                 write!(f, "Not registered key generator: {}", msg)
             }
             KeyGenerationError::InvalidPartialKey(msg) => write!(f, "Invalid key format: {}", msg),
@@ -88,12 +102,6 @@ impl std::fmt::Display for Error {
 impl From<SignatureError> for Error {
     fn from(value: SignatureError) -> Self {
         Self::Signature(value)
-    }
-}
-
-impl From<KeyGenerationError> for Error {
-    fn from(value: KeyGenerationError) -> Self {
-        Self::KeyGeneration(value)
     }
 }
 
@@ -125,7 +133,7 @@ impl From<radius_sdk::json_rpc::client::RpcClientError> for Error {
 impl From<KeyGenerationError> for RpcError {
     fn from(error: KeyGenerationError) -> Self {
         match error {
-            KeyGenerationError::NotRegisteredGenerator(msg) => RpcError::from(std::io::Error::new(
+            KeyGenerationError::NotRegistered(msg) => RpcError::from(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("Not registered key generator: {}", msg),
             )),

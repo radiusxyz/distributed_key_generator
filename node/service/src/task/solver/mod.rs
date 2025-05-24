@@ -1,14 +1,14 @@
-use super::{AppState, SkdeParams, RpcParameter, DkgAppState, Config, Error};
+use super::{AppState, RpcParameter, Config};
 use crate::rpc::{default_external_rpc_server, default_cluster_rpc_server};
-use dkg_rpc::external::{GetSkdeParams, GetSkdeParamsResponse, GetKeyGeneratorList, GetKeyGeneratorRpcUrlListResponse};
-use dkg_primitives::{KeyGeneratorList, AsyncTask};
+use dkg_rpc::external::{GetTrustedSetup, GetTrustedSetupResponse, GetKeyGeneratorList, GetKeyGeneratorRpcUrlListResponse};
+use dkg_primitives::{KeyGeneratorList, AsyncTask, TrustedSetupFor};
 use tokio::task::JoinHandle;
+use tracing::info;
 
-pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<Vec<JoinHandle<()>>, Error> {
+pub async fn run_node<C: AppState>(ctx: &mut C, config: Config) -> Result<Vec<JoinHandle<()>>, C::Error> {
     let mut handle: Vec<JoinHandle<()>> = vec![];
     let leader_rpc_url = ctx.leader_rpc_url().expect("Leader RPC URL not set");
-    let skde_params = fetch_skde_params(ctx, &leader_rpc_url).await;
-    ctx.with_skde_params(skde_params);
+    fetch_trusted_setup::<C>(ctx, &leader_rpc_url).await;
     fetch_key_generator_list(ctx, &leader_rpc_url).await?;
 
     let external_server = default_external_rpc_server(ctx).await?;
@@ -26,23 +26,23 @@ pub async fn run_node(ctx: &mut DkgAppState, config: Config) -> Result<Vec<JoinH
 }
 
 // TODO: REFACTOR ME!
-pub async fn fetch_skde_params<C: AppState>(ctx: &C, leader_rpc_url: &str) -> SkdeParams {
+pub async fn fetch_trusted_setup<C: AppState>(ctx: &C, leader_rpc_url: &str) {
     loop {
-        let result: Result<GetSkdeParamsResponse<C::Signature>, C::Error> = ctx
+        let result: Result<GetTrustedSetupResponse<C::Signature, TrustedSetupFor<C>>, C::Error> = ctx
             .async_task()
             .request(
                 leader_rpc_url.to_string(),
-                <GetSkdeParams as RpcParameter<C>>::method().to_string(),
-                GetSkdeParams,
+                <GetTrustedSetup as RpcParameter<C>>::method().to_string(),
+                GetTrustedSetup,
             )
             .await;
 
         match result {
             Ok(response) => {
-                let GetSkdeParamsResponse { skde_params, signature } = response;
+                let GetTrustedSetupResponse { trusted_setup, signature } = response;
 
-                match ctx.verify_signature(&signature, &skde_params, None) {
-                    Ok(_signer_address) => { return skde_params }
+                match ctx.verify_signature(&signature, &trusted_setup, None) {
+                    Ok(_signer_address) => { info!("Successfully fetched SKDE params from leader"); return }
                     Err(e) => { panic!("Failed to verify SKDE params signature: {}", e) }
                 }
             }
