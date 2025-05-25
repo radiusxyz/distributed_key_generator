@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+/// Handler for syncing the newly generated decryption key and store it in the local kvstore
 pub struct SyncDecKey<Signature, Address>(pub SignedCommitment<Signature, Address>);
 
 impl<Signature, Address> SyncDecKey<Signature, Address> {
@@ -12,7 +13,6 @@ impl<Signature, Address> SyncDecKey<Signature, Address> {
     } 
 }
 
-// TODO (Post-PoC): Decouple session start trigger from decryption key sync to improve robustness.
 impl<C: AppState> RpcParameter<C> for SyncDecKey<C::Signature, C::Address> {
     type Response = ();
 

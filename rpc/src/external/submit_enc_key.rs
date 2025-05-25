@@ -27,14 +27,13 @@ impl<C: AppState> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
 
     async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
         let sender = ctx.verify_signature(&self.0.signature, &self.0.commitment, self.sender())?;
-        let session_id = self.0.session_id();
-        info!("Received enc key - session_id: {:?}, sender: {:?}", session_id, sender);
-
-        // Check if key generator is registered in the cluster
         let key_generators = KeyGeneratorList::get()?;
         if !key_generators.contains(&sender) {
             return Err(RpcError::from(KeyGenerationError::NotRegistered(sender.into())));
         } 
+
+        let session_id = self.0.session_id();
+        info!("Received enc key - session_id: {:?}, sender: {:?}", session_id, sender);
 
         // Store commitment for `session` and `sender`
         let commitment = EncKeyCommitment::new(self.inner());
@@ -64,7 +63,7 @@ impl<C: AppState> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
             ctx.async_task().emit_event(Event::ThresholdMet(commitments)).await.map_err(|e| RpcError::from(e))?;
         }
 
-        let _ = multicast_enc_key_ack(&ctx, session_id, self.inner());
+        let _ = multicast_enc_key_ack(&ctx, session_id, commitment);
 
         Ok(())
     }

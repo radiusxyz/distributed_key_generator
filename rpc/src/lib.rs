@@ -1,4 +1,4 @@
-pub use dkg_primitives::{AppState, SessionId, KeyGeneratorList, Commitment, Payload, SignedCommitment, AsyncTask};
+pub use dkg_primitives::{AppState, SessionId, KeyGeneratorList, Commitment, Payload, SignedCommitment, AsyncTask, EncKeyCommitment};
 pub use tracing::info;
 pub use radius_sdk::json_rpc::server::{RpcParameter, RpcError};
 
@@ -12,6 +12,7 @@ pub use payload::*;
 pub use helper::*;
 pub mod helper {
     use super::*;
+    
     /// Helper function to submit encryption key 
     pub async fn submit_enc_key<C: AppState>(
         session_id: SessionId,
@@ -31,9 +32,9 @@ pub mod helper {
     pub fn multicast_enc_key_ack<C: AppState>(
         ctx: &C,
         session_id: SessionId,
-        commitment: SignedCommitment<C::Signature, C::Address>,
+        commitment: EncKeyCommitment<C::Signature, C::Address>,
     ) -> Result<(), C::Error> {
-        let committee_urls =
+        let key_generators =
             KeyGeneratorList::<C::Address>::get()
                 .map_err(|e| C::Error::from(e))?
                 .into_iter()
@@ -43,8 +44,8 @@ pub mod helper {
         let payload = serde_json::to_vec(&commitment)?;
         let commitment = Commitment::new(payload.into(), Some(ctx.address()), session_id);
         let signature = ctx.sign(&commitment)?;
-        info!("Broadcasting enc key ack to {:?}", committee_urls);
-        ctx.async_task().multicast(committee_urls, <SyncEncKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncEncKey(SignedCommitment { commitment, signature }));
+        info!("Broadcasting enc key ack to {:?}", key_generators);
+        ctx.async_task().multicast(key_generators, <SyncEncKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncEncKey(SignedCommitment { commitment, signature }));
         Ok(())
     }
 
@@ -54,11 +55,11 @@ pub mod helper {
         payload: Payload,
         session_id: SessionId,
     ) -> Result<(), C::Error> {
-        let committee_urls = KeyGeneratorList::<C::Address>::get()?.all_rpc_urls(true);
-        info!("Broadcast decryption key - session_id: {:?}, all_dkg_list: {:?}", session_id, committee_urls);
+        let key_generators = KeyGeneratorList::<C::Address>::get()?.all_rpc_urls(true);
+        info!("Broadcast decryption key - session_id: {:?}, all_dkg_list: {:?}", session_id, key_generators);
         let commitment = Commitment::new(payload, Some(ctx.address()), session_id);
         let signature = ctx.sign(&commitment)?;
-        ctx.async_task().multicast(committee_urls, <SyncDecKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncDecKey(SignedCommitment { commitment, signature }));
+        ctx.async_task().multicast(key_generators, <SyncDecKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncDecKey(SignedCommitment { commitment, signature }));
         Ok(())
     } 
 }

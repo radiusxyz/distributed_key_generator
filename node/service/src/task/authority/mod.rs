@@ -17,7 +17,7 @@ pub async fn run_node<C: AppState>(ctx: &mut C, config: Config) -> Result<Vec<Jo
 
     info!("RPC server runs at {}", config.external_rpc_url);
 
-    let handle = ctx.async_task().spawn_task(Box::pin(async move { rpc_server.stopped().await; }));
+    let handle = ctx.async_task().spawn_task(async move { rpc_server.stopped().await; });
 
     Ok(vec![handle])
 }

@@ -5,7 +5,7 @@ use crate::{SignedCommitment, Parameter, AddressT, Error};
 
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
 #[kvstore(key(session_id: &SessionId, address: &Address))]
-/// Kvstore for commitment to a encryption keys mapped by session id and address
+/// Kvstore for signed commitment to a encryption keys mapped by session id and address
 pub struct EncKeyCommitment<Signature, Address>(SignedCommitment<Signature, Address>);
 
 impl<Signature: Clone, Address: Clone> EncKeyCommitment<Signature, Address> {

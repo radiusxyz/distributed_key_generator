@@ -15,11 +15,11 @@ pub async fn run_node<C: AppState>(ctx: &mut C, config: Config) -> Result<Vec<Jo
         .register_rpc_method::<RequestSubmitEncKey>()?
         .init(&config.external_rpc_url)
         .await?;
-    handle.push(ctx.async_task().spawn_task(Box::pin(async move { server_handle.stopped().await; })));
+    handle.push(ctx.async_task().spawn_task(async move { server_handle.stopped().await; }));
     
     let cluster_server = default_cluster_rpc_server(ctx).await?;
     let server_handle = cluster_server.init(&config.cluster_rpc_url).await?;
-    handle.push(ctx.async_task().spawn_task(Box::pin(async move { server_handle.stopped().await; })));
+    handle.push(ctx.async_task().spawn_task(async move { server_handle.stopped().await; }));
 
     tracing::info!("External RPC server: {}", config.external_rpc_url);
     tracing::info!("Cluster RPC server: {}", config.cluster_rpc_url);
