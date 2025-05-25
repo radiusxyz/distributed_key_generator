@@ -32,7 +32,7 @@ pub struct Config {
     pub session_cycle: u64,
     pub private_key_path: PathBuf,
     pub db_path: PathBuf,
-    pub skde_path: Option<PathBuf>,
+    pub trusted_setup_path: Option<PathBuf>,
     pub threshold: u16,
 }
 
@@ -50,7 +50,7 @@ impl Config {
         session_cycle: u64,
         private_key_path: PathBuf,
         db_path: PathBuf,
-        skde_path: Option<PathBuf>,
+        trusted_setup_path: Option<PathBuf>,
         threshold: u16,
     ) -> Self {
         Self {
@@ -66,13 +66,13 @@ impl Config {
             session_cycle,
             private_key_path,
             db_path,
-            skde_path,
+            trusted_setup_path,
             threshold,
         }
     }
 
-    pub fn skde_path(&self) -> PathBuf {
-        self.skde_path.clone().expect("SKDE path not set")
+    pub fn trusted_setup_path(&self) -> PathBuf {
+        self.trusted_setup_path.clone().expect("Trusted setup path not set")
     }
 
     pub fn session_cycle(&self) -> u64 {
@@ -128,15 +128,15 @@ impl std::error::Error for ConfigError {}
 /// Node roles in the DKG network
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub enum Role {
-    /// Leader node responsible for collecting partial keys and coordinating
+    /// Leader node responsible for collecting encryption keys and coordinating
     Leader,
-    /// Committee node that generates partial keys
+    /// Committee node that generates encryption keys
     Committee,
     /// Solver node that computes decryption keys
     Solver,
     /// Verifier node that monitors the network for Byzantine behavior
     Verifier,
-    /// Authority node that conducts the secure skde parameter setup
+    /// Authority node that conducts the secure trusted setup
     Authority,
 }
 

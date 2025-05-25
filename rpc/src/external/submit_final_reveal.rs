@@ -3,7 +3,7 @@ use dkg_primitives::{AppState, SessionId, KeyGeneratorList, AsyncTask, SignedCom
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-// TODO: Add handler to submit partial keys and decryption key from leader to a verifier
+// TODO: Add handler to submit encryption keys and decryption key from leader to a verifier
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SubmitFinalReveal<Signature, Address>(SignedCommitment<Signature, Address>);
 

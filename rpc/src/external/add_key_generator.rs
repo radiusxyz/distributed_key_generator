@@ -29,8 +29,7 @@ impl<Address: Clone> From<AddKeyGenerator<Address>> for KeyGenerator<Address> {
     }
 }
 
-// TODO (Post-PoC): Replace leader self-RPC calls for partial key submission and decryption key sync with direct internal handling.
-// See Issue #38
+// TODO: Replace leader self-RPC calls for encryption key submission and decryption key sync with direct internal handling(Issue #38
 impl<C: AppState> RpcParameter<C> for AddKeyGenerator<C::Address> {
     type Response = ();
 

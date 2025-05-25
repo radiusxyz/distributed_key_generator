@@ -24,31 +24,31 @@ pub async fn run_node<C: AppState>(ctx: &mut C, config: Config) -> Result<Vec<Jo
 
 
 pub fn run_setup_trusted_setup<C: AppState>(ctx: &C, config: &Config) -> PathBuf {
-    let skde_path = config.skde_path().join("skde_params.json");
-    if skde_path.exists() {
-        return skde_path;
+    let path = config.trusted_setup_path().join("trusted_setup.json");
+    if path.exists() {
+        return path;
     }
     let trusted_setup = ctx.secure_block().get_trusted_setup();
     let signature = ctx.sign(&trusted_setup).unwrap();
     let signed_params = SignedTrustedSetup { trusted_setup, signature };
     let serialized = serde_json::to_string_pretty(&signed_params).unwrap();
-    fs::write(&skde_path, serialized).unwrap();
-    info!("Successfully generated SKDE params at {:?}", skde_path);
-    skde_path
+    fs::write(&path, serialized).unwrap();
+    info!("Successfully generated trusted setup at {:?}", path);
+    path
 }
 
 pub fn fetch_trusted_setup<C: AppState>(ctx: &C, path: PathBuf) -> TrustedSetupFor<C> {
-    info!("Fetching SKDE params from {:?}", path);
+    info!("Fetching trusted setup from {:?}", path);
     match fs::read_to_string(&path) {
         Ok(data) => {
             match serde_json::from_str::<SignedTrustedSetup<C::Signature, TrustedSetupFor<C>>>(&data) {
                 Ok(signed) => {
-                    let _ = ctx.verify_signature(&signed.signature, &signed.trusted_setup, None).expect("Failed to verify SKDE params signature");
+                    let _ = ctx.verify_signature(&signed.signature, &signed.trusted_setup, None).expect("Failed to verify trusted setup signature");
                     signed.trusted_setup
                 },
-                Err(e) => { panic!("Failed to parse SKDE param file: {}", e) }
+                Err(e) => { panic!("Failed to parse trusted setup file: {}", e) }
             }
         }
-        Err(e) => { panic!("SKDE params not set for authority node: {}", e) }
+        Err(e) => { panic!("Trusted setup not set for authority node: {}", e) }
     }
 }

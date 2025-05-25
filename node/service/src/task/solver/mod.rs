@@ -42,8 +42,8 @@ pub async fn fetch_trusted_setup<C: AppState>(ctx: &C, leader_rpc_url: &str) {
                 let GetTrustedSetupResponse { trusted_setup, signature } = response;
 
                 match ctx.verify_signature(&signature, &trusted_setup, None) {
-                    Ok(_signer_address) => { info!("Successfully fetched SKDE params from leader"); return }
-                    Err(e) => { panic!("Failed to verify SKDE params signature: {}", e) }
+                    Ok(_signer_address) => { info!("Successfully fetched trusted setup from leader"); return }
+                    Err(e) => { panic!("Failed to verify trusted setup signature: {}", e) }
                 }
             }
             Err(err) => { 

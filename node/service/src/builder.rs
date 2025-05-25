@@ -1,4 +1,4 @@
-use dkg_primitives::AppState;
+use dkg_primitives::{AppState, TrustedSetupFor};
 use skde::delay_encryption::SkdeParams;
 use tokio::runtime::Handle;
 use std::path::PathBuf;
@@ -6,7 +6,6 @@ use std::path::PathBuf;
 pub struct ServiceBuilder<Service: DkgService> {
     service: Service,
     handle: Handle,
-
 }
 
 impl<Service: DkgService> ServiceBuilder<Service> {
@@ -17,17 +16,17 @@ impl<Service: DkgService> ServiceBuilder<Service> {
     pub fn run(&self) {}
 }
 
-pub trait DkgService {
+pub trait DkgService<C: AppState> {
     
     /// Type of error that this service builder can produce
     type Error: std::error::Error + Send + Sync;
     type AppState: AppState;
 
-    /// Setup the SKDE params
-    fn setup_skde_params(&self, path: PathBuf) -> Result<(), Self::Error>;
+    /// Setup the trusted setup
+    fn trusted_setup(&self, path: PathBuf) -> Result<(), Self::Error>;
     
-    /// Fetch the SKDE params
-    fn fetch_skde_params(&self) -> Result<SkdeParams, Self::Error>;
+    /// Fetch the trusted setup
+    fn fetch_trusted_setup(&self) -> Result<TrustedSetupFor<C>, Self::Error>;
 
     /// Fetch the key generator list
     fn fetch_key_generator_list(&self) -> Result<(), Self::Error>;  

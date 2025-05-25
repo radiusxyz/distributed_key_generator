@@ -22,7 +22,7 @@ fn run_node_inner(cli: Box<NodeCommand>) -> Result<(), Error> {
 fn create_configuration(cli: Box<NodeCommand>) -> Config {
     let private_key_path = cli.data_dir.private_key.map_or(PathBuf::from(format!("./tmp/{}/private_key", cli.dkg.role)), |path| path.into());
     let db_path = cli.data_dir.db_path.map_or(PathBuf::from(format!("./tmp/{}/db", cli.dkg.role)), |path| path.into());
-    let skde_path = cli.data_dir.skde_params.map_or(PathBuf::from(format!("./tmp/{}/skde_params", cli.dkg.role)), |path| path.into());
+    let trusted_setup_path = cli.data_dir.trusted_setup.map_or(PathBuf::from(format!("./tmp/{}/trusted_setup", cli.dkg.role)), |path| path.into());
     let chain_type = cli.dkg.chain_type.try_into().expect("Invalid chain type");
     Config::new(
         cli.rpc.external_rpc_url(),
@@ -37,7 +37,7 @@ fn create_configuration(cli: Box<NodeCommand>) -> Config {
         cli.dkg.session_cycle,
         private_key_path,
         db_path,
-        Some(skde_path),
+        Some(trusted_setup_path),
         cli.dkg.threshold,
     )
 }

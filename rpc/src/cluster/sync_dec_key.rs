@@ -36,7 +36,7 @@ impl<C: AppState> RpcParameter<C> for SyncDecKey<C::Signature, C::Address> {
             let next_session_id = session_id.next().unwrap(); // TODO: Remove unwrap
             submit_enc_key(next_session_id, enc_key, &ctx).await?;
 
-            info!("Completed submitting partial key");
+            info!("Completed submitting encryption key");
         }
 
         Ok(())

@@ -42,7 +42,7 @@ pub async fn run_node<C: AppState>(ctx: &mut C, config: Config, rx: Receiver<Eve
 
 // TODO: REFACTOR ME!
 pub async fn fetch_trusted_setup<C: AppState>(ctx: &C, authority_url: &str) {
-    info!("Fetching SKDE params from authority: {}", authority_url);
+    info!("Fetching trusted setup from authority: {}", authority_url);
     loop {
         let result: Result<GetTrustedSetupResponse<C::Signature, TrustedSetupFor<C>>, C::Error> = ctx
             .async_task()
@@ -59,10 +59,10 @@ pub async fn fetch_trusted_setup<C: AppState>(ctx: &C, authority_url: &str) {
 
                 match ctx.verify_signature(&signature, &trusted_setup, None) {
                     Ok(_signer_address) => { 
-                        info!("Successfully fetched SKDE params from authority");
+                        info!("Successfully fetched trusted setup from authority");
                         return;
                     }
-                    Err(e) => { panic!("Failed to verify SKDE params signature: {}", e) }
+                    Err(e) => { panic!("Failed to verify trusted setup signature: {}", e) }
                 }
             }
             Err(err) => { 

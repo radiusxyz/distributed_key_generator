@@ -35,7 +35,7 @@ impl<C: AppState> DkgWorker<C> {
     pub async fn run(&mut self, context: &C) -> Result<(), Error> {
         let mut session_id = SessionId::get_mut()?;
         let submitter_list = SubmitterList::<C::Address>::get(*session_id)?;
-        info!("Partial key address list at {:?}: {:?}", *session_id, submitter_list);
+        info!("Encryption key address list at {:?}: {:?}", *session_id, submitter_list);
         let has_submit = !submitter_list.is_empty();
         let mut key_generators = KeyGeneratorList::<C::Address>::get()?.all_rpc_urls(has_submit);
         info!("Key generator URLs: {:?}", key_generators);
@@ -44,18 +44,18 @@ impl<C: AppState> DkgWorker<C> {
             return Ok(());
         }
         if !has_submit {
-            info!("Requesting partial keys");
+            info!("Requesting encryption keys");
             // 0.5s timeout
-            request_submit_partial_key(context, key_generators, *session_id);
+            request_submit_enc_key(context, key_generators, *session_id);
             return Ok(());
         } else {
             if let Some(event) = self.rx.recv().await {
                 match event {
                     Event::ThresholdMet(list) => {
                         if let Err(err) =
-                            broadcast_finalized_partial_keys::<C>(&context, &mut key_generators, list, self.solver_rpc_url.clone(), *session_id).await
+                            broadcast_finalized_enc_keys::<C>(&context, &mut key_generators, list, self.solver_rpc_url.clone(), *session_id).await
                         {
-                            error!("Error during partial key broadcasting: {:?}", err);
+                            error!("Error during encryption key broadcasting: {:?}", err);
                             return Ok(());
                         }
                     }
@@ -70,7 +70,7 @@ impl<C: AppState> DkgWorker<C> {
     }
 }
 
-pub fn request_submit_partial_key<C: AppState>(
+pub fn request_submit_enc_key<C: AppState>(
     context: &C,
     key_generators: Vec<String>,
     session_id: SessionId,
@@ -78,7 +78,7 @@ pub fn request_submit_partial_key<C: AppState>(
     context.async_task().multicast(key_generators, <RequestSubmitEncKey as RpcParameter<C>>::method().to_string(), RequestSubmitEncKey { session_id });
 }
 
-pub async fn broadcast_finalized_partial_keys<C: AppState>(
+pub async fn broadcast_finalized_enc_keys<C: AppState>(
     ctx: &C,
     key_generator_urls: &mut Vec<String>,
     commitments: Vec<EncKeyCommitment<C::Signature, C::Address>>,
@@ -90,7 +90,7 @@ pub async fn broadcast_finalized_partial_keys<C: AppState>(
     let commitment = Commitment::new(bytes.into(), Some(ctx.address()), session_id);
     let signature = ctx.sign(&commitment)?;
     key_generator_urls.push(solver_url);
-    info!("Broadcasting finalized partial keys to {:?}", key_generator_urls);
+    info!("Broadcasting finalized encryption keys to {:?}", key_generator_urls);
     ctx.async_task().multicast(key_generator_urls.clone(), <SyncFinalizedEncKeys<C::Signature, C::Address> as RpcParameter<C>>::method().to_string(), SignedCommitment { signature, commitment });
     Ok(())
 }

@@ -8,8 +8,8 @@ pub struct DataDirArgs {
     pub db_path: Option<PathBuf>,
     #[arg(long = "datadir.private-key")]
     pub private_key: Option<PathBuf>,
-    #[arg(long = "datadir.skde-params")]
-    pub skde_params: Option<PathBuf>,
+    #[arg(long = "datadir.trusted-setup")]
+    pub trusted_setup: Option<PathBuf>,
 }
 
 impl Default for DataDirArgs {
@@ -20,7 +20,7 @@ impl Default for DataDirArgs {
         Self {
             db_path: Some(config_dir.join("db")),
             private_key: Some(config_dir.join("private_key")),
-            skde_params: Some(config_dir.join("skde_params")),
+            trusted_setup: Some(config_dir.join("trusted_setup")),
         }
     }
 }

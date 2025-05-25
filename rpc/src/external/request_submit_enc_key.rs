@@ -4,11 +4,11 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+/// Handler for submitted encryption key for given session
 pub struct RequestSubmitEncKey {
     pub session_id: SessionId,
 }
 
-// RPC Method for committee members to submit their partial keys to the leader
 impl<C: AppState> RpcParameter<C> for RequestSubmitEncKey {
     type Response = ();
 

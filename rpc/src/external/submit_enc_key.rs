@@ -52,7 +52,7 @@ impl<C: AppState> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
                 }).collect::<Result<Vec<EncKeyCommitment<C::Signature, C::Address>>, KvStoreError>>().map_err(|e| RpcError::from(e)) {
                     Ok(commitments) => commitments,
                     Err(e) => {
-                        error!("Error getting partial key list at {:?}: {:?}", session_id, e);
+                        error!("Error getting encryption key list at {:?}: {:?}", session_id, e);
                         is_threshold_met = false;
                         Vec::new()
                     }

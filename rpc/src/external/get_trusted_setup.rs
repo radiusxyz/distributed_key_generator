@@ -3,7 +3,7 @@ use dkg_primitives::{AppState, TrustedSetupFor, SecureBlock};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-/// RPC method for getting the trusted setup(e.g SKDE params)
+/// RPC method for getting the trusted setup
 pub struct GetTrustedSetup;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
