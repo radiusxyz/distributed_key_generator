@@ -1,4 +1,4 @@
-use crate::primitives::*;
+use crate::*;
 use dkg_primitives::{
     AppState, SessionId, SignedCommitment, SubmitterList, EncKeyCommitment
 };

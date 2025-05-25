@@ -1,4 +1,4 @@
-use crate::primitives::*;
+use crate::*;
 use serde::{Deserialize, Serialize};
 use dkg_primitives::{AppState, EncKey, Error, SessionId};
 #[derive(Clone, Debug, Deserialize, Serialize)]

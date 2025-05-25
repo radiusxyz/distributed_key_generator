@@ -14,11 +14,6 @@ pub use secure_block::*;
 pub mod config;
 pub use config::*;
 
-#[cfg(feature = "experimental")]
-mod randomness;
-#[cfg(feature = "experimental")]
-mod key;
-
 
 #[derive(Clone)]
 pub struct DkgAppState<SB> {

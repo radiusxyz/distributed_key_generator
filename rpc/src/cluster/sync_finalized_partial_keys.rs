@@ -1,4 +1,4 @@
-use crate::{primitives::*, SubmitDecKeyResponse, SubmitDecKey, DecKeyPayload, FinalizedEncKeyPayload};
+use crate::{*, SubmitDecKeyResponse, SubmitDecKey, DecKeyPayload, FinalizedEncKeyPayload};
 use dkg_primitives::{AppState, AsyncTask, Commitment, DecKey, EncKey, Payload, SecureBlock, SessionId, SignedCommitment, SubmitterList};
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};

@@ -19,7 +19,7 @@ pub use get_session_id::GetSessionId;
 pub use get_trusted_setup::{GetTrustedSetup, Response as GetTrustedSetupResponse};
 pub use get_key_generator_list::{GetKeyGeneratorList, Response as GetKeyGeneratorRpcUrlListResponse};
 pub use submit_enc_key::*;
-pub use request_submit_enc_key::{RequestSubmitEncKey, submit_enc_key};
+pub use request_submit_enc_key::RequestSubmitEncKey;
 pub use submit_dec_key::{SubmitDecKey, Response as SubmitDecKeyResponse};
 // pub use submit_final_reveal::SubmitFinalReveal;
 pub use get_health::GetHealth;

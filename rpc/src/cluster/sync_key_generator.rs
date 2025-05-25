@@ -1,4 +1,4 @@
-use crate::primitives::*;
+use crate::*;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use dkg_primitives::{AppState, KeyGenerator, KeyGeneratorList};

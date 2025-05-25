@@ -1,4 +1,4 @@
-use crate::primitives::*;
+use crate::*;
 use dkg_primitives::{AppState, TrustedSetupFor, SecureBlock};
 use serde::{Deserialize, Serialize};
 

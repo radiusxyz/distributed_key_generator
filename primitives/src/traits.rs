@@ -15,11 +15,11 @@ use radius_sdk::{
 
 #[async_trait]
 pub trait AppState: Clone + Send + Sync + 'static {
-    /// The address type that this app accepts
+    /// The address type of this app
     type Address: Parameter + AddressT;
-    /// The signature type that this app accepts
+    /// The signature type of this app
     type Signature: Parameter + Debug;
-    /// Verifier for the signature
+    /// Verifier of this app 
     type Verify: Verify<Self::Signature, Self::Address>;
     /// Type that secures the data
     type SecureBlock: SecureBlock;
@@ -66,8 +66,9 @@ pub trait AppState: Clone + Send + Sync + 'static {
         }
         Ok(signer)
     }
+    /// Get the instance of the secure block
     fn secure_block(&self) -> &Self::SecureBlock;
-    /// Helper function to get task spawner. This should not be used outside of the task module.
+    /// Get the instance of the task spawner
     fn async_task(&self) -> &Self::AsyncTask;
 }
 
@@ -88,7 +89,7 @@ pub trait SecureBlock {
     /// Get the trusted setup for this app
     fn get_trusted_setup(&self) -> Self::TrustedSetUp;
 
-    /// Derive encryption key from metadata for a given session
+    /// Generate encryption key for a given session
     fn gen_enc_key(&self, randomness: Vec<u8>, maybe_enc_keys: Option<Vec<Vec<u8>>>) -> Result<Vec<u8>, Self::Error>;
 
     /// Generate decryption key from encryption key

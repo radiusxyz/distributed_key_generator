@@ -10,7 +10,7 @@ use tracing::{info, warn, error};
 use tokio::sync::mpsc::Receiver;
 
 pub async fn run_dkg_worker<C: AppState>(context: &C, worker: &mut DkgWorker<C>) -> Result<(), Error> {
-    SubmitterList::<C::Address>::initialize(0u64.into()).map_err(|e| Error::from(e))?;
+    SubmitterList::<C::Address>::initialize(0u64.into())?;
     info!("Init DKG worker");
     loop {
         // TODO: loop { future::select!(worker.run(context), timer) }
@@ -33,30 +33,27 @@ impl<C: AppState> DkgWorker<C> {
     }
 
     pub async fn run(&mut self, context: &C) -> Result<(), Error> {
-        let mut session_id = SessionId::get_mut().map_err(|e| Error::from(e))?;
-        let submitter_list = SubmitterList::<C::Address>::get(*session_id).map_err(|e| Error::from(e))?;
+        let mut session_id = SessionId::get_mut()?;
+        let submitter_list = SubmitterList::<C::Address>::get(*session_id)?;
         info!("Partial key address list at {:?}: {:?}", *session_id, submitter_list);
         let has_submit = !submitter_list.is_empty();
-        let is_sync = if has_submit { true } else { false };
-        let mut committee_urls = KeyGeneratorList::<C::Address>::get()
-            .map_err(|e| Error::from(e))?
-            .all_rpc_urls(is_sync);
-        info!("Committee URLs: {:?}", committee_urls);
-        if committee_urls.is_empty() {
+        let mut key_generators = KeyGeneratorList::<C::Address>::get()?.all_rpc_urls(has_submit);
+        info!("Key generator URLs: {:?}", key_generators);
+        if key_generators.is_empty() {
             warn!("No single key generator has been registered! Skipping...");
             return Ok(());
         }
         if !has_submit {
-            info!("Rrequesting partial keys from committee");
+            info!("Requesting partial keys");
             // 0.5s timeout
-            request_submit_partial_key(context, committee_urls, *session_id);
+            request_submit_partial_key(context, key_generators, *session_id);
             return Ok(());
         } else {
             if let Some(event) = self.rx.recv().await {
                 match event {
                     Event::ThresholdMet(list) => {
                         if let Err(err) =
-                            broadcast_finalized_partial_keys::<C>(&context, &mut committee_urls, list, self.solver_rpc_url.clone(), *session_id).await
+                            broadcast_finalized_partial_keys::<C>(&context, &mut key_generators, list, self.solver_rpc_url.clone(), *session_id).await
                         {
                             error!("Error during partial key broadcasting: {:?}", err);
                             return Ok(());
@@ -66,25 +63,24 @@ impl<C: AppState> DkgWorker<C> {
             }
         }
 
-        session_id.next_mut().map_err(|e| Error::from(e))?;
-        SubmitterList::<C::Address>::initialize(session_id.clone()).map_err(|e| Error::from(e))?;
-        session_id.update().map_err(|e| Error::from(e))?;
+        session_id.next_mut()?;
+        SubmitterList::<C::Address>::initialize(session_id.clone())?;
+        session_id.update()?;
         Ok(())
     }
 }
 
 pub fn request_submit_partial_key<C: AppState>(
     context: &C,
-    committee_urls: Vec<String>,
+    key_generators: Vec<String>,
     session_id: SessionId,
 ) {
-    let parameter = RequestSubmitEncKey { session_id };
-    context.async_task().multicast(committee_urls, <RequestSubmitEncKey as RpcParameter<C>>::method().to_string(), parameter);
+    context.async_task().multicast(key_generators, <RequestSubmitEncKey as RpcParameter<C>>::method().to_string(), RequestSubmitEncKey { session_id });
 }
 
 pub async fn broadcast_finalized_partial_keys<C: AppState>(
     ctx: &C,
-    committee_urls: &mut Vec<String>,
+    key_generator_urls: &mut Vec<String>,
     commitments: Vec<EncKeyCommitment<C::Signature, C::Address>>,
     solver_url: String,
     session_id: SessionId,
@@ -93,9 +89,9 @@ pub async fn broadcast_finalized_partial_keys<C: AppState>(
     let bytes = serde_json::to_vec(&payload).map_err(|e| C::Error::from(e))?;
     let commitment = Commitment::new(bytes.into(), Some(ctx.address()), session_id);
     let signature = ctx.sign(&commitment)?;
-    committee_urls.push(solver_url);
-    info!("Broadcasting finalized partial keys to {:?}", committee_urls);
-    ctx.async_task().multicast(committee_urls.clone(), <SyncFinalizedEncKeys<C::Signature, C::Address> as RpcParameter<C>>::method().to_string(), SignedCommitment { signature, commitment });
+    key_generator_urls.push(solver_url);
+    info!("Broadcasting finalized partial keys to {:?}", key_generator_urls);
+    ctx.async_task().multicast(key_generator_urls.clone(), <SyncFinalizedEncKeys<C::Signature, C::Address> as RpcParameter<C>>::method().to_string(), SignedCommitment { signature, commitment });
     Ok(())
 }
 

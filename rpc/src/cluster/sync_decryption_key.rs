@@ -1,4 +1,4 @@
-use crate::{primitives::*, submit_enc_key, DecKeyPayload};
+use crate::{*, DecKeyPayload};
 use dkg_primitives::{AppState, EncKey, DecKey, SignedCommitment, SecureBlock};
 use serde::{Deserialize, Serialize};
 use tracing::info;
