@@ -18,9 +18,6 @@ pub struct RpcServerArgs {
     pub cluster_rpc_url: IpAddr,
     #[arg(long = "cluster.port", default_value_t = DEFAULT_CLUSTER_RPC_PORT)]
     pub cluster_rpc_port: u16,
-    /// Args for other nodes except leader node
-    #[arg(long = "leader.rpc.url")]
-    pub leader_rpc_url: Option<String>,
     /// Args for leader node
     #[arg(long = "authority.rpc.url")]
     pub authority_rpc_url: Option<String>,
@@ -38,7 +35,6 @@ impl Default for RpcServerArgs {
             external_rpc_port: DEFAULT_EXTERNAL_RPC_PORT,
             cluster_rpc_url: IpAddr::V4(Ipv4Addr::LOCALHOST).into(),
             cluster_rpc_port: DEFAULT_CLUSTER_RPC_PORT,
-            leader_rpc_url: None,
             authority_rpc_url: None,
             solver_rpc_url: None,
         }

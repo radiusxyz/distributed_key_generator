@@ -1,16 +1,18 @@
 use dkg_primitives::{AppState, TrustedSetupFor};
-use skde::delay_encryption::SkdeParams;
+use dkg_node_primitives::Role;
 use tokio::runtime::Handle;
-use std::path::PathBuf;
+use std::{path::PathBuf, marker::PhantomData};
 
-pub struct ServiceBuilder<Service: DkgService> {
-    service: Service,
+pub struct ServiceBuilder<S: DkgService<C>, C: AppState> {
+    service: S,
     handle: Handle,
+    role: Role,
+    _phantom: PhantomData<C>,
 }
 
-impl<Service: DkgService> ServiceBuilder<Service> {
-    pub fn new(service: Service, handle: Handle) -> Self {
-        Self { service, handle }
+impl<S: DkgService<C>, C: AppState> ServiceBuilder<S, C> {
+    pub fn new(service: S, handle: Handle, role: Role) -> Self {
+        Self { service, handle, role, _phantom: PhantomData }
     }
 
     pub fn run(&self) {}

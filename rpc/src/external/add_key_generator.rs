@@ -1,19 +1,19 @@
 use crate::{*, cluster::SyncKeyGenerator};
 use dkg_primitives::{AppState, KeyGenerator, KeyGeneratorList, AsyncTask};
-use tracing::{info, warn};
 use serde::{Serialize, Deserialize};
 use std::fmt::{Debug, Display};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AddKeyGenerator<Address> {
+    is_solver: bool,
     address: Address,
     cluster_rpc_url: String,
     external_rpc_url: String,
 }
 
 impl<Address> AddKeyGenerator<Address> {
-    pub fn new(address: Address, cluster_rpc_url: String, external_rpc_url: String) -> Self {
-        Self { address, cluster_rpc_url, external_rpc_url }
+    pub fn new(is_solver: bool, address: Address, cluster_rpc_url: String, external_rpc_url: String) -> Self {
+        Self { is_solver, address, cluster_rpc_url, external_rpc_url }
     }
 }
 
@@ -38,22 +38,17 @@ impl<C: AppState> RpcParameter<C> for AddKeyGenerator<C::Address> {
     }
 
     async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
-        let key_generator_list = KeyGeneratorList::<C::Address>::get()?;
-        if key_generator_list
-            .into_iter()
-            .any(|kg| kg.address() == self.address)
-        {
-            warn!("Duplicate key generator registration for {}", self);
-            return Ok(());
+        let mut urls = Vec::new();
+        if !self.is_solver {
+            KeyGeneratorList::apply(|new| { 
+                if !new.into_iter().any(|kg| kg.address() == self.address) {
+                    new.insert(self.clone().into()); 
+                    urls = new.all_rpc_urls(true); // All cluster RPC urls
+                }
+            })?;
         }
 
-        info!("Add distributed key generation for {}", self);
-        let mut new: Vec<String> = vec![];
-        KeyGeneratorList::apply(|key_generator_list| {
-            key_generator_list.insert(self.clone().into());
-            new = key_generator_list.all_rpc_urls(true);
-        })?;
-        ctx.async_task().multicast(new, <SyncKeyGenerator::<C::Address> as RpcParameter<C>>::method().into(), self);
+        ctx.async_task().multicast(urls, <SyncKeyGenerator::<C::Address> as RpcParameter<C>>::method().into(), self);
 
         Ok(())
     }

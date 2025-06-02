@@ -1,6 +1,6 @@
 use dkg_primitives::AppState;
 use radius_sdk::json_rpc::server::RpcServer;
-use dkg_rpc::{SyncKeyGenerator, SyncEncKey, SyncFinalizedEncKeys, SyncDecKey, AddKeyGenerator, GetKeyGeneratorList, GetEncKey, GetDecKey, GetSessionId, GetTrustedSetup, GetHealth};
+use dkg_rpc::{SyncKeyGenerator, SyncEncKey, SyncFinalizedEncKeys, SyncDecKey, AddKeyGenerator, GetKeyGeneratorList, GetEncKey, GetDecKey, GetSessionId, GetTrustedSetup, SubmitHeartbeat};
 
 /// Configure the cluster RPC server.
 pub async fn default_cluster_rpc_server<C: AppState>(ctx: &mut C) -> Result<RpcServer<C>, C::Error> {
@@ -21,6 +21,6 @@ pub async fn default_external_rpc_server<C: AppState>(ctx: &C) -> Result<RpcServ
         .register_rpc_method::<GetEncKey>()?
         .register_rpc_method::<GetSessionId>()?
         .register_rpc_method::<GetTrustedSetup>()?
-        .register_rpc_method::<GetHealth>()
+        .register_rpc_method::<SubmitHeartbeat>()
         .map_err(C::Error::from)
 }

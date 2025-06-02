@@ -52,3 +52,10 @@ pub struct FinalRevealPayload<Signature, Address> {
     pub enc_commitments: Vec<SignedCommitment<Signature, Address>>,
     pub dec_commitment: SignedCommitment<Signature, Address>,
 }
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AddKeyGeneratorPayload<Address> {
+    address: Address,
+    cluster_rpc_url: String,
+    external_rpc_url: String,
+}

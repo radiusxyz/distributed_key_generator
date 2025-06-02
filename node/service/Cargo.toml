@@ -21,6 +21,8 @@ ethers.workspace = true
 bincode.workspace = true
 futures-util.workspace = true
 futures.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
 
 [features]
 experimental = []

@@ -19,12 +19,10 @@ pub mod helper {
         enc_key: Vec<u8>,
         ctx: &C,
     ) -> Result<(), RpcError> {
-        if let Some(leader_rpc_url) = ctx.leader_rpc_url() {
-            let commitment = Commitment::new(enc_key.into(), Some(ctx.address()), session_id);
-            let signature = ctx.sign(&commitment)?;
-            ctx.async_task().multicast(vec![leader_rpc_url], <SubmitEncKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SubmitEncKey(SignedCommitment { commitment, signature }));
-            return Ok(());
-        }
+        let leader = ctx.current_leader(false).map_err(|e| RpcError::from(e))?;
+        let commitment = Commitment::new(enc_key.into(), Some(ctx.address()), session_id);
+        let signature = ctx.sign(&commitment)?;
+        ctx.async_task().multicast(vec![leader.1], <SubmitEncKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SubmitEncKey(SignedCommitment { commitment, signature }));
         Ok(())
     }
 

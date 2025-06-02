@@ -1,4 +1,5 @@
 pub mod node;
+pub mod trusted_setup;
 
 use clap::Subcommand;
 
@@ -6,7 +7,6 @@ use clap::Subcommand;
 pub enum Commands {
     /// Starts the node
     Node(Box<node::NodeCommand>),
-    /// Create private key
-    #[cfg(feature = "experimental")]
-    CreatePrivateKey(Box<create_private_key::CreatePrivateKeyCommand>),
+    /// Set trusted setup
+    TrustedSetup(Box<trusted_setup::TrustedSetupCommand>),
 }

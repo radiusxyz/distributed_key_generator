@@ -1,6 +1,6 @@
 pub use crate::Config;
 use std::sync::Arc;
-pub use dkg_primitives::{AppState, DecKey, Verify, AsyncTask, Error, TraceExt, KeyGenerationError, SessionId, Parameter, Event, SecureBlock, TrustedSetupFor};
+pub use dkg_primitives::{AppState, DecKey, KeyGeneratorList, Verify, SelectLeader, AsyncTask, Error, TraceExt, KeyGenerationError, SessionId, Round, Parameter, Event, SecureBlock, TrustedSetupFor, AuthService, AuthError};
 use radius_sdk::{signature::{PrivateKeySigner, Address, Signature, SignatureError}, json_rpc::client::{RpcClient, Id}};
 use ethers::{types::Signature as EthersSignature, utils::hash_message};
 use serde::{Serialize, de::DeserializeOwned};
@@ -8,33 +8,34 @@ use futures_util::future::Future;
 use tokio::{task::JoinHandle, sync::mpsc::Sender};
 use async_trait::async_trait;
 
+mod auth;
+pub use auth::*;
+
 mod secure_block;
 pub use secure_block::*;
 
 pub mod config;
 pub use config::*;
 
-
 #[derive(Clone)]
-pub struct DkgAppState<SB> {
-    leader_rpc_url: Option<String>,
+pub struct DkgAppState<SB, AS> {
     signer: PrivateKeySigner,
     task_spawner: DkgExecutor,
     role: Role,
     threshold: u16,
-    secure_block: SB,
+    pub secure_block: Option<SB>,
+    pub auth_service: AS,
 }
 
-impl<SB: SecureBlock> DkgAppState<SB> {
+impl<SB: SecureBlock, AS> DkgAppState<SB, AS> {
     pub fn new(
-        leader_rpc_url: Option<String>,
         signer: PrivateKeySigner,
         task_spawner: DkgExecutor,
         role: Role,
         threshold: u16,
-    ) -> Result<Self, Error> {
-        let secure_block = SB::setup();
-        Ok(Self { leader_rpc_url, signer, task_spawner, role, threshold, secure_block })
+        auth_service: AS,
+    ) -> Result<Self, Error> {        
+        Ok(Self { signer, task_spawner, role, threshold, secure_block: None, auth_service })
     }
 
     pub fn task_spawner(&self) -> &DkgExecutor {
@@ -42,18 +43,28 @@ impl<SB: SecureBlock> DkgAppState<SB> {
     }
 }
 
-impl<SB: SecureBlock + Parameter> AppState for DkgAppState<SB> {
+impl<SB, AS> AppState for DkgAppState<SB, AS> 
+where
+    SB: SecureBlock + Parameter,
+    AS: AuthService<Address> + Clone,
+{
     type Address = Address;
     type Signature = Signature;
     type Verify = DkgVerify;
+    type SelectLeader = DefaultSelectLeader;
     type SecureBlock = SB;
+    type AuthService = AS;
     type AsyncTask = DkgExecutor;
     type Error = Error;
 
     fn threshold(&self) -> u16 { self.threshold }
-    fn is_leader(&self) -> bool { self.role == Role::Leader }
+    fn is_leader(&self) -> bool { 
+        match self.current_leader(false) {
+            Ok((leader, _)) => leader == self.address(),
+            Err(_) => false,
+        }    
+    }
     fn is_solver(&self) -> bool { self.role == Role::Solver }
-    fn leader_rpc_url(&self) -> Option<String> { self.leader_rpc_url.clone() }
     fn signer(&self) -> PrivateKeySigner { self.signer.clone() }
     fn address(&self) -> Address { self.signer.address().clone() }
     fn log_prefix(&self) -> String { format!("{}", self.role) }
@@ -69,8 +80,33 @@ impl<SB: SecureBlock + Parameter> AppState for DkgAppState<SB> {
             }
         }
     }
+    fn current_session(&self) -> Result<SessionId, Self::Error> { SessionId::get().map_err(Self::Error::from) }
+    fn current_round(&self) -> Result<u64, Self::Error> { Round::get().map(|r| r.0).map_err(Self::Error::from) }
+    fn current_leader(&self, is_sync: bool) -> Result<(Self::Address, String), Self::Error> {
+        let current_session = self.current_session().map_err(Self::Error::from)?;
+        let key_generator_list = KeyGeneratorList::<Self::Address>::get().map_err(Self::Error::from)?;
+        let index = Self::SelectLeader::current_leader(current_session.into(), key_generator_list.len()).ok_or(Error::LeaderNotFound)?;
+        let key_generator = key_generator_list.get_by_index(index).ok_or(Error::LeaderNotFound)?;
+        if is_sync {
+            Ok((key_generator.address(), key_generator.cluster_rpc_url().to_string()))
+        } else {
+            Ok((key_generator.address(), key_generator.external_rpc_url().to_string()))
+        }
+    }
+    fn next_leader(&self, is_sync: bool) -> Result<(Self::Address, String), Self::Error> {
+        let current_session = self.current_session().map_err(Self::Error::from)?;
+        let key_generator_list = KeyGeneratorList::<Self::Address>::get().map_err(Self::Error::from)?;
+        let index = Self::SelectLeader::next_leader(current_session.into(), key_generator_list.len()).ok_or(Error::LeaderNotFound)?;
+        let key_generator = key_generator_list.get_by_index(index).ok_or(Error::LeaderNotFound)?;
+        if is_sync {
+            Ok((key_generator.address(), key_generator.cluster_rpc_url().to_string()))
+        } else {
+            Ok((key_generator.address(), key_generator.external_rpc_url().to_string()))
+        }
+    }
     fn sign<T: Serialize>(&self, message: &T) -> Result<Self::Signature, Self::Error> { self.signer().sign_message(message).map_err(Self::Error::from) }
-    fn secure_block(&self) -> &Self::SecureBlock { &self.secure_block }
+    fn auth_service(&self) -> &Self::AuthService { &self.auth_service }
+    fn secure_block(&self) -> &Self::SecureBlock { self.secure_block.as_ref().expect("App not initialized with secure block") }
     fn async_task(&self) -> &Self::AsyncTask { &self.task_spawner }
 }
 
@@ -156,5 +192,24 @@ impl AsyncTask<Signature, Address, Error> for DkgExecutor {
                 let _ = rpc_client.multicast::<P>(urls, method, &parameter, Id::Null).await.map_err(Error::from);
             }
         ));
+    }
+}
+
+/// Simple round robin leader selection
+pub struct DefaultSelectLeader;
+impl SelectLeader for DefaultSelectLeader {
+    fn current_leader(current_session: u64, len: usize) -> Option<usize> {
+        if len == 0 {
+            return None;
+        }
+        let index = current_session % len as u64;
+        Some(index as usize)
+    }
+    fn next_leader(current_session: u64, len: usize) -> Option<usize> {
+        if len == 0 {
+            return None;
+        }
+        let index = (current_session + 1) % len as u64;
+        Some(index as usize)
     }
 }

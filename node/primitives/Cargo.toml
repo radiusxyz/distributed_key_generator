@@ -23,6 +23,8 @@ tracing.workspace = true
 async-trait.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+alloy.workspace = true
 
 [features]
 experimental = []
+verifier = []

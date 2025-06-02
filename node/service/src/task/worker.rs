@@ -1,38 +1,58 @@
-use super::{AppState, Error, RpcParameter};
+use super::{AppState, RpcParameter};
 use dkg_rpc::{RequestSubmitEncKey, SyncFinalizedEncKeys, FinalizedEncKeyPayload};
 use dkg_primitives::{
     AsyncTask, Commitment, Event, SessionId, SignedCommitment, SubmitterList, 
-    EncKeyCommitment, KeyGeneratorList
+    EncKeyCommitment, KeyGeneratorList, AuthService
 };
-use std::time::Duration;
-use tokio::time::sleep;
+use std::{sync::Arc, time::Duration};
+use tokio::sync::Mutex;
 use tracing::{info, warn, error};
 use tokio::sync::mpsc::Receiver;
 
-pub async fn run_dkg_worker<C: AppState>(context: &C, worker: &mut DkgWorker<C>) -> Result<(), Error> {
+pub async fn run_dkg_worker<C>(ctx: &C, worker: Arc<DkgWorker<C>>) -> Result<(), C::Error> 
+where
+    C: AppState
+{
     SubmitterList::<C::Address>::initialize(0u64.into())?;
     info!("Init DKG worker");
+    let current_round = ctx.current_round()?;
+    let session_cycle = worker.session_cycle;
     loop {
-        // TODO: loop { future::select!(worker.run(context), timer) }
-        worker.run(context).await?;
-        // TODO: Timer
-        sleep(Duration::from_millis(worker.session_cycle)).await;
+        if !ctx.auth_service().is_ready(current_round, ctx.threshold())
+            .await
+            .expect("Failed to connect to auth service") 
+        {
+            info!("Waiting for other nodes to be ready");
+            tokio::time::sleep(Duration::from_millis(session_cycle)).await;
+            continue;
+        }
+        let cloned_ctx = ctx.clone();
+        let worker = worker.clone();
+        ctx.async_task().spawn_with_timeout(
+            async move {
+                let mut worker = worker.as_ref().clone();
+                worker.run(&cloned_ctx).await
+            },
+            Duration::from_millis(session_cycle)
+        ).await;
+        tokio::time::sleep(Duration::from_millis(session_cycle)).await;
     }
 }
 
+#[derive(Clone)]
 pub struct DkgWorker<C: AppState> {
     solver_rpc_url: String,
     session_cycle: u64,
-    rx: Receiver<Event<C::Signature, C::Address>>,
+    rx: Arc<Mutex<Receiver<Event<C::Signature, C::Address>>>>,
 }
 
 impl<C: AppState> DkgWorker<C> {
 
     pub fn new(solver_rpc_url: String, session_cycle: u64, rx: Receiver<Event<C::Signature, C::Address>>) -> Self {
-        Self { solver_rpc_url, session_cycle, rx }
+        Self { solver_rpc_url, session_cycle, rx: Arc::new(Mutex::new(rx)) }
     }
 
-    pub async fn run(&mut self, context: &C) -> Result<(), Error> {
+    pub async fn run(&mut self, context: &C) -> Result<(), C::Error> {
         let mut session_id = SessionId::get_mut()?;
         let submitter_list = SubmitterList::<C::Address>::get(*session_id)?;
         info!("Encryption key address list at {:?}: {:?}", *session_id, submitter_list);
@@ -45,11 +65,10 @@ impl<C: AppState> DkgWorker<C> {
         }
         if !has_submit {
             info!("Requesting encryption keys");
-            // 0.5s timeout
             request_submit_enc_key(context, key_generators, *session_id);
             return Ok(());
         } else {
-            if let Some(event) = self.rx.recv().await {
+            if let Some(event) = self.rx.lock().await.recv().await {
                 match event {
                     Event::ThresholdMet(list) => {
                         if let Err(err) =
@@ -63,7 +82,7 @@ impl<C: AppState> DkgWorker<C> {
             }
         }
 
-        session_id.next_mut()?;
+        session_id.next_mut().unwrap();
         SubmitterList::<C::Address>::initialize(session_id.clone())?;
         session_id.update()?;
         Ok(())

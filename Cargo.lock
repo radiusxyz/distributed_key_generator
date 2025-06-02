@@ -141,11 +141,13 @@ dependencies = [
  "alloy-contract",
  "alloy-core",
  "alloy-eips",
+ "alloy-genesis",
  "alloy-network",
  "alloy-provider",
  "alloy-pubsub",
  "alloy-rpc-client",
  "alloy-rpc-types",
+ "alloy-serde",
  "alloy-signer",
  "alloy-signer-local",
  "alloy-transport",
@@ -227,6 +229,7 @@ dependencies = [
  "alloy-dyn-abi",
  "alloy-json-abi",
  "alloy-primitives",
+ "alloy-rlp",
  "alloy-sol-types",
 ]
 
@@ -287,6 +290,18 @@ dependencies = [
  "once_cell",
  "serde",
  "sha2",
+]
+
+[[package]]
+name = "alloy-genesis"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aeec8e6eab6e52b7c9f918748c9b811e87dbef7312a2e3a2ca1729a92966a6af"
+dependencies = [
+ "alloy-primitives",
+ "alloy-serde",
+ "alloy-trie",
+ "serde",
 ]
 
 [[package]]
@@ -2408,6 +2423,8 @@ dependencies = [
  "dkg-primitives",
  "radius-sdk",
  "serde",
+ "serde_json",
+ "skde",
  "tokio",
 ]
 
@@ -2415,6 +2432,7 @@ dependencies = [
 name = "dkg-node-primitives"
 version = "0.1.0"
 dependencies = [
+ "alloy",
  "async-trait",
  "bincode",
  "dkg-primitives",
@@ -2437,6 +2455,7 @@ dependencies = [
 name = "dkg-node-service"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "bincode",
  "dkg-node-primitives",
  "dkg-primitives",
@@ -2448,6 +2467,7 @@ dependencies = [
  "serde",
  "serde_json",
  "skde",
+ "thiserror 2.0.12",
  "tokio",
  "tracing",
 ]
@@ -4991,7 +5011,9 @@ version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8983bb634df7248924ee0c4c3a749609b5abcb082c28fffe3254b3eb3602b307"
 dependencies = [
+ "alloy-rlp",
  "const-hex",
+ "proptest",
  "serde",
  "smallvec",
 ]

@@ -11,6 +11,10 @@ impl Payload {
         Self(payload)
     }
 
+    pub fn inner(&self) -> Vec<u8> {
+        self.0.clone()
+    }
+
     /// Decode the payload into a specific type `T`
     pub fn decode<T: DeserializeOwned>(&self) -> Result<T, ConsensusError> {
         serde_json::from_slice(&self.0).map_err(|_| ConsensusError::InvalidPayload("Invalid payload".to_string()))

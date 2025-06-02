@@ -9,16 +9,9 @@ use skde::{
 use dkg_utils::timestamp;
 use serde::{Serialize, Deserialize};
 
-const DEFAULT_TIME_PARAM_T: u32 = 4;
-const DEFAULT_GENERATOR: u32 = 4;
-const DEFAULT_MAX_SEQUENCER_NUMBER: u32 = 2;
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Skde<H> {
     params: SkdeParams,
-    time_param_t: u32,
-    generator: u32,
-    max_sequencer_number: u32,
     _phantom: PhantomData<H>,
 }
 
@@ -26,19 +19,11 @@ impl<H: Hasher> Skde<H>
 where
     H::Output: AsRef<[u8]>,
 {
-    pub fn new(time_param_t: Option<u32>, generator: Option<u32>, max_sequencer_number: Option<u32>) -> Self {
-        let time_param_t = time_param_t.unwrap_or(DEFAULT_TIME_PARAM_T);
-        let generator = generator.unwrap_or(DEFAULT_GENERATOR);
-        let max_sequencer_number = max_sequencer_number.unwrap_or(DEFAULT_MAX_SEQUENCER_NUMBER);
-        let params = skde::delay_encryption::setup(
-            time_param_t,
-            generator.into(),
-            max_sequencer_number.into(),
-        );
-        Self { params: params, time_param_t, generator, max_sequencer_number, _phantom: Default::default() }
+    pub fn new(params: SkdeParams) -> Self {
+        Self { params, _phantom: Default::default() }
     }
 
-    pub fn enc_key(&self, randomness: Vec<u8>, maybe_enc_keys: Option<Vec<Vec<u8>>>) -> Result<Vec<u8>, Error> {
+    pub fn gen_enc_key(&self, randomness: Vec<u8>, maybe_enc_keys: Option<Vec<Vec<u8>>>) -> Result<Vec<u8>, Error> {
         // If enc_keys are provided, aggregate them
         let enc_key = if let Some(enc_keys) = maybe_enc_keys {
             // Try deserialize enc_keys into PartialKey, error if failed to deserialize
@@ -55,7 +40,7 @@ where
         Ok(enc_key)
     }
 
-    pub fn dec_key(&self, enc_key: &Vec<u8>) -> Result<(Vec<u8>, u128), Error> {
+    pub fn gen_dec_key(&self, enc_key: &Vec<u8>) -> Result<(Vec<u8>, u128), Error> {
         // TODO: Timeout
         let enc_key = serde_json::from_slice::<AggregatedKey>(enc_key).map_err(|err| Error::SecureBlockError(Box::new(err)))?;
         let secure_key = solve_time_lock_puzzle(&self.params, &enc_key).map_err(|err| Error::SecureBlockError(Box::new(err)))?;
@@ -165,8 +150,8 @@ where
     type Metadata = Vec<PartialKey>;
     type Error = Error; 
 
-    fn setup() -> Self {
-        Skde::<H>::new(None, None, None)
+    fn setup(param: Self::TrustedSetUp) -> Self {
+        Skde::<H>::new(param)
     }
 
     fn get_trusted_setup(&self) -> Self::TrustedSetUp {
@@ -174,11 +159,11 @@ where
     }
 
     fn gen_enc_key(&self, randomness: Vec<u8>, maybe_enc_keys: Option<Vec<Vec<u8>>>) -> Result<Vec<u8>, Self::Error> {
-        self.enc_key(randomness, maybe_enc_keys)
+        self.gen_enc_key(randomness, maybe_enc_keys)
     }
 
     fn gen_dec_key(&self, enc_key: &Vec<u8>) -> Result<(Vec<u8>, u128), Self::Error> {
-        self.dec_key(enc_key)
+        self.gen_dec_key(enc_key)
     }
 
     fn verify_dec_key(&self, enc_key: &Vec<u8>, dec_key: &Vec<u8>) -> Result<(), Self::Error> {

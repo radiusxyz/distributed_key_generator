@@ -3,22 +3,22 @@ use serde::{Deserialize, Serialize};
 use dkg_primitives::AppState;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct GetHealth;
+/// Handler for submitting heartbeat
+pub struct SubmitHeartbeat;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Response {
     pub status: bool,
 }
 
-impl<C: AppState> RpcParameter<C> for GetHealth {
+impl<C: AppState> RpcParameter<C> for SubmitHeartbeat {
     type Response = Response;
 
     fn method() -> &'static str {
-        "health"
+        "submit_heartbeat"
     }
 
     async fn handler(self, _context: C) -> Result<Self::Response, RpcError> {
-        // TODO: Implement health check
         Ok(Response { status: true })
     }
 }

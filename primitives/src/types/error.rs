@@ -58,6 +58,9 @@ pub enum Error {
     SerializeError(#[from] serde_json::Error),
     #[error(transparent)]
     SecureBlockError(#[from] Box<dyn std::error::Error>),
+    #[error(transparent)]
+    AuthError(#[from] AuthError),
+    LeaderNotFound,
 }
 
 /// Error type for key generation process
@@ -175,3 +178,19 @@ impl std::fmt::Display for ConfigError {
 }
 
 impl std::error::Error for ConfigError {}
+
+#[derive(thiserror::Error, Debug)]
+pub enum AuthError {
+    #[error("Error on getting state from blockchain!")]
+    GetStateError,
+    #[error("Invalid role!")]
+    InvalidRole,
+    #[error("Error on registering!")]
+    RegisterError,
+    #[error("Error on unregistering!")]
+    UnregisterError,
+    #[error("Already registered!")]
+    AlreadyRegistered,
+    #[error("Any error: {0}")]
+    AnyError(String),
+}

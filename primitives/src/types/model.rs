@@ -157,6 +157,14 @@ impl<Address: AddressT> KeyGeneratorList<Address> {
         Self(Vec::new())
     }
 
+    pub fn get_by_index(&self, index: usize) -> Option<&KeyGenerator<Address>> {
+        self.0.get(index)
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn insert(&mut self, key_generator: KeyGenerator<Address>) {
         self.0.push(key_generator);
     }
@@ -191,6 +199,36 @@ impl<Address> Iterator for KeyGeneratorList<Address> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.pop()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize, Model)]
+#[kvstore(key())]
+pub struct Round(pub u64);
+
+impl From<u64> for Round {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
+impl Round {
+
+    pub fn initialize() -> Result<(), KvStoreError> {
+        Self(0).put()
+    }
+
+    pub fn is_initial(&self) -> bool {
+        self.0 == 0
+    }
+
+    pub fn next(&self) -> Option<Self> {
+        self.0.checked_add(1).map(Self)
+    }
+
+    pub fn next_mut(&mut self) -> Result<(), Error> {
+        *self = self.next().ok_or(Error::Arithmetic)?;
+        Ok(())
     }
 }
 

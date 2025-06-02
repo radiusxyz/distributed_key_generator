@@ -1,7 +1,6 @@
-use crate::node::NodeCommand;
+use crate::{Cli, Commands, node::NodeCommand, trusted_setup::{Method, TrustedSetupCommand, run_skde_inner}};
 use dkg_node_primitives::Config;
 use dkg_primitives::Error;
-use crate::{Cli, Commands};
 use std::path::PathBuf;
 
 pub fn run() -> Result<(), Error> {
@@ -9,6 +8,7 @@ pub fn run() -> Result<(), Error> {
 
     match cli.command {
         Commands::Node(command) => run_node_inner(command),
+        Commands::TrustedSetup(command) => run_trusted_setup_inner(command),
     }
 }
 
@@ -29,10 +29,10 @@ fn create_configuration(cli: Box<NodeCommand>) -> Config {
         cli.rpc.internal_rpc_url(),
         cli.rpc.cluster_rpc_url(),
         cli.rpc.authority_rpc_url,
-        cli.rpc.leader_rpc_url,
         cli.rpc.solver_rpc_url,
         cli.dkg.role,
         cli.dkg.trusted_address,
+        cli.dkg.auth_service_endpoint,
         chain_type,
         cli.dkg.session_cycle,
         private_key_path,
@@ -40,4 +40,11 @@ fn create_configuration(cli: Box<NodeCommand>) -> Config {
         Some(trusted_setup_path),
         cli.dkg.threshold,
     )
+}
+
+fn run_trusted_setup_inner(cli: Box<TrustedSetupCommand>) -> Result<(), Error> {
+    match cli.method {
+        Method::Skde(args) => run_skde_inner(args),
+    }
+    Ok(())
 }
