@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use dkg_primitives::{Error, Hasher, SecureBlock};
+use dkg_primitives::{Error, Hasher, KeyService};
 use skde::{
     delay_encryption::{decrypt, encrypt, solve_time_lock_puzzle, SkdeParams},
     key_aggregation::{aggregate_key, AggregatedKey},
@@ -141,7 +141,7 @@ where
     }
 }
 
-impl<H> SecureBlock for Skde<H> 
+impl<H> KeyService for Skde<H> 
 where 
     H: Hasher,
     H::Output: AsRef<[u8]>,
@@ -150,11 +150,11 @@ where
     type Metadata = Vec<PartialKey>;
     type Error = Error; 
 
-    fn setup(param: Self::TrustedSetUp) -> Self {
+    fn setup(param: SkdeParams) -> Self {
         Skde::<H>::new(param)
     }
 
-    fn get_trusted_setup(&self) -> Self::TrustedSetUp {
+    fn get_trusted_setup(&self) -> SkdeParams {
         self.params.clone()
     }
 

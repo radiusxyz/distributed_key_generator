@@ -1,6 +1,6 @@
 use crate::*;
 use serde::{Deserialize, Serialize};
-use dkg_primitives::{AppState, EncKey, Error, SessionId};
+use dkg_primitives::{Config, EncKey, Error, SessionId};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetEncKey;
 
@@ -16,14 +16,14 @@ impl GetEncKeyResponse {
     }
 }
 
-impl<C: AppState> RpcParameter<C> for GetEncKey {
+impl<C: Config> RpcParameter<C> for GetEncKey {
     type Response = GetEncKeyResponse;
 
     fn method() -> &'static str {
         "get_encryption_key"
     }
 
-    async fn handler(self, _ctx: C) -> Result<Self::Response, RpcError> {
+    async fn handler(self, _ctx: C) -> RpcResult<Self::Response> {
         let session_id = SessionId::get()?;
         loop {
             if let Some(prev) = session_id.prev() {

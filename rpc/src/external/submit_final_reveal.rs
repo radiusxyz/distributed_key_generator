@@ -1,5 +1,5 @@
 use crate::{primitives::*, SyncDecKey, SyncPartialKey};
-use dkg_primitives::{AppState, SessionId, KeyGeneratorList, AsyncTask, SignedCommitment};
+use dkg_primitives::{Config, SessionId, KeyGeneratorList, AsyncTask, SignedCommitment};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -12,7 +12,7 @@ pub struct RevealResponse {
     pub success: bool,
 }
 
-impl<C: AppState> RpcParameter<C> for SubmitFinalReveal<C::Signature, C::Address> {
+impl<C: Config> RpcParameter<C> for SubmitFinalReveal<C::Signature, C::Address> {
     type Response = RevealResponse;
 
     fn method() -> &'static str {
@@ -32,7 +32,7 @@ impl<C: AppState> RpcParameter<C> for SubmitFinalReveal<C::Signature, C::Address
 }
 
 // TODO: Verifier - Broadcast final reveal information from leader
-pub fn _broadcast_final_reveal<C: AppState>(
+pub fn _broadcast_final_reveal<C: Config>(
     session_id: SessionId,
     partial_keys: Vec<SyncPartialKey<C::Signature, C::Address>>,
     sync_decryption_key: SyncDecKey<C::Signature, C::Address>,

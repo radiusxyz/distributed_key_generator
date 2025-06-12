@@ -1,5 +1,5 @@
 use crate::*;
-use dkg_primitives::{AppState, SignedCommitment, Payload};
+use dkg_primitives::{Config, Event, Payload, SignedCommitment};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use std::fmt::{Debug, Display};
@@ -22,17 +22,20 @@ impl<Signature, Address> SubmitDecKey<Signature, Address> {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Response(pub bool);
 
-impl<C: AppState> RpcParameter<C> for SubmitDecKey<C::Signature, C::Address> {
+impl<C: Config> RpcParameter<C> for SubmitDecKey<C::Signature, C::Address> {
     type Response = Response;
 
     fn method() -> &'static str {
         "submit_dec_key"
     }
 
-    async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
+    async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
         let _ = ctx.verify_signature(&self.0.signature, &self.0.commitment, self.0.sender())?;
         info!("{}", self);
-        multicast_dec_key_ack::<C>(&ctx, self.payload(), self.0.session_id())?;
+        let session_id = self.0.session_id();
+        multicast_dec_key_ack::<C>(&ctx, self.payload(), session_id)?;
+        // This is end of the session
+        ctx.async_task().emit_event(Event::EndSession(session_id.into())).await.map_err(|e| RpcError::from(e))?;
         Ok(Response(true))
     }
 }

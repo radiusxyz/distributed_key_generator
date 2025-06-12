@@ -1,7 +1,7 @@
 use crate::*;
 use serde::{Deserialize, Serialize};
 use tracing::info;
-use dkg_primitives::{AppState, KeyGenerator, KeyGeneratorList};
+use dkg_primitives::{Config, KeyGenerator, KeyGeneratorList};
 use std::fmt::{Display, Debug};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -24,16 +24,17 @@ impl<Address: Debug> Display for SyncKeyGenerator<Address> {
     }
 }
 
-impl<C: AppState> RpcParameter<C> for SyncKeyGenerator<C::Address> {
+impl<C: Config> RpcParameter<C> for SyncKeyGenerator<C::Address> {
     type Response = ();
 
     fn method() -> &'static str {
         "sync_key_generator"
     }
 
-    async fn handler(self, _context: C) -> Result<Self::Response, RpcError> {
+    async fn handler(self, _context: C) -> RpcResult<Self::Response> {
         info!("Sync key generator - {}", self);
-        let mut key_generators = KeyGeneratorList::get_mut()?;
+        let current_round = _context.current_round().map_err(|e| C::Error::from(e))?;
+        let mut key_generators = KeyGeneratorList::<C::Address>::get_mut(current_round)?;
         if key_generators.contains(&self.address) {
             tracing::warn!("Already synced key generator: {}", self);
             return Ok(());

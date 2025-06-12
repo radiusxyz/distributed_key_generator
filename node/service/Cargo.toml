@@ -10,6 +10,7 @@ repository.workspace = true
 dkg-primitives.workspace = true
 dkg-node-primitives.workspace = true
 dkg-rpc.workspace = true
+dkg-utils.workspace = true
 radius-sdk.workspace = true
 
 serde.workspace = true
@@ -20,6 +21,7 @@ tracing.workspace = true
 ethers.workspace = true
 bincode.workspace = true
 futures-util.workspace = true
+futures-timer.workspace = true
 futures.workspace = true
 thiserror.workspace = true
 async-trait.workspace = true

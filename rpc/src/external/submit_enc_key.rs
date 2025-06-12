@@ -1,5 +1,5 @@
 use crate::*;
-use dkg_primitives::{AppState, AsyncTask, EncKeyCommitment, Event, KeyGenerationError, KeyGeneratorList, SignedCommitment, SubmitterList};
+use dkg_primitives::{Config, AsyncTask, EncKeyCommitment, Event, KeyGenerationError, KeyGeneratorList, SignedCommitment, SubmitterList};
 use radius_sdk::kvstore::KvStoreError;
 use serde::{Deserialize, Serialize};
 use tracing::{info, error};
@@ -17,7 +17,7 @@ impl<Signature: Clone, Address: Clone> SubmitEncKey<Signature, Address> {
     }
 }
 
-impl<C: AppState> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
+impl<C: Config> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
     
     type Response = ();
 
@@ -25,9 +25,12 @@ impl<C: AppState> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
         "submit_enc_key"
     }
 
-    async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
+    async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
+        // Leader of the session will handle the enc key submission
+        if !ctx.is_leader() { return Ok(()) }
+        let current_round = ctx.current_round().map_err(|e| C::Error::from(e))?;
         let sender = ctx.verify_signature(&self.0.signature, &self.0.commitment, self.sender())?;
-        let key_generators = KeyGeneratorList::get()?;
+        let key_generators = KeyGeneratorList::<C::Address>::get(current_round)?;
         if !key_generators.contains(&sender) {
             return Err(RpcError::from(KeyGenerationError::NotRegistered(sender.into())));
         } 
@@ -60,7 +63,7 @@ impl<C: AppState> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
             }
         })?;
         if is_threshold_met {
-            ctx.async_task().emit_event(Event::ThresholdMet(commitments)).await.map_err(|e| RpcError::from(e))?;
+            ctx.async_task().emit_event(Event::FinalizeKey { commitments, current_session_id: session_id }).await.map_err(|e| RpcError::from(e))?;
         }
 
         let _ = multicast_enc_key_ack(&ctx, session_id, commitment);

@@ -1,6 +1,6 @@
 use crate::*;
 use serde::{Deserialize, Serialize};
-use dkg_primitives::{AppState, EncKeyCommitment, SessionId, SignedCommitment, SubmitterList};
+use dkg_primitives::{Config, EncKeyCommitment, SessionId, SignedCommitment, SubmitterList};
 use tracing::info;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -12,14 +12,14 @@ impl<Signature: Clone, Address: Clone> SyncEncKey<Signature, Address> {
     fn sender(&self) -> Option<Address> { self.0.sender() }
 }
 
-impl<C: AppState> RpcParameter<C> for SyncEncKey<C::Signature, C::Address> {
+impl<C: Config> RpcParameter<C> for SyncEncKey<C::Signature, C::Address> {
     type Response = ();
 
     fn method() -> &'static str {
         "sync_enc_key"
     }
 
-    async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> { 
+    async fn handler(self, ctx: C) -> RpcResult<Self::Response> { 
         if let Some(sender) = self.sender() {
             info!("Received encryption key from {:?}", sender);
             let session_id = self.session_id();

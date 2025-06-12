@@ -1,5 +1,5 @@
 use crate::{*, cluster::SyncKeyGenerator};
-use dkg_primitives::{AppState, KeyGenerator, KeyGeneratorList, AsyncTask};
+use dkg_primitives::{Config, KeyGenerator, KeyGeneratorList, AsyncTask};
 use serde::{Serialize, Deserialize};
 use std::fmt::{Debug, Display};
 
@@ -30,17 +30,18 @@ impl<Address: Clone> From<AddKeyGenerator<Address>> for KeyGenerator<Address> {
 }
 
 // TODO: Replace leader self-RPC calls for encryption key submission and decryption key sync with direct internal handling(Issue #38
-impl<C: AppState> RpcParameter<C> for AddKeyGenerator<C::Address> {
+impl<C: Config> RpcParameter<C> for AddKeyGenerator<C::Address> {
     type Response = ();
 
     fn method() -> &'static str {
         "add_key_generator"
     }
 
-    async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
+    async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
         let mut urls = Vec::new();
         if !self.is_solver {
-            KeyGeneratorList::apply(|new| { 
+            let current_round = ctx.current_round().map_err(|e| C::Error::from(e))?;
+            KeyGeneratorList::<C::Address>::apply(current_round, |new| { 
                 if !new.into_iter().any(|kg| kg.address() == self.address) {
                     new.insert(self.clone().into()); 
                     urls = new.all_rpc_urls(true); // All cluster RPC urls

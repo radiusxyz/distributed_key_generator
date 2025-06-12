@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use radius_sdk::signature::ChainType;
 pub use constants::*;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 mod constants {
     pub const DEFAULT_HOME_PATH: &str = ".radius";
@@ -13,42 +14,38 @@ mod constants {
     pub const DEFAULT_LEADER_RPC_PORT: u16 = 6000;
     pub const DEFAULT_AUTHORITY_RPC_PORT: u16 = 7000;
     pub const DEFAULT_TRUSTED_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
-    pub const DEFAULT_SESSION_CYCLE_MS: u64 = 2000; // 2s
+    pub const DEFAULT_SESSION_DURATION: u64 = 2000; // 2s
     pub const DEFAULT_CHAIN_TYPE: &str = "ethereum";
     pub const DEFAULT_THRESHOLD: u16 = 1;
     pub const DEFAULT_AUTH_SERVICE_ENDPOINT: &str = "http://localhost:8545";
 }
 
 #[derive(Debug, Clone)]
-pub struct Config {
+pub struct NodeConfig {
     pub external_rpc_url: String,
     pub internal_rpc_url: String,
     pub cluster_rpc_url: String,
-    pub maybe_authority_rpc_url: Option<String>,
-    pub maybe_solver_rpc_url: Option<String>,
     pub role: Role,
     pub trusted_address: String,
     pub auth_service_endpoint: String,
     pub chain_type: ChainType,
-    pub session_cycle: u64,
+    pub session_duration_millis: Duration,
     pub private_key_path: PathBuf,
     pub db_path: PathBuf,
     pub trusted_setup_path: Option<PathBuf>,
     pub threshold: u16,
 }
 
-impl Config {
+impl NodeConfig {
     pub fn new(
         external_rpc_url: String, 
         internal_rpc_url: String, 
         cluster_rpc_url: String,
-        maybe_authority_rpc_url: Option<String>,
-        maybe_solver_rpc_url: Option<String>,
         role: Role,
         trusted_address: String,
         auth_service_endpoint: String,
         chain_type: ChainType,
-        session_cycle: u64,
+        session_duration_millis: Duration,
         private_key_path: PathBuf,
         db_path: PathBuf,
         trusted_setup_path: Option<PathBuf>,
@@ -58,13 +55,11 @@ impl Config {
             external_rpc_url,
             internal_rpc_url,
             cluster_rpc_url,
-            maybe_authority_rpc_url,
-            maybe_solver_rpc_url,
             role,
             trusted_address,
             auth_service_endpoint,
             chain_type,
-            session_cycle,
+            session_duration_millis,
             private_key_path,
             db_path,
             trusted_setup_path,
@@ -76,19 +71,42 @@ impl Config {
         self.trusted_setup_path.clone().expect("Trusted setup path not set")
     }
 
-    pub fn session_cycle(&self) -> u64 {
-        self.session_cycle
+    pub fn session_duration_millis(&self) -> Duration {
+        self.session_duration_millis
     }
 
-    pub fn validate(&self) -> bool {
-        match self.role {
-            _ => true
+    pub fn log(&self) -> String {
+        let mut log_lines = Vec::new();
+        
+        // Node role and basic info
+        log_lines.push(format!("👤 Role: {}", self.role.to_string().to_uppercase()));
+        log_lines.push(format!("🔗 Chain Type: {:?}", self.chain_type));
+        
+        // RPC endpoints
+        log_lines.push(format!("🌐 External RPC: {}", self.external_rpc_url));
+        log_lines.push(format!("🔒 Internal RPC: {}", self.internal_rpc_url));
+        log_lines.push(format!("🔄 Cluster RPC: {}", self.cluster_rpc_url));
+
+        // Security and configuration
+        log_lines.push(format!("🔑 Trusted Address: {}", self.trusted_address));
+        log_lines.push(format!("⏱️ Session Duration: {}ms", self.session_duration_millis.as_millis()));
+        log_lines.push(format!("📊 Threshold: {}", self.threshold));
+        
+        // Paths
+        log_lines.push(format!("💾 DB opens at: {}", self.db_path.display()));
+        if let Some(setup_path) = &self.trusted_setup_path {
+            log_lines.push(format!("🔧 Trusted Setup Path: {}", setup_path.display()));
         }
+        
+        // Auth service
+        log_lines.push(format!("🔐 Auth Service Endpoint: {}", self.auth_service_endpoint));
+        
+        log_lines.join("\n")
     }
 }
 
 #[derive(Debug)]
-pub enum ConfigError {
+pub enum NodeConfigError {
     Load(std::io::Error),
     Parse(toml::de::Error),
     RemoveConfigDirectory(std::io::Error),
@@ -100,24 +118,24 @@ pub enum ConfigError {
     InvalidConfig,
 }
 
-impl std::fmt::Display for ConfigError {
+impl std::fmt::Display for NodeConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-impl std::error::Error for ConfigError {}
+impl std::error::Error for NodeConfigError {}
 
 /// Roles in the DKG network
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub enum Role {
-    /// Committee node that generates encryption keys
+    /// Committee node that generates encryption keys and acts as a leader
     Committee,
     /// Solver node that computes decryption keys
     Solver,
     /// Verifier node that monitors the network for Byzantine behavior
     Verifier,
-    /// Authority node that conducts the secure trusted setup
+    /// Authority node that constructs the trusted setup
     Authority,
 }
 
@@ -130,6 +148,10 @@ impl Role {
             #[cfg(feature = "verifier")]
             Self::Verifier,
         ].into_iter()
+    }
+
+    pub fn is_authority(&self) -> bool {
+        self == &Self::Authority
     }
 }
 

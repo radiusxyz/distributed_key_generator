@@ -1,10 +1,10 @@
-use super::{AppState, RpcParameter, Config};
+use super::{Config, RpcParameter, NodeConfig};
 use crate::rpc::{default_external_rpc_server, default_cluster_rpc_server};
 use dkg_rpc::external::{GetKeyGeneratorList, GetKeyGeneratorRpcUrlListResponse};
 use dkg_primitives::{KeyGeneratorList, AsyncTask};
 use tokio::task::JoinHandle;
 
-pub async fn run_node<C: AppState>(ctx: &mut C, config: Config) -> Result<Vec<JoinHandle<()>>, C::Error> {
+pub async fn run_node<C: Config>(ctx: &mut C, config: NodeConfig) -> Result<Vec<JoinHandle<()>>, C::Error> {
     let mut handle: Vec<JoinHandle<()>> = vec![];
     let leader = ctx.current_leader(false).map_err(|e| C::Error::from(e))?;
     fetch_key_generator_list(ctx, &leader.1).await?;
@@ -23,7 +23,7 @@ pub async fn run_node<C: AppState>(ctx: &mut C, config: Config) -> Result<Vec<Jo
     Ok(handle)
 }
 
-pub async fn fetch_key_generator_list<C: AppState>(ctx: &C, leader_rpc_url: &str) -> Result<(), C::Error> {
+pub async fn fetch_key_generator_list<C: Config>(ctx: &C, leader_rpc_url: &str) -> Result<(), C::Error> {
     let response: GetKeyGeneratorRpcUrlListResponse = ctx
         .async_task()
         .request(
@@ -33,6 +33,7 @@ pub async fn fetch_key_generator_list<C: AppState>(ctx: &C, leader_rpc_url: &str
         )
         .await?;
     let key_generator_list: KeyGeneratorList<C::Address> = response.into();
-    key_generator_list.put()?;
+    let current_round = ctx.current_round().map_err(|e| C::Error::from(e))?;
+    key_generator_list.put(current_round)?;
     Ok(())
 }

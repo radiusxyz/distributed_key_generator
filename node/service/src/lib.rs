@@ -1,7 +1,7 @@
-use dkg_node_primitives::{Config, DkgAppState, DkgExecutor, DkgAuth, Role, Skde};
+use dkg_node_primitives::{BasicDkgService, DefaultExecutor, DefaultAuthService, Role, Skde, NodeConfig};
 use futures::future::join_all;
 use radius_sdk::{signature::{PrivateKeySigner, ChainType, Signature, Address}, kvstore::KvStoreBuilder};
-use dkg_primitives::{AppState, TrustedSetupFor, ConfigError, Error, Event, KeyGeneratorList, SecureBlock, SessionId, Sha3Hasher, AuthService};
+use dkg_primitives::{Config, TrustedSetupFor, Error, Event, SessionId, Sha3Hasher, AuthService, KeyService};
 use std::{fs, path::PathBuf};
 use tokio::sync::mpsc::{channel, Sender};
 use tracing::{info, error};
@@ -12,9 +12,9 @@ pub use task::*;
 #[cfg(feature = "experimental")]
 mod builder;
 
-async fn create_secure_block<C: AppState>(ctx: &C, config: &Config) -> Result<C::SecureBlock, C::Error> {
+async fn create_key_service<C: Config>(ctx: &C, config: &NodeConfig) -> Result<C::KeyService, C::Error> {
     // If the role is authority, setup the trusted setup 
-    if config.role == Role::Authority {
+    if config.role.is_authority() {
         let path = config.trusted_setup_path().join("trusted_setup.json");  
         match fs::read_to_string(&path) {
             Ok(data) => {
@@ -23,13 +23,10 @@ async fn create_secure_block<C: AppState>(ctx: &C, config: &Config) -> Result<C:
                         let signature = ctx.sign(&trusted_setup)?;
                         let trusted_setup_bytes = serde_json::to_vec(&trusted_setup)?;
                         let signature_bytes = serde_json::to_vec(&signature)?;
-                        match ctx.auth_service().update_trusted_setup(trusted_setup_bytes, signature_bytes).await {
-                            Ok(_) => {
-                                info!("Successfully updated trusted setup");
-                            }
-                            Err(e) => { panic!("Failed to update trusted setup: {}", e) }
+                        if let Err(_) = ctx.auth_service().update_trusted_setup(trusted_setup_bytes, signature_bytes).await {
+                            error!("Failed to update trusted setup");
                         }
-                        Ok(C::SecureBlock::setup(trusted_setup))
+                        Ok(C::KeyService::setup(trusted_setup))
                     },
                     Err(e) => { panic!("Failed to parse trusted setup file: {}", e) }
                 }
@@ -41,7 +38,7 @@ async fn create_secure_block<C: AppState>(ctx: &C, config: &Config) -> Result<C:
             match ctx.auth_service().get_trusted_setup().await {
                 Ok(trusted_setup) => {
                     let trusted_setup = serde_json::from_slice::<TrustedSetupFor<C>>(&trusted_setup).map_err(|e| C::Error::from(e))?;
-                    return Ok(C::SecureBlock::setup(trusted_setup))
+                    return Ok(C::KeyService::setup(trusted_setup))
                 }
                 Err(e) => { 
                     error!("Failed to get trusted setup: {}", e);
@@ -52,15 +49,15 @@ async fn create_secure_block<C: AppState>(ctx: &C, config: &Config) -> Result<C:
     }
 }
 
-fn create_app_state<SB, AS>(config: &Config, tx: Sender<Event<Signature, Address>>, auth_service: AS) -> Result<DkgAppState<SB, AS>, Error> 
+fn create_dkg_service<KS, AS>(config: &NodeConfig, tx: Sender<Event<Signature, Address>>, auth_service: AS) -> Result<BasicDkgService<KS, AS>, Error> 
 where
-    SB: SecureBlock,
-    AS: AuthService<Address>, 
+    KS: KeyService + Clone,
+    AS: AuthService<Address> + Clone, 
 {
     let signer = create_signer(&config.private_key_path, config.chain_type);
-    let executor = DkgExecutor::new(tx)?;
+    let executor = DefaultExecutor::new(tx)?;
     info!("Creating app state for: {:?}", config.role);
-    DkgAppState::<SB, AS>::new(
+    BasicDkgService::<KS, AS>::new(
         signer,
         executor,
         config.role.clone(),
@@ -88,15 +85,16 @@ fn create_signer(path: &PathBuf, chain_type: ChainType) -> PrivateKeySigner {
     }
 }
 
-fn init_db(config: &Config) -> Result<(), Error> {
+fn init_db(config: &NodeConfig) -> Result<(), Error> {
     KvStoreBuilder::default()
         .set_default_lock_timeout(5000)
         .set_txn_lock_timeout(5000)
         .build(config.db_path.clone())
         .map_err(Error::Database)?
         .init();
-    KeyGeneratorList::<Address>::default().put()?;
-    SessionId::initialize().map_err(Error::Database)?;
+    // Initialize neccessary kv stores
+    let session_id = SessionId::new();
+    session_id.put()?;
     tracing::info!("Successfully initialized the database at {:?}.", config.db_path);
     Ok(())
 }
@@ -109,27 +107,29 @@ fn init_db(config: &Config) -> Result<(), Error> {
 // let service = service_builder.build();
 // service.start();
 //```
-pub async fn run_node(config: Config) -> Result<(), Error> {
+pub async fn run_node(config: NodeConfig) -> Result<(), Error> {
 
     init_db(&config)?;
     
     let (tx, rx) = channel(10);
-    let auth_service = DkgAuth::new(&config.auth_service_endpoint, &config.trusted_address);
-    let mut app_state = create_app_state::<Skde<Sha3Hasher>, DkgAuth>(&config, tx, auth_service)?;
-    app_state.secure_block = Some(create_secure_block(&app_state, &config).await?);
+    let auth_service = DefaultAuthService::new(&config.auth_service_endpoint, &config.trusted_address);
+    let mut dkg_service = create_dkg_service::<Skde<Sha3Hasher>, DefaultAuthService>(&config, tx, auth_service)?;
+    dkg_service.key_service = Some(create_key_service(&dkg_service, &config).await?);
 
-    if !config.validate() {
-        return Err(Error::Config(ConfigError::InvalidConfig));
+    info!("{}", config.log());
+
+    if config.role.is_authority() {
+        return Ok(());
+    } else {
+        let handles = match config.role {
+            Role::Committee => committee::run_node(&mut dkg_service, config, rx).await?,
+            Role::Solver => solver::run_node(&mut dkg_service, config).await?,
+            Role::Verifier => unimplemented!("Verifier is not implemented yet"),
+            _ => panic!("Invalid role"),
+        };
+    
+        join_all(handles).await;
+    
+        Ok(())
     }
-
-    let handles = match config.role {
-        Role::Authority => authority::run_node(&mut app_state, config).await?,
-        Role::Committee => committee::run_node(&mut app_state, config, rx).await?,
-        Role::Solver => solver::run_node(&mut app_state, config).await?,
-        _ => panic!("Invalid role"),
-    };
-
-    join_all(handles).await;
-
-    Ok(())
 }

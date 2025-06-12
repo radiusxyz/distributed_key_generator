@@ -1,4 +1,4 @@
-use std::{fmt::{Debug, Display}, hash::{Hash, Hasher}};
+use std::{fmt::{Debug, Display}, hash::{Hash, Hasher}, ops::Add};
 use radius_sdk::kvstore::{KvStoreError, Model};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use crate::{SignedCommitment, Parameter, AddressT, Error};
@@ -149,11 +149,11 @@ impl<Address: Clone> KeyGenerator<Address> {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
-#[kvstore(key())]
+#[kvstore(key(round: Round))]
 pub struct KeyGeneratorList<Address>(Vec<KeyGenerator<Address>>);
 
 impl<Address: AddressT> KeyGeneratorList<Address> {
-    pub fn default() -> Self {
+    pub fn new() -> Self {
         Self(Vec::new())
     }
 
@@ -175,6 +175,10 @@ impl<Address: AddressT> KeyGeneratorList<Address> {
 
     pub fn contains(&self, address: &Address) -> bool {
         self.0.iter().any(|kg| kg.address == *address)
+    }
+
+    pub fn all_addresses(&self) -> Vec<Address> {
+        self.0.iter().map(|kg| kg.address()).collect()
     }
 
     /// Returns all RPC URLs of the key generators.
@@ -209,6 +213,12 @@ pub struct Round(pub u64);
 impl From<u64> for Round {
     fn from(value: u64) -> Self {
         Self(value)
+    }
+}
+
+impl Into<u64> for Round {
+    fn into(self) -> u64 {
+        self.0
     }
 }
 
@@ -248,9 +258,16 @@ impl Into<u64> for SessionId {
     }
 }
 
+impl Add for SessionId {
+    type Output = Self;
+    fn add(self, other: Self) -> Self::Output {
+        Self(self.0 + other.0)
+    }
+}
+
 impl SessionId {
-    pub fn initialize() -> Result<(), KvStoreError> {
-        Self(0).put()
+    pub fn new() -> Self {
+        Self(0)
     }
 
     pub fn is_initial(&self) -> bool {

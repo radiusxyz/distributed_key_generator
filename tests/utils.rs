@@ -32,7 +32,7 @@ use crate::{
     },
     types::{Config, ConfigOption},
     utils::{signature::create_signature, time::get_current_timestamp},
-    AppState, PartialKeySubmission, SessionId,
+    Config, PartialKeySubmission, SessionId,
 };
 
 const TEST_PRIVATE_KEYS: [&str; 10] = [
@@ -420,7 +420,7 @@ pub async fn generate_partial_key_with_proof(
 /// Submits a partial key from a committee node to a leader node    
 /// Should be removed after test_integration_submit_partial_key_and_ack.rs is removed
 pub async fn submit_partial_key_to_leader(
-    context: &AppState,
+    context: &Config,
     committee_address: Address,
     leader_port: u16,
     partial_key: skde::key_generation::PartialKey,

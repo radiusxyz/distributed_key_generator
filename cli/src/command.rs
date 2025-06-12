@@ -1,7 +1,7 @@
 use crate::{Cli, Commands, node::NodeCommand, trusted_setup::{Method, TrustedSetupCommand, run_skde_inner}};
-use dkg_node_primitives::Config;
+use dkg_node_primitives::NodeConfig;
 use dkg_primitives::Error;
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 pub fn run() -> Result<(), Error> {
     let cli = Cli::init();
@@ -19,22 +19,20 @@ fn run_node_inner(cli: Box<NodeCommand>) -> Result<(), Error> {
     runtime.block_on(dkg_node_service::run_node(config))
 }
 
-fn create_configuration(cli: Box<NodeCommand>) -> Config {
+fn create_configuration(cli: Box<NodeCommand>) -> NodeConfig {
     let private_key_path = cli.data_dir.private_key.map_or(PathBuf::from(format!("./tmp/{}/private_key", cli.dkg.role)), |path| path.into());
     let db_path = cli.data_dir.db_path.map_or(PathBuf::from(format!("./tmp/{}/db", cli.dkg.role)), |path| path.into());
     let trusted_setup_path = cli.data_dir.trusted_setup.map_or(PathBuf::from(format!("./tmp/{}/trusted_setup", cli.dkg.role)), |path| path.into());
     let chain_type = cli.dkg.chain_type.try_into().expect("Invalid chain type");
-    Config::new(
+    NodeConfig::new(
         cli.rpc.external_rpc_url(),
         cli.rpc.internal_rpc_url(),
         cli.rpc.cluster_rpc_url(),
-        cli.rpc.authority_rpc_url,
-        cli.rpc.solver_rpc_url,
         cli.dkg.role,
         cli.dkg.trusted_address,
         cli.dkg.auth_service_endpoint,
         chain_type,
-        cli.dkg.session_cycle,
+        Duration::from_millis(cli.dkg.session_duration),
         private_key_path,
         db_path,
         Some(trusted_setup_path),

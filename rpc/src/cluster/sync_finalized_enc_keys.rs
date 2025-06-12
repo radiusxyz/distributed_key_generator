@@ -1,5 +1,5 @@
 use crate::{*, SubmitDecKeyResponse, SubmitDecKey, DecKeyPayload, FinalizedEncKeyPayload};
-use dkg_primitives::{AppState, AsyncTask, Commitment, DecKey, EncKey, Payload, SecureBlock, SessionId, SignedCommitment, SubmitterList};
+use dkg_primitives::{Config, AsyncTask, Commitment, DecKey, EncKey, Payload, SessionId, SignedCommitment, SubmitterList, KeyService};
 use radius_sdk::json_rpc::server::RpcError;
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
@@ -15,14 +15,14 @@ impl<Signature, Address: Clone> SyncFinalizedEncKeys<Signature, Address> {
     fn payload(&self) -> Payload { self.0.commitment.payload.clone() }
 }
 
-impl<C: AppState> RpcParameter<C> for SyncFinalizedEncKeys<C::Signature, C::Address> {
+impl<C: Config> RpcParameter<C> for SyncFinalizedEncKeys<C::Signature, C::Address> {
     type Response = ();
 
     fn method() -> &'static str {
         "sync_finalized_enc_keys"
     }
 
-    async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
+    async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
         info!("Syncing finalized encryption keys");
         let session_id = self.get_session_id();
         SubmitterList::<C::Address>::initialize(session_id)?;
@@ -39,7 +39,7 @@ impl<C: AppState> RpcParameter<C> for SyncFinalizedEncKeys<C::Signature, C::Addr
             })
             .collect::<Result<Vec<Vec<u8>>, RpcError>>()?;
         enc_keys.sort();
-        let enc_key = ctx.secure_block().gen_enc_key(ctx.randomness(session_id), Some(enc_keys))?;
+        let enc_key = ctx.key_service().gen_enc_key(ctx.randomness(session_id), Some(enc_keys))?;
         EncKey::new(enc_key.clone()).put(session_id)?;
         if ctx.is_solver() {
             let _ = ctx.verify_signature(&self.0.signature, &self.0.commitment, self.0.commitment.sender.clone())?;
@@ -83,13 +83,13 @@ impl<C: AppState> RpcParameter<C> for SyncFinalizedEncKeys<C::Signature, C::Addr
 }
 
 /// Solve based on the given encryption keys and create a signed commitment
-fn solve<C: AppState>(
+fn solve<C: Config>(
     ctx: &C,
     session_id: SessionId,
     enc_key: &Vec<u8>,
 ) -> Result<SignedCommitment<C::Signature, C::Address>, RpcError> {
-    let (dec_key, solve_at) = ctx.secure_block().gen_dec_key(enc_key).map_err(|e| RpcError::from(e))?;
-    ctx.secure_block().verify_dec_key(&enc_key, &dec_key).map_err(|e| RpcError::from(e))?;
+    let (dec_key, solve_at) = ctx.key_service().gen_dec_key(enc_key).map_err(|e| RpcError::from(e))?;
+    ctx.key_service().verify_dec_key(&enc_key, &dec_key).map_err(|e| RpcError::from(e))?;
     DecKey::new(dec_key.clone()).put(session_id).map_err(|e| RpcError::from(e))?;
     let payload = DecKeyPayload::new(dec_key, solve_at);
     let bytes = serde_json::to_vec(&payload).map_err(|e| RpcError::from(e))?;

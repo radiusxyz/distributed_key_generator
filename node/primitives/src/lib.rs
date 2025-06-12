@@ -1,6 +1,6 @@
-pub use crate::Config;
+pub use crate::NodeConfig;
 use std::sync::Arc;
-pub use dkg_primitives::{AppState, DecKey, KeyGeneratorList, Verify, SelectLeader, AsyncTask, Error, TraceExt, KeyGenerationError, SessionId, Round, Parameter, Event, SecureBlock, TrustedSetupFor, AuthService, AuthError};
+pub use dkg_primitives::{Config, DecKey, KeyGeneratorList, Verify, SelectLeader, AsyncTask, Error, TraceExt, KeyGenerationError, SessionId, Round, Parameter, Event, TrustedSetupFor, AuthService, AuthError, KeyService};
 use radius_sdk::{signature::{PrivateKeySigner, Address, Signature, SignatureError}, json_rpc::client::{RpcClient, Id}};
 use ethers::{types::Signature as EthersSignature, utils::hash_message};
 use serde::{Serialize, de::DeserializeOwned};
@@ -17,45 +17,56 @@ pub use secure_block::*;
 pub mod config;
 pub use config::*;
 
+
 #[derive(Clone)]
-pub struct DkgAppState<SB, AS> {
+/// Instance of DKG service
+pub struct BasicDkgService<KS, AS> {
     signer: PrivateKeySigner,
-    task_spawner: DkgExecutor,
+    task_spawner: DefaultExecutor,
     role: Role,
     threshold: u16,
-    pub secure_block: Option<SB>,
+    pub key_service: Option<KS>,
     pub auth_service: AS,
 }
 
-impl<SB: SecureBlock, AS> DkgAppState<SB, AS> {
+impl<KS, AS> BasicDkgService<KS, AS> {
     pub fn new(
         signer: PrivateKeySigner,
-        task_spawner: DkgExecutor,
+        task_spawner: DefaultExecutor,
         role: Role,
         threshold: u16,
         auth_service: AS,
     ) -> Result<Self, Error> {        
-        Ok(Self { signer, task_spawner, role, threshold, secure_block: None, auth_service })
+        Ok(Self { signer, task_spawner, role, threshold, key_service: None, auth_service })
     }
 
-    pub fn task_spawner(&self) -> &DkgExecutor {
+    pub fn task_spawner(&self) -> &DefaultExecutor {
         &self.task_spawner
     }
 }
 
-impl<SB, AS> AppState for DkgAppState<SB, AS> 
+mod consts {
+    // Day in 2s session
+    pub const DAY: u64 = 1800;
+    pub const WEEK: u64 = 7 * DAY;
+    pub const MONTH: u64 = 30 * DAY;
+}
+
+impl<KS, AS> Config for BasicDkgService<KS, AS> 
 where
-    SB: SecureBlock + Parameter,
+    KS: KeyService + Parameter,
     AS: AuthService<Address> + Clone,
 {
     type Address = Address;
     type Signature = Signature;
-    type Verify = DkgVerify;
     type SelectLeader = DefaultSelectLeader;
-    type SecureBlock = SB;
+    type VerifyService = DefaultVerifier;
+    type KeyService = KS;
     type AuthService = AS;
-    type AsyncTask = DkgExecutor;
+    type AsyncTask = DefaultExecutor;
     type Error = Error;
+
+    const ROUND_DURATION: u64 = consts::WEEK;
 
     fn threshold(&self) -> u16 { self.threshold }
     fn is_leader(&self) -> bool { 
@@ -67,7 +78,6 @@ where
     fn is_solver(&self) -> bool { self.role == Role::Solver }
     fn signer(&self) -> PrivateKeySigner { self.signer.clone() }
     fn address(&self) -> Address { self.signer.address().clone() }
-    fn log_prefix(&self) -> String { format!("{}", self.role) }
     fn randomness(&self, session_id: SessionId) -> Vec<u8> {
         match session_id.prev() {
             Some(prev) => match DecKey::get(prev) {
@@ -81,11 +91,19 @@ where
         }
     }
     fn current_session(&self) -> Result<SessionId, Self::Error> { SessionId::get().map_err(Self::Error::from) }
-    fn current_round(&self) -> Result<u64, Self::Error> { Round::get().map(|r| r.0).map_err(Self::Error::from) }
+    fn current_round(&self) -> Result<Round, Self::Error> { Round::get().map_err(Self::Error::from) }
+    fn should_end_round(&self, current_session: u64) -> bool { 
+        if current_session == 0 {
+            tracing::info!("First round");
+            return false;
+        }
+        current_session % Self::ROUND_DURATION == 0 
+    }
     fn current_leader(&self, is_sync: bool) -> Result<(Self::Address, String), Self::Error> {
         let current_session = self.current_session().map_err(Self::Error::from)?;
-        let key_generator_list = KeyGeneratorList::<Self::Address>::get().map_err(Self::Error::from)?;
-        let index = Self::SelectLeader::current_leader(current_session.into(), key_generator_list.len()).ok_or(Error::LeaderNotFound)?;
+        let current_round = self.current_round()?;
+        let key_generator_list = KeyGeneratorList::<Self::Address>::get(current_round).map_err(Self::Error::from)?;
+        let index = if current_session.is_initial() { 0 } else { Self::SelectLeader::current_leader(current_session.into(), key_generator_list.len()).ok_or(Error::LeaderNotFound)? };
         let key_generator = key_generator_list.get_by_index(index).ok_or(Error::LeaderNotFound)?;
         if is_sync {
             Ok((key_generator.address(), key_generator.cluster_rpc_url().to_string()))
@@ -95,7 +113,8 @@ where
     }
     fn next_leader(&self, is_sync: bool) -> Result<(Self::Address, String), Self::Error> {
         let current_session = self.current_session().map_err(Self::Error::from)?;
-        let key_generator_list = KeyGeneratorList::<Self::Address>::get().map_err(Self::Error::from)?;
+        let current_round = self.current_round()?;
+        let key_generator_list = KeyGeneratorList::<Self::Address>::get(current_round).map_err(Self::Error::from)?;
         let index = Self::SelectLeader::next_leader(current_session.into(), key_generator_list.len()).ok_or(Error::LeaderNotFound)?;
         let key_generator = key_generator_list.get_by_index(index).ok_or(Error::LeaderNotFound)?;
         if is_sync {
@@ -106,13 +125,13 @@ where
     }
     fn sign<T: Serialize>(&self, message: &T) -> Result<Self::Signature, Self::Error> { self.signer().sign_message(message).map_err(Self::Error::from) }
     fn auth_service(&self) -> &Self::AuthService { &self.auth_service }
-    fn secure_block(&self) -> &Self::SecureBlock { self.secure_block.as_ref().expect("App not initialized with secure block") }
+    fn key_service(&self) -> &Self::KeyService { self.key_service.as_ref().expect("App not initialized with key service") }
     fn async_task(&self) -> &Self::AsyncTask { &self.task_spawner }
 }
 
-pub struct DkgVerify;
+pub struct DefaultVerifier;
 
-impl Verify<Signature, Address> for DkgVerify {
+impl Verify<Signature, Address> for DefaultVerifier {
     fn verify_signature<T: Serialize>(signature: &Signature, message: &T) -> Result<Address, SignatureError> {
         let message_bytes = bincode::serialize(message).map_err(SignatureError::SerializeMessage)?;
         let message_hash = hash_message(message_bytes);
@@ -138,23 +157,23 @@ impl Verify<Signature, Address> for DkgVerify {
 }
 
 #[derive(Clone)]
-pub struct DkgExecutor {
+pub struct DefaultExecutor {
     rpc_client: Arc<RpcClient>,
     sender: Sender<Event<Signature, Address>>,
 }
 
-impl DkgExecutor {
+impl DefaultExecutor {
     pub fn new(sender: Sender<Event<Signature, Address>>) -> Result<Self, Error> {
         let rpc_client = RpcClient::new().map_err(Error::from)?;
         Ok(Self { rpc_client: Arc::new(rpc_client), sender })
     }
 }
 
-unsafe impl Send for DkgExecutor {}
-unsafe impl Sync for DkgExecutor {}
+unsafe impl Send for DefaultExecutor {}
+unsafe impl Sync for DefaultExecutor {}
 
 #[async_trait]
-impl AsyncTask<Signature, Address, Error> for DkgExecutor {
+impl AsyncTask<Signature, Address, Error> for DefaultExecutor {
     fn spawn_task<Fut>(&self, fut: Fut) -> JoinHandle<()>
     where
         Fut: Future<Output = ()> + Send + 'static,

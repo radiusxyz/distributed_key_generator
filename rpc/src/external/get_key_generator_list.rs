@@ -1,6 +1,6 @@
 use crate::*;
 use serde::{Deserialize, Serialize};
-use dkg_primitives::{AppState, KeyGeneratorList, KeyGenerator, AddressT};
+use dkg_primitives::{Config, KeyGeneratorList, KeyGenerator, AddressT};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetKeyGeneratorList;
@@ -20,7 +20,7 @@ pub struct Response {
 
 impl<Address: AddressT> From<Response> for KeyGeneratorList<Address> {
     fn from(value: Response) -> Self {
-        let mut key_generator_list = KeyGeneratorList::<Address>::default();
+        let mut key_generator_list = KeyGeneratorList::<Address>::new();
         let key_generator_rpc_url_list = value.urls;
         for key_generator_rpc_info in key_generator_rpc_url_list {
             key_generator_list.insert(KeyGenerator::new(key_generator_rpc_info.address.into(), key_generator_rpc_info.cluster_rpc_url, key_generator_rpc_info.external_rpc_url));
@@ -29,15 +29,16 @@ impl<Address: AddressT> From<Response> for KeyGeneratorList<Address> {
     }
 }
 
-impl<C: AppState> RpcParameter<C> for GetKeyGeneratorList {
+impl<C: Config> RpcParameter<C> for GetKeyGeneratorList {
     type Response = Response;
 
     fn method() -> &'static str {
         "get_key_generator_list"
     }
 
-    async fn handler(self, _context: C) -> Result<Self::Response, RpcError> {
-        let key_generator_list = KeyGeneratorList::<C::Address>::get()?;
+    async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
+        let current_round = ctx.current_round().map_err(|e| C::Error::from(e))?;
+        let key_generator_list = KeyGeneratorList::<C::Address>::get(current_round)?;
 
         let urls: Vec<KeyGeneratorRpcInfo> = key_generator_list
             .into_iter()

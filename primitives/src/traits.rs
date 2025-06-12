@@ -1,4 +1,4 @@
-use crate::{AuthError, Event, KeyGenerationError, SessionId};
+use crate::{AuthError, Event, KeyGenerationError, SessionId, Error, Round, KeyGenerator};
 use std::{hash::Hash, fmt::Debug, time::Duration};
 use futures::future::{select, Either};
 use futures_util::{pin_mut, future::Future};
@@ -14,23 +14,24 @@ use radius_sdk::{
 };
 
 #[async_trait]
-pub trait AppState: Clone + Send + Sync + 'static {
-    /// The address type of this app
+pub trait Config: Clone + Send + Sync + 'static {
+    /// The address type of the runtime
     type Address: Parameter + AddressT;
-    /// The signature type of this app
+    /// The signature type of the runtime
     type Signature: Parameter + Debug;
-    /// Verifier of this app 
-    type Verify: Verify<Self::Signature, Self::Address>;
     /// Type that selects the leader
     type SelectLeader: SelectLeader;
-    /// Type that generates key
-    type SecureBlock: SecureBlock;
-    /// Auth service of this app which interacts with the registry(e.g blockchain)
+    /// Type that serves related to verification 
+    type VerifyService: Verify<Self::Signature, Self::Address>;
+    /// Type that serves related key generation(e.g Set trusted setup, generate encryption and decryption key)
+    type KeyService: KeyService;
+    /// Auth service of the runtime which interacts with the registry(e.g blockchain)
     type AuthService: AuthService<Self::Address>;
     /// Type that spawns tasks
     type AsyncTask: AsyncTask<Self::Signature, Self::Address, Self::Error>;
-    /// The error type of this app
+    /// The error type of the runtime
     type Error: std::error::Error 
+        + From<Error>
         + From<SignatureError>
         + From<KvStoreError>
         + From<KeyGenerationError>
@@ -42,6 +43,9 @@ pub trait AppState: Clone + Send + Sync + 'static {
         + Sync 
         + 'static;
 
+    /// The duration of a round in milliseconds
+    const ROUND_DURATION: u64;
+
     /// Get the threshold for the key generator
     fn threshold(&self) -> u16;
     /// Check if the node is a leader
@@ -52,8 +56,6 @@ pub trait AppState: Clone + Send + Sync + 'static {
     fn signer(&self) -> PrivateKeySigner;
     /// Get the node's address which is used for creating payload
     fn address(&self) -> Self::Address;
-    /// Helper function to get log prefix
-    fn log_prefix(&self) -> String;
     /// Helper function to get signature
     fn sign<T: Serialize>(&self, message: &T) -> Result<Self::Signature, Self::Error>;
     /// Get the randomness for a given session id
@@ -61,14 +63,16 @@ pub trait AppState: Clone + Send + Sync + 'static {
     /// Get the current session id
     fn current_session(&self) -> Result<SessionId, Self::Error>;
     /// Get the current round
-    fn current_round(&self) -> Result<u64, Self::Error>;
-    /// Get the current leader which will return (address, rpc_url)
+    fn current_round(&self) -> Result<Round, Self::Error>;
+    /// Check if the node should move to the next round
+    fn should_end_round(&self, current_session: u64) -> bool;
+    /// Get the current leader on the current session which will return (address, rpc_url)
     fn current_leader(&self, is_sync: bool) -> Result<(Self::Address, String), Self::Error>;
-    /// Get the next leader which will return (address, rpc_url)
+    /// Get the next leader on the next session which will return (address, rpc_url)
     fn next_leader(&self, is_sync: bool) -> Result<(Self::Address, String), Self::Error>;
     /// Helper function to verify signature. Verification will be handled by `Self::VerifySignature` type
     fn verify_signature<T: Serialize>(&self, signature: &Self::Signature, message: &T, maybe_signer: Option<Self::Address>) -> Result<Self::Address, Self::Error> {
-        let signer = Self::Verify::verify_signature(signature, message)
+        let signer = Self::VerifyService::verify_signature(signature, message)
             .map_err(|e| Self::Error::from(e))?;
         if let Some(address) = maybe_signer {
             if signer != address {
@@ -79,13 +83,13 @@ pub trait AppState: Clone + Send + Sync + 'static {
     }
     /// Get the instance of the auth service
     fn auth_service(&self) -> &Self::AuthService;
-    /// Get the instance of the key generator
-    fn secure_block(&self) -> &Self::SecureBlock;
+    /// Get the instance of the key service
+    fn key_service(&self) -> &Self::KeyService;
     /// Get the instance of the task spawner
     fn async_task(&self) -> &Self::AsyncTask;
 }
 
-/// A trait for selecting the leader
+/// Interface for selecting the leader
 pub trait SelectLeader {
     /// Get the current leader which will return the index of the leader
     fn current_leader(current_session: u64, len: usize) -> Option<usize>;
@@ -93,12 +97,15 @@ pub trait SelectLeader {
     fn next_leader(current_session: u64, len: usize) -> Option<usize>;
 }
 
+
+/// Inferface for verifying related 
 pub trait Verify<Signature, Address> {
 
     fn verify_signature<T: Serialize>(signature: &Signature, message: &T) -> Result<Address, SignatureError>;
 }
 
-pub trait SecureBlock {
+/// Interface for generating (encryption, decryption) keys
+pub trait KeyService {
     
     type TrustedSetUp: Parameter + Debug;
     type Metadata: Parameter;
@@ -120,6 +127,7 @@ pub trait SecureBlock {
     fn verify_dec_key(&self, enc_key: &Vec<u8>, dec_key: &Vec<u8>) -> Result<(), Self::Error>;
 }
 
+/// Interface for spawning async tasks
 #[async_trait]
 pub trait AsyncTask<Signature, Address, Error>: Send + Sync + Unpin + 'static 
 where
@@ -188,17 +196,8 @@ pub trait AuthService<Address>: Send + Sync + 'static {
     async fn get_solver_info(&self) -> Result<(Address, String, String), Self::Error>;
     /// Check if the given address is active at the given round
     async fn is_active(&self, current_round: u64, address: Address) -> Result<bool, Self::Error>;
-    /// Get the current auth registry
-    async fn current_auth_registry(&self, current_round: u64) -> Result<Vec<Address>, Self::Error>;
-    /// Get the next auth registry
-    async fn next_auth_registry(&self, next_round: u64) -> Result<Vec<Address>, Self::Error>;
-    /// Check if the given round is ready
-    async fn is_ready(&self, current_round: u64, threshold: u16) -> Result<bool, Self::Error>;
-}
-
-/// Interface for managing the session
-pub trait SessionManager {
-    
+    /// Get the key generators for a given round
+    async fn get_key_generators(&self, current_round: u64) -> Result<Vec<KeyGenerator<Address>>, Self::Error>;
 }
 
 /// Using unwrap() inside the task block is caught by tracing::error!().
