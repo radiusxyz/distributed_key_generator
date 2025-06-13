@@ -1,6 +1,6 @@
 use crate::*;
 use serde::{Deserialize, Serialize};
-use dkg_primitives::{Config, EncKey, Error, SessionId};
+use dkg_primitives::{Config, EncKey, RuntimeError, SessionId};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetEncKey;
 
@@ -32,7 +32,7 @@ impl<C: Config> RpcParameter<C> for GetEncKey {
                     Err(_) => continue,
                 }
             } else {
-                return Err(RpcError::from(Error::Arithmetic));
+                return Err(RpcError::from(RuntimeError::Arithmetic));
             }
         }
     }

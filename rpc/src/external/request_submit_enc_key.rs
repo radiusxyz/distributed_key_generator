@@ -21,7 +21,7 @@ impl<C: Config> RpcParameter<C> for RequestSubmitEncKey {
         if !session_id.is_initial() { return Ok(()); } 
         info!("Generate enc key for session {:?}", session_id);
         let enc_key = ctx.key_service().gen_enc_key(ctx.randomness(session_id), None)?;
-        submit_enc_key::<C>(session_id, enc_key, &ctx).await?;
+        submit_enc_key::<C>(session_id, enc_key, &ctx)?;
         Ok(())
     }
 }

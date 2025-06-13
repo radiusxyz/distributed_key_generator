@@ -4250,6 +4250,7 @@ dependencies = [
  "jsonrpsee",
  "serde",
  "serde_json",
+ "thiserror 2.0.12",
  "tower 0.4.13",
  "tower-http",
  "trait-variant",
@@ -4389,6 +4390,7 @@ dependencies = [
  "rocksdb",
  "serde",
  "serde_json",
+ "thiserror 2.0.12",
  "tokio",
 ]
 

@@ -1,9 +1,9 @@
 use crate::{Cli, Commands, node::NodeCommand, trusted_setup::{Method, TrustedSetupCommand, run_skde_inner}};
 use dkg_node_primitives::NodeConfig;
-use dkg_primitives::Error;
+use dkg_primitives::RuntimeResult;
 use std::{path::PathBuf, time::Duration};
 
-pub fn run() -> Result<(), Error> {
+pub fn run() -> RuntimeResult<()> {
     let cli = Cli::init();
 
     match cli.command {
@@ -12,7 +12,7 @@ pub fn run() -> Result<(), Error> {
     }
 }
 
-fn run_node_inner(cli: Box<NodeCommand>) -> Result<(), Error> {
+fn run_node_inner(cli: Box<NodeCommand>) -> RuntimeResult<()> {
     let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     let config = create_configuration(cli);
     // TODO: handle the result
@@ -41,7 +41,7 @@ fn create_configuration(cli: Box<NodeCommand>) -> NodeConfig {
     )
 }
 
-fn run_trusted_setup_inner(cli: Box<TrustedSetupCommand>) -> Result<(), Error> {
+fn run_trusted_setup_inner(cli: Box<TrustedSetupCommand>) -> RuntimeResult<()> {
     match cli.method {
         Method::Skde(args) => run_skde_inner(args),
     }

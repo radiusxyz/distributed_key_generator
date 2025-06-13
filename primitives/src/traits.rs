@@ -1,4 +1,4 @@
-use crate::{AuthServiceError, Event, KeyServiceError, SessionId, Error, Round, KeyGenerator, KeyGeneratorList};
+use crate::{AuthServiceError, RuntimeEvent, KeyServiceError, SessionId, RuntimeError, Round, KeyGenerator, KeyGeneratorList, EncKey, DecKey};
 use std::{hash::Hash, fmt::Debug, time::Duration};
 use futures::future::{select, Either};
 use futures_util::{pin_mut, future::Future};
@@ -17,7 +17,7 @@ use radius_sdk::{
 #[async_trait]
 pub trait Config: Clone + Send + Sync + 'static {
     /// The address type of the runtime
-    type Address: Parameter + AddressT;
+    type Address: AddressT;
     /// The signature type of the runtime
     type Signature: Parameter + Debug;
     /// Type that selects the leader
@@ -34,7 +34,7 @@ pub trait Config: Clone + Send + Sync + 'static {
     type DbManager: DbManager<Self::Address>;
     /// The error type of the runtime
     type Error: std::error::Error 
-        + From<Error>
+        + IsType<RuntimeError>
         + From<KvStoreError>
         + From<KeyServiceError>
         + From<RpcServerError>
@@ -62,10 +62,6 @@ pub trait Config: Clone + Send + Sync + 'static {
     fn sign<T: Serialize>(&self, message: &T) -> Result<Self::Signature, Self::Error>;
     /// Get the randomness for a given session id
     fn randomness(&self, session_id: SessionId) -> Vec<u8>;
-    /// Get the current session id
-    fn current_session(&self) -> Result<SessionId, Self::Error>;
-    /// Get the current round
-    fn current_round(&self) -> Result<Round, Self::Error>;
     /// Check if the node should move to the next round
     fn should_end_round(&self, current_session: u64) -> bool;
     /// Get the current leader on the current session which will return (address, rpc_url)
@@ -97,10 +93,10 @@ pub trait SelectLeader {
     fn select_leader(current_session: u64, len: usize) -> Option<usize>;
 } 
 
-/// Interface for backend services
-pub trait DbManager<Address: Parameter + AddressT> {
+/// Interface for db client services
+pub trait DbManager<Address: AddressT> {
 
-    type Error: From<Error> + From<KvStoreError>;
+    type Error: IsType<RuntimeError> + From<KvStoreError> + std::error::Error + Send + Sync + 'static;
 
     /// Get the current session id
     fn current_session(&self) -> Result<SessionId, Self::Error> {
@@ -115,27 +111,39 @@ pub trait DbManager<Address: Parameter + AddressT> {
     }
 
     /// Increase the session id by one
-    fn increase_session(&self) -> Result<(), Self::Error> {
+    fn increase_session(&self, amount: u64) -> Result<(), Self::Error> {
         let mut kv_store: SessionId = SessionId::get()?;
-        kv_store.next_mut()?;
-        let _ = kv_store.put()?;
+        kv_store.next_mut(amount)?.put()?;
         Ok(())
     }
 
     /// Increase the round by one
     fn increase_round(&self) -> Result<(), Self::Error> {
         let mut kv_store: Round = Round::get()?;
-        kv_store.next_mut()?;
-        let _ = kv_store.put()?;
+        kv_store.next_mut()?.put()?;
         Ok(())
     }
 
     /// Update the key generator list
-    fn update_key_generator_list(&self, key_generators: Vec<KeyGenerator<Address>>) -> Result<(), Self::Error> {
-        let current_round = self.current_round()?;
+    fn update_key_generator_list(&self, round: Round, key_generators: Vec<KeyGenerator<Address>>) -> Result<(), Self::Error> {
         let kv_store: KeyGeneratorList<Address> = key_generators.into();
-        let _ = kv_store.put(current_round)?;
+        let _ = kv_store.put(round)?;
         Ok(())
+    }
+
+    fn get_key_generator_list(&self, round: Round) -> Result<KeyGeneratorList<Address>, Self::Error> {
+        let kv_store: KeyGeneratorList<Address> = KeyGeneratorList::get(round)?;
+        Ok(kv_store)
+    }
+
+    fn get_enc_key(&self, session_id: SessionId) -> Result<EncKey, Self::Error> {
+        let kv_store: EncKey = EncKey::get(session_id)?;
+        Ok(kv_store)
+    }
+
+    fn get_dec_key(&self, session_id: SessionId) -> Result<DecKey, Self::Error> {
+        let kv_store: DecKey = DecKey::get(session_id)?;
+        Ok(kv_store)
     }
 }
 
@@ -151,7 +159,7 @@ pub trait KeyService {
     
     type TrustedSetUp: Parameter + Debug;
     type Metadata: Parameter;
-    type Error: std::error::Error + Send + Sync + 'static;
+    type Error: std::error::Error + Send + Sync + 'static + Into<RuntimeError>;
 
     /// Create new instance of the secure block with the trusted setup
     fn setup(param: Self::TrustedSetUp) -> Self;
@@ -173,7 +181,7 @@ pub trait KeyService {
 #[async_trait]
 pub trait AsyncTask<Signature, Address, Error>: Send + Sync + Unpin + 'static 
 where
-    Error: std::error::Error + Send + Sync + 'static,
+    Error: std::error::Error + Send + Sync + 'static + Into<RuntimeError>,
 {
     fn spawn_task<Fut>(&self, fut: Fut) -> JoinHandle<()>
     where
@@ -204,7 +212,7 @@ where
     }
 
     /// Helper function to emit an event
-    async fn emit_event(&self, event: Event<Signature, Address>) -> Result<(), Error>;
+    async fn emit_event(&self, event: RuntimeEvent<Signature, Address>) -> Result<(), Error>;
 
     // TODO: REFACTOR ME! - RPC Worker should be a separate thread
     /// API for RPC request which waits for the response
@@ -226,7 +234,7 @@ where
 pub trait AuthService<Address>: Send + Sync + 'static {
 
     /// The error type of the auth service
-    type Error: std::error::Error + Send + Sync + 'static;
+    type Error: std::error::Error + Send + Sync + 'static + Into<RuntimeError>;
 
     /// Update the trusted setup
     async fn update_trusted_setup(&self, bytes: Vec<u8>, signature: Vec<u8>) -> Result<(), Self::Error>;
@@ -277,9 +285,9 @@ pub trait Parameter: Serialize + DeserializeOwned + Clone + Send + Sync + 'stati
 
 impl<T> Parameter for T where T: Serialize + DeserializeOwned + Clone + Send + Sync + 'static {}
 
-pub trait AddressT: Hash + Eq + PartialEq + Clone + Debug + Into<String> + From<String> {}
+pub trait AddressT: Parameter + Hash + Eq + PartialEq + Clone + Debug + Into<String> + From<String> {}
 
-impl<T> AddressT for T where T: Hash + Eq + PartialEq + Clone + Debug + Into<String> + From<String> {}
+impl<T> AddressT for T where T: Parameter + Hash + Eq + PartialEq + Clone + Debug + Into<String> + From<String> {}
 
 /// A trait for types that can be used as a hasher
 pub trait Hasher {

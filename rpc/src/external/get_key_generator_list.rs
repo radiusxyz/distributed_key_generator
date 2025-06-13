@@ -1,6 +1,6 @@
 use crate::*;
 use serde::{Deserialize, Serialize};
-use dkg_primitives::{Config, KeyGeneratorList, KeyGenerator, AddressT};
+use dkg_primitives::{Config, KeyGeneratorList, KeyGenerator, AddressT, DbManager};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetKeyGeneratorList;
@@ -37,7 +37,7 @@ impl<C: Config> RpcParameter<C> for GetKeyGeneratorList {
     }
 
     async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
-        let current_round = ctx.current_round().map_err(|e| C::Error::from(e))?;
+        let current_round = ctx.db_manager().current_round().map_err(|e| RpcError::from(e))?;
         let key_generator_list = KeyGeneratorList::<C::Address>::get(current_round)?;
 
         let urls: Vec<KeyGeneratorRpcInfo> = key_generator_list

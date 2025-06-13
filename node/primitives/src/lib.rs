@@ -1,8 +1,8 @@
 pub use crate::NodeConfig;
 use std::sync::Arc;
 pub use dkg_primitives::{
-    Config, DecKey, KeyGeneratorList, VerifyService, SelectLeader, AsyncTask, Error, 
-    TraceExt, KeyServiceError, SessionId, Round, Parameter, Event, TrustedSetupFor, 
+    Config, DecKey, KeyGeneratorList, VerifyService, SelectLeader, AsyncTask, RuntimeResult, RuntimeError,
+    TraceExt, KeyServiceError, SessionId, Round, Parameter, RuntimeEvent, TrustedSetupFor, 
     AuthService, AuthServiceError, KeyService, DbManager, AddressT
 };
 use radius_sdk::{signature::{PrivateKeySigner, Address, Signature, SignatureError}, json_rpc::client::{RpcClient, Id}};
@@ -15,8 +15,8 @@ use async_trait::async_trait;
 mod auth;
 pub use auth::*;
 
-mod secure_block;
-pub use secure_block::*;
+mod key_service;
+pub use key_service::*;
 
 pub mod config;
 pub use config::*;
@@ -24,25 +24,26 @@ pub use config::*;
 
 #[derive(Clone)]
 /// Instance of DKG service
-pub struct BasicDkgService<KS, AS> {
+pub struct BasicDkgService<KS, AS, DB> {
     signer: PrivateKeySigner,
     task_executor: DefaultTaskExecutor,
     role: Role,
     threshold: u16,
     pub key_service: Option<KS>,
     pub auth_service: AS,
-    pub db_manager: DefaultDbManager,
+    pub db_manager: DB,
 }
 
-impl<KS, AS> BasicDkgService<KS, AS> {
+impl<KS, AS, DB> BasicDkgService<KS, AS, DB> {
     pub fn new(
         signer: PrivateKeySigner,
         task_executor: DefaultTaskExecutor,
         role: Role,
         threshold: u16,
         auth_service: AS,
-    ) -> Result<Self, Error> {        
-        Ok(Self { signer, task_executor, role, threshold, key_service: None, auth_service, db_manager: DefaultDbManager })
+        db_manager: DB,
+    ) -> RuntimeResult<Self> {        
+        Ok(Self { signer, task_executor, role, threshold, key_service: None, auth_service, db_manager })
     }
 
     pub fn task_executor(&self) -> &DefaultTaskExecutor {
@@ -56,10 +57,11 @@ mod consts {
     pub const WEEK: u64 = 7 * DAY;
 }
 
-impl<KS, AS> Config for BasicDkgService<KS, AS> 
+impl<KS, AS, DB> Config for BasicDkgService<KS, AS, DB> 
 where
     KS: KeyService + Parameter,
     AS: AuthService<Address> + Clone,
+    DB: DbManager<Address, Error = RuntimeError> + Clone + Send + Sync + 'static,
 {
     type Address = Address;
     type Signature = Signature;
@@ -68,8 +70,8 @@ where
     type KeyService = KS;
     type AuthService = AS;
     type AsyncTask = DefaultTaskExecutor;
-    type DbManager = DefaultDbManager;
-    type Error = Error;
+    type DbManager = DB;
+    type Error = RuntimeError;
 
     const ROUND_DURATION: u64 = consts::WEEK;
 
@@ -85,7 +87,7 @@ where
     fn address(&self) -> Address { self.signer.address().clone() }
     fn randomness(&self, session_id: SessionId) -> Vec<u8> {
         match session_id.prev() {
-            Some(prev) => match DecKey::get(prev) {
+            Some(prev) => match self.db_manager().get_dec_key(prev) {
                 Ok(key) => key.into(),
                 Err(_) => b"default-randomness".to_vec(),
             },
@@ -95,8 +97,6 @@ where
             }
         }
     }
-    fn current_session(&self) -> Result<SessionId, Self::Error> { SessionId::get().map_err(Self::Error::from) }
-    fn current_round(&self) -> Result<Round, Self::Error> { Round::get().map_err(Self::Error::from) }
     fn should_end_round(&self, current_session: u64) -> bool { 
         if current_session == 0 {
             tracing::info!("First round");
@@ -105,11 +105,11 @@ where
         current_session % Self::ROUND_DURATION == 0 
     }
     fn current_leader(&self, is_sync: bool) -> Result<(Self::Address, String), Self::Error> {
-        let current_session = self.current_session().map_err(Self::Error::from)?;
-        let current_round = self.current_round()?;
+        let current_session = self.db_manager().current_session()?;
+        let current_round = self.db_manager().current_round()?;
         let key_generator_list = KeyGeneratorList::<Self::Address>::get(current_round).map_err(Self::Error::from)?;
-        let index = if current_session.is_initial() { 0 } else { Self::SelectLeader::select_leader(current_session.into(), key_generator_list.len()).ok_or(Error::LeaderNotFound)? };
-        let key_generator = key_generator_list.get_by_index(index).ok_or(Error::LeaderNotFound)?;
+        let index = if current_session.is_initial() { 0 } else { Self::SelectLeader::select_leader(current_session.into(), key_generator_list.len()).ok_or(RuntimeError::LeaderNotFound)? };
+        let key_generator = key_generator_list.get_by_index(index).ok_or(RuntimeError::LeaderNotFound)?;
         if is_sync {
             Ok((key_generator.address(), key_generator.cluster_rpc_url().to_string()))
         } else {
@@ -135,7 +135,6 @@ impl VerifyService<Signature, Address> for DefaultVerifier {
         if sig_fixed[64] < 27 { sig_fixed[64] += 27; }
         let ethers_signature = EthersSignature::try_from(sig_fixed.as_slice())
             .map_err(|_| SignatureError::UnsupportedChainType("Expected Ethereum signature".to_string()))?;
-
         let recovered_pubkey = ethers_signature.recover(message_hash).map_err(|_| SignatureError::RecoverError)?;
 
         Ok(Address::from(recovered_pubkey.as_bytes().to_vec()))
@@ -144,19 +143,19 @@ impl VerifyService<Signature, Address> for DefaultVerifier {
 
 #[derive(Clone)]
 pub struct DefaultDbManager;
-impl<Address: Parameter + AddressT> DbManager<Address> for DefaultDbManager {
-    type Error = Error;
+impl<Address: AddressT> DbManager<Address> for DefaultDbManager {
+    type Error = RuntimeError;
 }
 
 #[derive(Clone)]
 pub struct DefaultTaskExecutor {
     rpc_client: Arc<RpcClient>,
-    sender: Sender<Event<Signature, Address>>,
+    sender: Sender<RuntimeEvent<Signature, Address>>,
 }
 
 impl DefaultTaskExecutor {
-    pub fn new(sender: Sender<Event<Signature, Address>>) -> Result<Self, Error> {
-        let rpc_client = RpcClient::new().map_err(Error::from)?;
+    pub fn new(sender: Sender<RuntimeEvent<Signature, Address>>) -> RuntimeResult<Self> {
+        let rpc_client = RpcClient::new().map_err(RuntimeError::from)?;
         Ok(Self { rpc_client: Arc::new(rpc_client), sender })
     }
 }
@@ -165,7 +164,7 @@ unsafe impl Send for DefaultTaskExecutor {}
 unsafe impl Sync for DefaultTaskExecutor {}
 
 #[async_trait]
-impl AsyncTask<Signature, Address, Error> for DefaultTaskExecutor {
+impl AsyncTask<Signature, Address, RuntimeError> for DefaultTaskExecutor {
     fn spawn_task<Fut>(&self, fut: Fut) -> JoinHandle<()>
     where
         Fut: Future<Output = ()> + Send + 'static,
@@ -180,17 +179,17 @@ impl AsyncTask<Signature, Address, Error> for DefaultTaskExecutor {
         tokio::task::spawn_blocking(move || tokio::runtime::Handle::current().block_on(Box::pin(fut)))
     }
 
-    async fn emit_event(&self, event: Event<Signature, Address>) -> Result<(), Error> {
-        self.sender.send(event).await.map_err(|e| Error::from(e))
+    async fn emit_event(&self, event: RuntimeEvent<Signature, Address>) -> RuntimeResult<()> {
+        self.sender.send(event).await.map_err(|e| RuntimeError::from(e))
     }
 
-    async fn request<P, R>(&self, url: String, method: String, parameter: P) -> Result<R, Error> 
+    async fn request<P, R>(&self, url: String, method: String, parameter: P) -> RuntimeResult<R> 
     where
         P: Serialize + Send + Sync + 'static,
         R: DeserializeOwned + Send + Sync + 'static,
     {
         let rpc_client = self.rpc_client.clone();
-        let res = rpc_client.request::<P, R>(url, method, parameter, Id::Null).await.map_err(Error::from)?;
+        let res = rpc_client.request::<P, R>(url, method, parameter, Id::Null).await.map_err(RuntimeError::from)?;
         return Ok(res);  
     } 
     fn multicast<P>(&self, urls: Vec<String>, method: String, parameter: P) 
@@ -200,7 +199,7 @@ impl AsyncTask<Signature, Address, Error> for DefaultTaskExecutor {
         let rpc_client = self.rpc_client.clone();
         self.spawn_task(Box::pin(
             async move {
-                let _ = rpc_client.multicast::<P>(urls, method, &parameter, Id::Null).await.map_err(Error::from);
+                let _ = rpc_client.multicast::<P>(urls, method, &parameter, Id::Null).await.map_err(RuntimeError::from);
             }
         ));
     }

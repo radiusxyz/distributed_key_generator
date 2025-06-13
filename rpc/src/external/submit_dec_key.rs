@@ -1,5 +1,5 @@
 use crate::*;
-use dkg_primitives::{Config, Event, Payload, SignedCommitment};
+use dkg_primitives::{Config, RuntimeEvent, Payload, SignedCommitment};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use std::fmt::{Debug, Display};
@@ -35,7 +35,7 @@ impl<C: Config> RpcParameter<C> for SubmitDecKey<C::Signature, C::Address> {
         let session_id = self.0.session_id();
         multicast_dec_key_ack::<C>(&ctx, self.payload(), session_id)?;
         // This is end of the session
-        ctx.async_task().emit_event(Event::EndSession(session_id.into())).await.map_err(|e| RpcError::from(e))?;
+        ctx.async_task().emit_event(RuntimeEvent::EndSession(session_id.into())).await.map_err(|e| RpcError::from(e))?;
         Ok(Response(true))
     }
 }

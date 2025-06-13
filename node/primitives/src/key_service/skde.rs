@@ -1,5 +1,6 @@
+use super::KeyServiceResult;
 use std::marker::PhantomData;
-use dkg_primitives::{Error, Hasher, KeyService};
+use dkg_primitives::{Hasher, KeyService, KeyServiceError};
 use skde::{
     delay_encryption::{decrypt, encrypt, solve_time_lock_puzzle, SkdeParams},
     key_aggregation::{aggregate_key, AggregatedKey},
@@ -23,53 +24,41 @@ where
         Self { params, _phantom: Default::default() }
     }
 
-    pub fn gen_enc_key(&self, randomness: Vec<u8>, maybe_enc_keys: Option<Vec<Vec<u8>>>) -> Result<Vec<u8>, Error> {
+    pub fn gen_enc_key(&self, randomness: Vec<u8>, maybe_enc_keys: Option<Vec<Vec<u8>>>) -> KeyServiceResult<Vec<u8>> {
         // If enc_keys are provided, aggregate them
         let enc_key = if let Some(enc_keys) = maybe_enc_keys {
             // Try deserialize enc_keys into PartialKey, error if failed to deserialize
-            let partial_keys = enc_keys.iter().map(|key| serde_json::from_slice::<PartialKey>(key).map_err(|e| Error::from(e))).collect::<Result<Vec<PartialKey>, Error>>()?;
+            let partial_keys = enc_keys.iter().map(|key| serde_json::from_slice::<PartialKey>(key).map_err(KeyServiceError::from)).collect::<Result<Vec<PartialKey>, KeyServiceError>>()?;
             let mut selected_keys = self.select_random_partial_keys(&partial_keys, randomness)?;
             let derived_key = self.derive_partial_key(&selected_keys)?;
             selected_keys.push(derived_key);
             let enc_key = aggregate_key(&self.params, &selected_keys);
-            serde_json::to_vec(&enc_key).map_err(|err| Error::AnyError(Box::new(err)))?
+            serde_json::to_vec(&enc_key)?
         } else {
-            let (_, partial_key) = generate_partial_key(&self.params).map_err(|_| Error::AnyError("Failed to generate partial key".into()))?;
-            serde_json::to_vec(&partial_key).map_err(|err| Error::AnyError(Box::new(err)))?
+            let (_, partial_key) = generate_partial_key(&self.params).map_err(|e| KeyServiceError::InternalError(e.to_string()))?;
+            serde_json::to_vec(&partial_key)?
         };
         Ok(enc_key)
     }
 
-    pub fn gen_dec_key(&self, enc_key: &Vec<u8>) -> Result<(Vec<u8>, u128), Error> {
+    pub fn gen_dec_key(&self, enc_key: &Vec<u8>) -> KeyServiceResult<(Vec<u8>, u128)> {
         // TODO: Timeout
-        let enc_key = serde_json::from_slice::<AggregatedKey>(enc_key).map_err(|err| Error::AnyError(Box::new(err)))?;
-        let secure_key = solve_time_lock_puzzle(&self.params, &enc_key).map_err(|err| Error::AnyError(Box::new(err)))?;
-        Ok((serde_json::to_vec(&secure_key.sk).map_err(|err| Error::AnyError(Box::new(err)))?, timestamp()))
+        let enc_key = serde_json::from_slice::<AggregatedKey>(enc_key)?;
+        let secure_key = solve_time_lock_puzzle(&self.params, &enc_key).map_err(|e| KeyServiceError::InternalError(e.to_string()))?;
+        Ok((serde_json::to_vec(&secure_key.sk)?, timestamp()))
     }
 
-    pub fn verify_dec_key(&self, enc_key: &Vec<u8>, dec_key: &Vec<u8>) -> Result<(), Error> {
+    pub fn verify_dec_key(&self, enc_key: &Vec<u8>, dec_key: &Vec<u8>) -> KeyServiceResult<()> {
         let sample_message = "sample_message";
-        let enc_key = serde_json::from_slice::<AggregatedKey>(enc_key).map_err(|err| Error::AnyError(Box::new(err)))?;
-        let dec_key = serde_json::from_slice::<String>(dec_key).map_err(|err| Error::AnyError(Box::new(err)))?;
-        let ciphertext = encrypt(&self.params, sample_message, &enc_key.u, true)
-            .map_err(|err| Error::AnyError(Box::new(err)))?;
-
-        let decrypted_message = match decrypt(&self.params, &ciphertext, &dec_key) {
-            Ok(message) => message,
-            Err(err) => {
-                tracing::error!("Decryption failed: {}", err);
-                return Err(Error::AnyError(Box::new(err)));
-            }
-        };
-
-        if decrypted_message.as_str() != sample_message {
-            return Err(Error::AnyError("Decryption failed: message mismatch".into()));
-        }
-
+        let enc_key = serde_json::from_slice::<AggregatedKey>(enc_key)?;
+        let dec_key = serde_json::from_slice::<String>(dec_key)?;
+        let ciphertext = encrypt(&self.params, sample_message, &enc_key.u, true)?;
+        let decrypted_message = decrypt(&self.params, &ciphertext, &dec_key)?;
+        if decrypted_message.as_str() != sample_message { return Err(KeyServiceError::MessageMismatch); }
         Ok(())
     }
 
-    fn select_ordered_indices(&self, n: usize, randomness: Vec<u8>) -> Result<Vec<usize>, Error> {
+    fn select_ordered_indices(&self, n: usize, randomness: Vec<u8>) -> KeyServiceResult<Vec<usize>> {
         assert!(n >= 1, "Need at least 1 partial key to proceed");
 
         // Special case: when there is only one partial key, return index 0
@@ -89,7 +78,7 @@ where
             input.extend_from_slice(&state);
             input.push(i as u8);
             let hash = H::hash(&input, None);
-            let output: [u8; 32] = hash.as_ref().try_into().map_err(|_| Error::ConvertError("Failed to convert hash to 32 bytes".into()))?;
+            let output: [u8; 32] = hash.as_ref().try_into().map_err(|_| KeyServiceError::InternalError("Failed to convert hash to 32 bytes".into()))?;
             let rand_byte = u64::from_le_bytes(output[0..8].try_into().unwrap());
             let j = (rand_byte % (i as u64 + 1)) as usize;
             indices.swap(i, j);
@@ -99,12 +88,12 @@ where
         Ok(indices[..k].to_vec())
     }
 
-    fn select_random_partial_keys(&self, partial_keys: &Vec<PartialKey>, randomness: Vec<u8>) -> Result<Vec<PartialKey>, Error> {
+    fn select_random_partial_keys(&self, partial_keys: &Vec<PartialKey>, randomness: Vec<u8>) -> KeyServiceResult<Vec<PartialKey>> {
         let indices = self.select_ordered_indices(partial_keys.len(), randomness)?;
         Ok(indices.iter().map(|&i| partial_keys[i].clone()).collect())
     }
 
-    fn derive_partial_key(&self, selected_keys: &Vec<PartialKey>) -> Result<PartialKey, Error> {
+    fn derive_partial_key(&self, selected_keys: &Vec<PartialKey>) -> KeyServiceResult<PartialKey> {
         let n = BigUint::parse_bytes(self.params.n.as_bytes(), 10).unwrap();
         let max_sequencer_number =
             BigUint::parse_bytes(self.params.max_sequencer_number.as_bytes(), 10).unwrap();
@@ -118,11 +107,11 @@ where
         let n_half = &n / 2u32;
         let n_half_over_max_sequencer_number = &n / (2u32 * &max_sequencer_number);
 
-        let gen = |label: &[u8]| -> Result<BigUint, Error> {
+        let gen = |label: &[u8]| -> KeyServiceResult<BigUint> {
             let mut input = h_input.clone();
             input.push(label[0]);
             let hash = H::hash(&input, Some(32));
-            let hash: [u8; 32] = hash.as_ref().try_into().map_err(|_| Error::ConvertError("Failed to convert hash to 32 bytes".into()))?;
+            let hash: [u8; 32] = hash.as_ref().try_into().map_err(|_| KeyServiceError::InternalError("Failed to convert hash to 32 bytes".into()))?;
             Ok(BigUint::from_bytes_le(&hash))
         };
 
@@ -148,7 +137,7 @@ where
 {
     type TrustedSetUp = SkdeParams;
     type Metadata = Vec<PartialKey>;
-    type Error = Error; 
+    type Error = KeyServiceError; 
 
     fn setup(param: SkdeParams) -> Self {
         Skde::<H>::new(param)
@@ -158,15 +147,15 @@ where
         self.params.clone()
     }
 
-    fn gen_enc_key(&self, randomness: Vec<u8>, maybe_enc_keys: Option<Vec<Vec<u8>>>) -> Result<Vec<u8>, Self::Error> {
+    fn gen_enc_key(&self, randomness: Vec<u8>, maybe_enc_keys: Option<Vec<Vec<u8>>>) -> KeyServiceResult<Vec<u8>> {
         self.gen_enc_key(randomness, maybe_enc_keys)
     }
 
-    fn gen_dec_key(&self, enc_key: &Vec<u8>) -> Result<(Vec<u8>, u128), Self::Error> {
+    fn gen_dec_key(&self, enc_key: &Vec<u8>) -> KeyServiceResult<(Vec<u8>, u128)> {
         self.gen_dec_key(enc_key)
     }
 
-    fn verify_dec_key(&self, enc_key: &Vec<u8>, dec_key: &Vec<u8>) -> Result<(), Self::Error> {
+    fn verify_dec_key(&self, enc_key: &Vec<u8>, dec_key: &Vec<u8>) -> KeyServiceResult<()> {
         self.verify_dec_key(enc_key, dec_key)?;
         Ok(())
     }

@@ -1,8 +1,7 @@
 use std::{fmt::{Debug, Display}, hash::{Hash, Hasher}, ops::Add};
 use radius_sdk::kvstore::Model;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use crate::{SignedCommitment, Parameter, AddressT, Error};
-
+use crate::{SignedCommitment, AddressT, RuntimeError};
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
 #[kvstore(key(session_id: &SessionId, address: &Address))]
 /// Kvstore for signed commitment to a encryption keys mapped by session id and address
@@ -23,7 +22,7 @@ impl<Signature: Clone, Address: Clone> EncKeyCommitment<Signature, Address> {
 /// List of encryption key SubmitterList mapped by session id
 pub struct SubmitterList<Address>(pub Vec<Address>);
 
-impl<Address: Parameter + AddressT> SubmitterList<Address> {
+impl<Address: AddressT> SubmitterList<Address> {
 
     pub fn new() -> Self {
         Self(Vec::new())
@@ -49,8 +48,8 @@ impl<Address: Parameter + AddressT> SubmitterList<Address> {
         self.0.is_empty()
     }
 
-    pub fn initialize(session_id: SessionId) -> Result<(), Error> {
-        Self(Vec::new()).put(session_id).map_err(Error::from)
+    pub fn initialize(session_id: SessionId) -> Result<(), RuntimeError> {
+        Self(Vec::new()).put(session_id).map_err(RuntimeError::from)
     }
 }
 
@@ -230,8 +229,8 @@ impl Into<u64> for Round {
 
 impl Round {
 
-    pub fn initialize() -> Result<(), Error> {
-        Self(0).put().map_err(Error::from)
+    pub fn initialize() -> Result<(), RuntimeError> {
+        Self(0).put().map_err(RuntimeError::from)
     }
 
     pub fn is_initial(&self) -> bool {
@@ -242,9 +241,9 @@ impl Round {
         self.0.checked_add(1).map(Self)
     }
 
-    pub fn next_mut(&mut self) -> Result<(), Error> {
-        *self = self.next().ok_or(Error::Arithmetic)?;
-        Ok(())
+    pub fn next_mut(&mut self) -> Result<Self, RuntimeError> {
+        self.0 = self.next().ok_or(RuntimeError::Arithmetic)?.into();
+        Ok(self.clone())
     }
 }
 
@@ -284,18 +283,18 @@ impl SessionId {
         self.0.checked_sub(1).map(Self)
     }
 
-    pub fn next(&self) -> Option<Self> {
-        self.0.checked_add(1).map(Self)
+    pub fn next(&self, amount: u64) -> Option<Self> {
+        self.0.checked_add(amount).map(Self)
     }
 
-    pub fn next_mut(&mut self) -> Result<(), Error> {
-        self.0 = self.next().ok_or(Error::Arithmetic)?.into();
-        Ok(())
+    pub fn next_mut(&mut self, amount: u64) -> Result<Self, RuntimeError> {
+        self.0 = self.next(amount).ok_or(RuntimeError::Arithmetic)?.into();
+        Ok(*self)
     }
 
-    pub fn prev_mut(&mut self) -> Result<(), Error> {
-        self.0 = self.prev().ok_or(Error::Arithmetic)?.into();
-        Ok(())
+    pub fn prev_mut(&mut self) -> Result<Self, RuntimeError> {
+        self.0 = self.prev().ok_or(RuntimeError::Arithmetic)?.into();
+        Ok(*self)
     }
 }
 

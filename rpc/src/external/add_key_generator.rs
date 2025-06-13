@@ -1,5 +1,5 @@
 use crate::{*, cluster::SyncKeyGenerator};
-use dkg_primitives::{Config, KeyGenerator, KeyGeneratorList, AsyncTask};
+use dkg_primitives::{Config, KeyGenerator, KeyGeneratorList, AsyncTask, DbManager};
 use serde::{Serialize, Deserialize};
 use std::fmt::{Debug, Display};
 
@@ -40,7 +40,7 @@ impl<C: Config> RpcParameter<C> for AddKeyGenerator<C::Address> {
     async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
         let mut urls = Vec::new();
         if !self.is_solver {
-            let current_round = ctx.current_round().map_err(|e| C::Error::from(e))?;
+            let current_round = ctx.db_manager().current_round().map_err(|e| RpcError::from(e))?;
             KeyGeneratorList::<C::Address>::apply(current_round, |new| { 
                 if !new.into_iter().any(|kg| kg.address() == self.address) {
                     new.insert(self.clone().into()); 

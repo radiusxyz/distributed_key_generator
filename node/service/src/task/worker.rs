@@ -1,11 +1,8 @@
 use super::*;
-use dkg_primitives::{Event, SessionId, KeyGenerator, AuthService};
+use dkg_primitives::{SessionId, KeyGenerator, AuthService};
 use dkg_utils::timestamp;
-use std::{marker::PhantomData, sync::Arc, time::{Duration, Instant}};
+use std::{marker::PhantomData, time::{Duration, Instant}};
 use futures_timer::Delay;
-use tokio::sync::Mutex;
-use tracing::{info, debug, error};
-use tokio::sync::mpsc::Receiver;
 
 pub struct SessionResult<Signature>(PhantomData<Signature>);
 

@@ -1,4 +1,4 @@
-pub use dkg_primitives::{Config, SessionId, KeyGeneratorList, Commitment, Payload, SignedCommitment, AsyncTask, EncKeyCommitment};
+pub use dkg_primitives::{Config, SessionId, KeyGeneratorList, Commitment, Payload, SignedCommitment, AsyncTask, EncKeyCommitment, DbManager};
 pub use tracing::info;
 pub use radius_sdk::json_rpc::server::{RpcParameter, RpcError};
 
@@ -16,7 +16,7 @@ pub mod helper {
     use super::*;
     
     /// Helper function to submit encryption key 
-    pub async fn submit_enc_key<C: Config>(
+    pub fn submit_enc_key<C: Config>(
         session_id: SessionId,
         enc_key: Vec<u8>,
         ctx: &C,
@@ -34,10 +34,10 @@ pub mod helper {
         session_id: SessionId,
         commitment: EncKeyCommitment<C::Signature, C::Address>,
     ) -> RpcResult<()> {
-        let current_round = ctx.current_round().map_err(|e| C::Error::from(e))?;
+        let current_round = ctx.db_manager().current_round().map_err(|e| RpcError::from(e))?;
         let key_generators =
-            KeyGeneratorList::<C::Address>::get(current_round)
-                .map_err(|e| C::Error::from(e))?
+            ctx.db_manager().get_key_generator_list(current_round)
+                .map_err(|e| RpcError::from(e))?
                 .into_iter()
                 .filter(|kg| kg.address() != ctx.address())
                 .map(|kg| kg.cluster_rpc_url().to_owned())
@@ -55,9 +55,11 @@ pub mod helper {
         ctx: &C,
         payload: Payload,
         session_id: SessionId,
-    ) -> RpcResult<()> {
-        let current_round = ctx.current_round().map_err(|e| C::Error::from(e))?;
-        let key_generators = KeyGeneratorList::<C::Address>::get(current_round)?.all_rpc_urls(true);
+    ) -> RpcResult<()> {    
+        let current_round = ctx.db_manager().current_round().map_err(|e| RpcError::from(e))?;
+        let key_generators = ctx.db_manager().get_key_generator_list(current_round)
+            .map_err(|e| RpcError::from(e))?
+            .all_rpc_urls(true);
         info!("Broadcast decryption key - session_id: {:?}, all_dkg_list: {:?}", session_id, key_generators);
         let commitment = Commitment::new(payload, Some(ctx.address()), session_id);
         let signature = ctx.sign(&commitment)?;

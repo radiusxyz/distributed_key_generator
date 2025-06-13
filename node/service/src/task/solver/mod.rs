@@ -6,12 +6,12 @@ use radius_sdk::json_rpc::server::{RpcError, RpcParameter};
 use tracing::debug;
 use tokio::task::JoinHandle;
 use tokio::sync::mpsc::Receiver;
-use dkg_primitives::Event;
+use dkg_primitives::RuntimeEvent;
 
 mod worker;
 use worker::SolverWorker;
 
-pub async fn run_node<C: Config>(ctx: &mut C, config: NodeConfig, rx: Receiver<Event<C::Signature, C::Address>>) -> Result<Vec<JoinHandle<()>>, C::Error> {
+pub async fn run_node<C: Config>(ctx: &mut C, config: NodeConfig, rx: Receiver<RuntimeEvent<C::Signature, C::Address>>) -> Result<Vec<JoinHandle<()>>, C::Error> {
     let mut handle: Vec<JoinHandle<()>> = vec![];
 
     let external_server = default_external_rpc_server(ctx).await?;

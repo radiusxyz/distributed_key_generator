@@ -6,32 +6,38 @@ use dkg_rpc::Config;
 use futures_timer::Delay;
 use std::time::Instant;
 
-use dkg_primitives::Event;
+use dkg_primitives::{RuntimeEvent, RuntimeError};
 use tracing::{debug, error, info};
 
 #[derive(Clone)]
 pub struct SolverWorker<C: Config> {
-    rx: Arc<Mutex<Receiver<Event<C::Signature, C::Address>>>>,
+    rx: Arc<Mutex<Receiver<RuntimeEvent<C::Signature, C::Address>>>>,
     state: SessionWorkerState,
 }
 
 #[async_trait::async_trait]
 impl<C: Config> SessionWorker<C> for SolverWorker<C> {
     async fn on_session(&mut self, ctx: &C, session_info: SessionInfo) -> Option<SessionResult<C::Signature>> {
-        self.on_session(ctx, session_info).await
+        match self.on_session(ctx, session_info).await {
+            Ok(res) => Some(res),
+            Err(e) => {
+                error!("Something wrong on session: {:?}", e);
+                None
+            }
+        }
     }
 }
 
 impl<C: Config> SolverWorker<C> {
 
     /// Create a instance of `SessionWorker`
-    pub fn new(rx: Receiver<Event<C::Signature, C::Address>>) -> Self {
+    pub fn new(rx: Receiver<RuntimeEvent<C::Signature, C::Address>>) -> Self {
         Self { rx: Arc::new(Mutex::new(rx)), state: SessionWorkerState::Init }
     }
 
     /// For every next session, worker will wait for the `SolveKey` event and submit the decryption key to the leader.
     /// Each session should be ended before timeout
-    pub async fn on_session(&mut self, ctx: &C, session_info: SessionInfo) -> Option<SessionResult<C::Signature>> {
+    pub async fn on_session(&mut self, ctx: &C, session_info: SessionInfo) -> Result<SessionResult<C::Signature>, C::Error> {
         // Ends at after this delay 
         let mut timeout = Delay::new(session_info.ends_at.duration_since(Instant::now()));
         loop {
@@ -42,7 +48,7 @@ impl<C: Config> SolverWorker<C> {
                 } => {
                     if let Some(event) = event {
                         match event {
-                            Event::SolveKey { enc_key, session_id } => {
+                            RuntimeEvent::SolveKey { enc_key, session_id } => {
                                 match solve(ctx, session_id, &enc_key) {
                                     Ok(commitment) => {
                                         if let Err(e) = submit_dec_key(ctx, commitment).await {
@@ -56,7 +62,7 @@ impl<C: Config> SolverWorker<C> {
                                     }
                                 }
                             }
-                            Event::EndSession(mut end_session_id) => {
+                            RuntimeEvent::EndSession(mut end_session_id) => {
                                 match self.state {
                                     SessionWorkerState::Start(current_session_id) => {
                                         // Should be the same session id
@@ -69,15 +75,8 @@ impl<C: Config> SolverWorker<C> {
                                     _ => continue,
                                 }
                                 // Update the session id 
-                                if let Ok(()) = end_session_id.next_mut() {
-                                    if let Err(e) = end_session_id.put() {
-                                        error!("Error during session id put: {:?}", e);
-                                        return None;
-                                    }
-                                } else {
-                                    return None;
-                                }
-                                return Some(SessionResult::<C::Signature>::new());
+                                end_session_id.next_mut(1)?.put()?;
+                                return Ok(SessionResult::<C::Signature>::new());
                             }
                             _ => continue,
                         }
@@ -85,7 +84,7 @@ impl<C: Config> SolverWorker<C> {
                 },
                 _ = &mut timeout => {
                     info!("Timeout for session {:?}", session_info.session_id);
-                    return None;
+                    return Err(RuntimeError::AnyError("Timeout".into()).into());
                 }
             }
         }

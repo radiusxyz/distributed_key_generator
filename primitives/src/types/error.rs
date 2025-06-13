@@ -1,40 +1,45 @@
-use super::Event;
+use super::RuntimeEvent;
 use crate::ConsensusError;
 use radius_sdk::{
-    json_rpc::{
-        client::RpcClientError,
-        server::{RpcError, RpcServerError},
-    },
+    json_rpc::{client::RpcClientError, server::RpcServerError},
     kvstore::KvStoreError,
     signature::{SignatureError, Signature, Address},
 };
 use thiserror::Error;
 use tokio::{sync::mpsc::error::SendError, task::JoinError};
+use serde_json::Error as SerdeError;
+use skde::delay_encryption::{DecryptionError, EncryptionError};
 
-/// All error types of the service
+/// Error types of the runtime
 #[derive(Debug, Error)]
-pub enum Error {
+pub enum RuntimeError {
     /// A database error has occurred
-    Database(KvStoreError),
+    #[error(transparent)]
+    Database(#[from] KvStoreError),
     /// A RPC server error has occurred
-    RpcServerError(RpcServerError),
+    #[error(transparent)]
+    RpcServerError(#[from] RpcServerError),
     /// A RPC client error has occurred
-    RpcClientError(RpcClientError),
+    #[error(transparent)]
+    RpcClientError(#[from] RpcClientError),
     /// Key service errors
-    KeyServiceError(KeyServiceError),
+    #[error(transparent)]
+    KeyServiceError(#[from] KeyServiceError),
     /// Task join error
-    TaskJoinError(JoinError),
+    #[error(transparent)]
+    TaskJoinError(#[from] JoinError),
     /// Event emission error
     #[error(transparent)]
-    EventError(#[from] SendError<Event<Signature, Address>>),
+    EventError(#[from] SendError<RuntimeEvent<Signature, Address>>),
     /// Conversion error
+    #[error("Conversion error: {0}")]
     ConvertError(String),
     /// Consensus error
     #[error(transparent)]
     Consensus(#[from] ConsensusError),
     /// General (de)serialization error
     #[error(transparent)]
-    SerializeError(#[from] serde_json::Error),
+    SerializeError(#[from] SerdeError),
     /// Any error wrapped type
     #[error(transparent)]
     AnyError(#[from] Box<dyn std::error::Error>),
@@ -42,93 +47,53 @@ pub enum Error {
     #[error(transparent)]
     AuthServiceError(#[from] AuthServiceError),
     /// Maybe overflow or underflow
+    #[error("Arithmetic error(e.g. overflow or underflow)")]
     Arithmetic,
     /// Key not found for db
+    #[error("Key not found for db")]
     NotFound,
     /// Leader not found
+    #[error("Leader not found")]
     LeaderNotFound,
 }
 
+// Ensure Error type can be safely sent between threads
+unsafe impl Send for RuntimeError {}
+unsafe impl Sync for RuntimeError {}
+
 /// Error type for key generation process
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum KeyServiceError {
     /// Key generator not registered
+    #[error("Key generator not registered: {0}")]
     NotRegistered(String),
     /// Invalid partial key
+    #[error("Invalid partial key: {0}")]
     InvalidPartialKey(String),
     /// Internal error
+    #[error("Internal error: {0}")]
     InternalError(String),
     /// Invalid signature
-    InvalidSignature(SignatureError),
+    #[error(transparent)]
+    InvalidSignature(#[from] SignatureError),
+    /// Decryption error has occurred
+    #[error(transparent)]
+    DecryptionError(#[from] DecryptionError),
+    /// Encryption error has occurred
+    #[error(transparent)]
+    EncryptionError(#[from] EncryptionError),
+    /// Message mismatch
+    #[error("Message mismatch")]
+    MessageMismatch,
+    /// Error on (de)serialization
+    #[error(transparent)]
+    SerdeError(#[from] SerdeError),
 }
 
-impl From<KeyServiceError> for Error {
-    fn from(value: KeyServiceError) -> Self { Self::KeyServiceError(value) }
-}
+unsafe impl Send for KeyServiceError {}
+unsafe impl Sync for KeyServiceError {}
 
-// Implement Display trait for KeyGenerationError
-impl std::fmt::Display for KeyServiceError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            KeyServiceError::NotRegistered(msg) => {
-                write!(f, "Not registered key generator: {}", msg)
-            }
-            KeyServiceError::InvalidPartialKey(msg) => write!(f, "Invalid key format: {}", msg),
-            KeyServiceError::InternalError(msg) => write!(f, "Internal error: {}", msg),
-            KeyServiceError::InvalidSignature(e) => write!(f, "Invalid signature: {}", e),
-        }
-    }
-}
-
-// Ensure Error type can be safely sent between threads
-unsafe impl Send for Error {}
-unsafe impl Sync for Error {}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-// Implement From trait for external error types
-impl From<KvStoreError> for Error {
-    fn from(err: KvStoreError) -> Self {
-        Self::Database(err)
-    }
-}
-
-impl From<RpcServerError> for Error {
-    fn from(value: RpcServerError) -> Self { Self::RpcServerError(value) }
-}
-
-impl From<RpcClientError> for Error {
-    fn from(value: RpcClientError) -> Self { Self::RpcClientError(value) }
-}
-
-impl From<KeyServiceError> for RpcError {
-    fn from(error: KeyServiceError) -> Self {
-        match error {
-            KeyServiceError::NotRegistered(msg) => RpcError::from(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Not registered key generator: {}", msg),
-            )),
-            KeyServiceError::InvalidPartialKey(msg) => RpcError::from(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid key format: {}", msg),
-            )),
-            KeyServiceError::InternalError(msg) => RpcError::from(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Internal error: {}", msg),
-            )),
-            KeyServiceError::InvalidSignature(e) => RpcError::from(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid signature: {}", e),
-            )),
-        }
-    }
-}
-
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug, Error)]
 pub enum AuthServiceError {
     #[error("Error on getting state from blockchain!")]
     GetStateError,
@@ -143,3 +108,4 @@ pub enum AuthServiceError {
     #[error("Any error: {0}")]
     AnyError(String),
 }
+    

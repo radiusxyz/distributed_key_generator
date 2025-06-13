@@ -1,7 +1,7 @@
-use dkg_node_primitives::{BasicDkgService, DefaultTaskExecutor, DefaultAuthService, Role, Skde, NodeConfig};
+use dkg_node_primitives::{BasicDkgService, DefaultTaskExecutor, DefaultAuthService, Role, Skde, NodeConfig, DefaultDbManager, DbManager};
 use futures::future::join_all;
 use radius_sdk::{signature::{PrivateKeySigner, ChainType, Signature, Address}, kvstore::KvStoreBuilder};
-use dkg_primitives::{Config, TrustedSetupFor, Error, Event, SessionId, Sha3Hasher, AuthService, KeyService};
+use dkg_primitives::{Config, TrustedSetupFor, RuntimeError, RuntimeEvent, SessionId, Sha3Hasher, AuthService, KeyService, RuntimeResult};
 use std::{fs, path::PathBuf};
 use tokio::sync::mpsc::{channel, Sender};
 use tracing::{info, error};
@@ -49,22 +49,24 @@ async fn create_key_service<C: Config>(ctx: &C, config: &NodeConfig) -> Result<C
     }
 }
 
-fn create_dkg_service<KS, AS>(config: &NodeConfig, tx: Sender<Event<Signature, Address>>, auth_service: AS) -> Result<BasicDkgService<KS, AS>, Error> 
+fn create_dkg_service<KS, AS, DB>(config: &NodeConfig, tx: Sender<RuntimeEvent<Signature, Address>>, auth_service: AS, db_manager: DB) -> RuntimeResult<BasicDkgService<KS, AS, DB>> 
 where
     KS: KeyService + Clone,
     AS: AuthService<Address> + Clone, 
+    DB: DbManager<Address> + Clone + Send + Sync + 'static,
 {
     let signer = create_signer(&config.private_key_path, config.chain_type);
     let task_executor = DefaultTaskExecutor::new(tx)?;
     info!("Creating app state for: {:?}", config.role);
-    BasicDkgService::<KS, AS>::new(
+    BasicDkgService::<KS, AS, DB>::new(
         signer,
         task_executor,
         config.role.clone(),
         config.threshold,
         auth_service,
+        db_manager,
     )
-    .map_err(Error::from)
+    .map_err(RuntimeError::from)
 }
 
 fn create_signer(path: &PathBuf, chain_type: ChainType) -> PrivateKeySigner {
@@ -85,12 +87,12 @@ fn create_signer(path: &PathBuf, chain_type: ChainType) -> PrivateKeySigner {
     }
 }
 
-fn init_db(config: &NodeConfig) -> Result<(), Error> {
+fn init_db(config: &NodeConfig) -> RuntimeResult<()> {
     KvStoreBuilder::default()
         .set_default_lock_timeout(5000)
         .set_txn_lock_timeout(5000)
         .build(config.db_path.clone())
-        .map_err(Error::Database)?
+        .map_err(RuntimeError::Database)?
         .init();
     // Initialize neccessary kv stores
     let session_id = SessionId::new();
@@ -107,13 +109,14 @@ fn init_db(config: &NodeConfig) -> Result<(), Error> {
 // let service = service_builder.build();
 // service.start();
 //```
-pub async fn run_node(config: NodeConfig) -> Result<(), Error> {
+pub async fn run_node(config: NodeConfig) -> RuntimeResult<()> {
 
     init_db(&config)?;
     
     let (tx, rx) = channel(10);
     let auth_service = DefaultAuthService::new(&config.auth_service_endpoint, &config.trusted_address);
-    let mut dkg_service = create_dkg_service::<Skde<Sha3Hasher>, DefaultAuthService>(&config, tx, auth_service)?;
+    let db_manager = DefaultDbManager;
+    let mut dkg_service = create_dkg_service::<Skde<Sha3Hasher>, DefaultAuthService, DefaultDbManager>(&config, tx, auth_service, db_manager)?;
     dkg_service.key_service = Some(create_key_service(&dkg_service, &config).await?);
 
     info!("{}", config.log());

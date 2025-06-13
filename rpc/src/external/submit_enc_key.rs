@@ -1,5 +1,5 @@
 use crate::*;
-use dkg_primitives::{Config, AsyncTask, EncKeyCommitment, Event, KeyServiceError, KeyGeneratorList, SignedCommitment, SubmitterList};
+use dkg_primitives::{Config, AsyncTask, EncKeyCommitment, RuntimeEvent, KeyServiceError, KeyGeneratorList, SignedCommitment, SubmitterList, DbManager};
 use radius_sdk::kvstore::KvStoreError;
 use serde::{Deserialize, Serialize};
 use tracing::{info, error};
@@ -28,7 +28,7 @@ impl<C: Config> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
     async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
         // Leader of the session will handle the enc key submission
         if !ctx.is_leader() { return Ok(()) }
-        let current_round = ctx.current_round().map_err(|e| C::Error::from(e))?;
+        let current_round = ctx.db_manager().current_round().map_err(|e| RpcError::from(e))?;
         let sender = ctx.verify_signature(&self.0.signature, &self.0.commitment, self.sender())?;
         let key_generators = KeyGeneratorList::<C::Address>::get(current_round)?;
         if !key_generators.contains(&sender) {
@@ -63,7 +63,7 @@ impl<C: Config> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
             }
         })?;
         if is_threshold_met {
-            ctx.async_task().emit_event(Event::FinalizeKey { commitments, session_id }).await.map_err(|e| RpcError::from(e))?;
+            ctx.async_task().emit_event(RuntimeEvent::FinalizeKey { commitments, start_session_id: session_id }).await.map_err(|e| RpcError::from(e))?;
         }
 
         let _ = multicast_enc_key_ack(&ctx, session_id, commitment);

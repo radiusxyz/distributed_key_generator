@@ -1,7 +1,7 @@
 use crate::*;
 use serde::{Deserialize, Serialize};
 use tracing::info;
-use dkg_primitives::{Config, KeyGenerator, KeyGeneratorList};
+use dkg_primitives::{Config, KeyGenerator, KeyGeneratorList, DbManager};
 use std::fmt::{Display, Debug};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -31,9 +31,9 @@ impl<C: Config> RpcParameter<C> for SyncKeyGenerator<C::Address> {
         "sync_key_generator"
     }
 
-    async fn handler(self, _context: C) -> RpcResult<Self::Response> {
+    async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
         info!("Sync key generator - {}", self);
-        let current_round = _context.current_round().map_err(|e| C::Error::from(e))?;
+        let current_round = ctx.db_manager().current_round().map_err(|e| RpcError::from(e))?;
         let mut key_generators = KeyGeneratorList::<C::Address>::get_mut(current_round)?;
         if key_generators.contains(&self.address) {
             tracing::warn!("Already synced key generator: {}", self);

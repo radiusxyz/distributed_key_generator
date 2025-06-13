@@ -1,5 +1,5 @@
 use crate::{*, DecKeyPayload};
-use dkg_primitives::{Config, DecKey, EncKey, Event, SignedCommitment, KeyService};
+use dkg_primitives::{Config, DecKey, EncKey, RuntimeEvent, SignedCommitment, KeyService};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -30,16 +30,7 @@ impl<C: Config> RpcParameter<C> for SyncDecKey<C::Signature, C::Address> {
             let dec_key = DecKey::new(payload.dec_key);
             ctx.key_service().verify_dec_key(&enc_key.inner(), &dec_key.inner()).map_err(|e| RpcError::from(e))?;
             dec_key.put(session_id)?;
-            
-            // Inform the session has ended
-            ctx.async_task().emit_event(Event::EndSession(session_id)).await.map_err(|e| RpcError::from(e))?;
-
-            // TODO: Request submit enc key asynchronously
-            let enc_key = ctx.key_service().gen_enc_key(ctx.randomness(session_id), None).map_err(|e| RpcError::from(e))?;
-            let next_session_id = session_id.next().unwrap(); // TODO: Remove unwrap
-            submit_enc_key(next_session_id, enc_key, &ctx).await?;
-
-            info!("Completed submitting encryption key");
+            ctx.async_task().emit_event(RuntimeEvent::EndSession(session_id)).await.map_err(|e| RpcError::from(e))?;
         }
 
         Ok(())

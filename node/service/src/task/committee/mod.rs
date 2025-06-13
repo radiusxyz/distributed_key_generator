@@ -1,14 +1,14 @@
 use super::{Config, RpcParameter, NodeConfig};
-use crate::{rpc::{default_cluster_rpc_server, default_external_rpc_server}, run_session_worker, run_genesis_session, SessionWorker};
-use dkg_rpc::{AddKeyGenerator, RequestSubmitEncKey, SubmitEncKey, SubmitDecKey, EncKeyCommitment, FinalizedEncKeyPayload, SyncFinalizedEncKeys};
-use dkg_primitives::{AuthService, AsyncTask, Event, SessionId, KeyGenerator, Commitment, SignedCommitment};
+use crate::{rpc::{default_cluster_rpc_server, default_external_rpc_server}, run_session_worker, run_genesis_session};
+use dkg_rpc::{AddKeyGenerator, RequestSubmitEncKey, SubmitEncKey, SubmitDecKey, EncKeyCommitment, FinalizedEncKeyPayload, SyncFinalizedEncKeys, submit_enc_key};
+use dkg_primitives::{AuthService, AsyncTask, RuntimeEvent, SessionId, KeyGenerator, Commitment, SignedCommitment};
 use tokio::{task::JoinHandle, sync::mpsc::Receiver};
 use tracing::info;
 
 mod worker;
 use worker::CommitteeWorker;
 
-pub async fn run_node<C: Config>(ctx: &mut C, config: NodeConfig, rx: Receiver<Event<C::Signature, C::Address>>) -> Result<Vec<JoinHandle<()>>, C::Error> {
+pub async fn run_node<C: Config>(ctx: &mut C, config: NodeConfig, rx: Receiver<RuntimeEvent<C::Signature, C::Address>>) -> Result<Vec<JoinHandle<()>>, C::Error> {
     let mut handle: Vec<JoinHandle<()>> = Vec::new();
     // Solver must be known at this point
     let (_, solver_cluster_rpc_url, _) = ctx.auth_service().get_solver_info().await.unwrap();
@@ -31,7 +31,7 @@ pub async fn run_node<C: Config>(ctx: &mut C, config: NodeConfig, rx: Receiver<E
 
     // Start the DKG worker
     let initial_key_generators = ctx.auth_service().get_key_generators(0).await.expect("Failed to get initial key generators");
-    let mut key_generator_worker = CommitteeWorker::<C>::new(solver_cluster_rpc_url, rx, initial_key_generators.clone(), config.round_look_ahead);
+    let mut key_generator_worker = CommitteeWorker::<C>::new(solver_cluster_rpc_url, rx, initial_key_generators.clone(), config.round_look_ahead, 1u64);
     let cloned_ctx = ctx.clone();
     let worker_handle = ctx.async_task().spawn_task(async move {
         if let Err(e) = run_genesis_session(&cloned_ctx, 0, config.threshold, initial_key_generators).await {
@@ -76,7 +76,6 @@ pub async fn sync_finalized_enc_keys<C: Config>(
     solver_url: String,
     session_id: SessionId,
 ) -> Result<(), C::Error> {
-    if !ctx.is_leader() { return Ok(()); }
     let payload = FinalizedEncKeyPayload::<C::Signature, C::Address>::new(commitments);
     let bytes = serde_json::to_vec(&payload).map_err(|e| C::Error::from(e))?;
     let commitment = Commitment::new(bytes.into(), Some(ctx.address()), session_id);
