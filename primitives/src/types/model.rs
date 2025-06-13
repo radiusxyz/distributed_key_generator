@@ -1,5 +1,5 @@
 use std::{fmt::{Debug, Display}, hash::{Hash, Hasher}, ops::Add};
-use radius_sdk::kvstore::{KvStoreError, Model};
+use radius_sdk::kvstore::Model;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use crate::{SignedCommitment, Parameter, AddressT, Error};
 
@@ -49,8 +49,8 @@ impl<Address: Parameter + AddressT> SubmitterList<Address> {
         self.0.is_empty()
     }
 
-    pub fn initialize(session_id: SessionId) -> Result<(), KvStoreError> {
-        Self(Vec::new()).put(session_id)
+    pub fn initialize(session_id: SessionId) -> Result<(), Error> {
+        Self(Vec::new()).put(session_id).map_err(Error::from)
     }
 }
 
@@ -198,6 +198,12 @@ impl<Address: AddressT> KeyGeneratorList<Address> {
     }
 }
 
+impl<Address: AddressT> From<Vec<KeyGenerator<Address>>> for KeyGeneratorList<Address> {
+    fn from(value: Vec<KeyGenerator<Address>>) -> Self {
+        Self(value)
+    }
+}
+
 impl<Address> Iterator for KeyGeneratorList<Address> {
     type Item = KeyGenerator<Address>;
 
@@ -224,8 +230,8 @@ impl Into<u64> for Round {
 
 impl Round {
 
-    pub fn initialize() -> Result<(), KvStoreError> {
-        Self(0).put()
+    pub fn initialize() -> Result<(), Error> {
+        Self(0).put().map_err(Error::from)
     }
 
     pub fn is_initial(&self) -> bool {

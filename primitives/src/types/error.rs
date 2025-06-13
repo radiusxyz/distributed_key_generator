@@ -1,6 +1,5 @@
 use super::Event;
 use crate::ConsensusError;
-use std::io::Error as IoError;
 use radius_sdk::{
     json_rpc::{
         client::RpcClientError,
@@ -9,85 +8,74 @@ use radius_sdk::{
     kvstore::KvStoreError,
     signature::{SignatureError, Signature, Address},
 };
-use toml::de::Error as TomlError;
 use thiserror::Error;
+use tokio::{sync::mpsc::error::SendError, task::JoinError};
 
-/// Main error type used throughout the application
+/// All error types of the service
 #[derive(Debug, Error)]
 pub enum Error {
-    /// External library errors
-    Config(ConfigError),
-    /// General database error
+    /// A database error has occurred
     Database(KvStoreError),
-    /// General RPC server error
+    /// A RPC server error has occurred
     RpcServerError(RpcServerError),
-    /// General RPC client error
+    /// A RPC client error has occurred
     RpcClientError(RpcClientError),
-    /// Key generation errors
-    KeyGeneration(KeyGenerationError),
-    /// File system errors
-    LoadConfigOption(IoError),
-    ParseTomlString(TomlError),
-    /// Signature error
-    Signature(SignatureError),
-    RemoveConfigDirectory,
-    CreateConfigDirectory,
-    CreateConfigFile,
-    CreatePrivateKeyFile,
-    // Data processing errors
-    HexDecodeError,
-    /// malformed, missing fields
-    InvalidParams(String),
-    /// follower or leader tried to call authority logic
-    UnauthorizedParamAccess,
-    /// Maybe overflow or underflow
-    Arithmetic,
-    /// Key not found for db
-    NotFound,
+    /// Key service errors
+    KeyServiceError(KeyServiceError),
     /// Task join error
-    TaskJoinError(tokio::task::JoinError),
+    TaskJoinError(JoinError),
     /// Event emission error
     #[error(transparent)]
-    EventError(#[from] tokio::sync::mpsc::error::SendError<Event<Signature, Address>>),
+    EventError(#[from] SendError<Event<Signature, Address>>),
     /// Conversion error
     ConvertError(String),
     /// Consensus error
     #[error(transparent)]
     Consensus(#[from] ConsensusError),
+    /// General (de)serialization error
     #[error(transparent)]
     SerializeError(#[from] serde_json::Error),
+    /// Any error wrapped type
     #[error(transparent)]
-    SecureBlockError(#[from] Box<dyn std::error::Error>),
+    AnyError(#[from] Box<dyn std::error::Error>),
+    /// Auth service error
     #[error(transparent)]
-    AuthError(#[from] AuthError),
+    AuthServiceError(#[from] AuthServiceError),
+    /// Maybe overflow or underflow
+    Arithmetic,
+    /// Key not found for db
+    NotFound,
+    /// Leader not found
     LeaderNotFound,
 }
 
 /// Error type for key generation process
 #[derive(Debug)]
-pub enum KeyGenerationError {
+pub enum KeyServiceError {
+    /// Key generator not registered
     NotRegistered(String),
+    /// Invalid partial key
     InvalidPartialKey(String),
+    /// Internal error
     InternalError(String),
-    InvalidSignature,
+    /// Invalid signature
+    InvalidSignature(SignatureError),
 }
 
-impl From<KeyGenerationError> for Error {
-    fn from(value: KeyGenerationError) -> Self {
-        Self::KeyGeneration(value)
-    }
+impl From<KeyServiceError> for Error {
+    fn from(value: KeyServiceError) -> Self { Self::KeyServiceError(value) }
 }
 
 // Implement Display trait for KeyGenerationError
-impl std::fmt::Display for KeyGenerationError {
+impl std::fmt::Display for KeyServiceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            KeyGenerationError::NotRegistered(msg) => {
+            KeyServiceError::NotRegistered(msg) => {
                 write!(f, "Not registered key generator: {}", msg)
             }
-            KeyGenerationError::InvalidPartialKey(msg) => write!(f, "Invalid key format: {}", msg),
-            KeyGenerationError::InternalError(msg) => write!(f, "Internal error: {}", msg),
-            KeyGenerationError::InvalidSignature => write!(f, "Invalid signature"),
+            KeyServiceError::InvalidPartialKey(msg) => write!(f, "Invalid key format: {}", msg),
+            KeyServiceError::InternalError(msg) => write!(f, "Internal error: {}", msg),
+            KeyServiceError::InvalidSignature(e) => write!(f, "Invalid signature: {}", e),
         }
     }
 }
@@ -102,12 +90,6 @@ impl std::fmt::Display for Error {
     }
 }
 
-impl From<SignatureError> for Error {
-    fn from(value: SignatureError) -> Self {
-        Self::Signature(value)
-    }
-}
-
 // Implement From trait for external error types
 impl From<KvStoreError> for Error {
     fn from(err: KvStoreError) -> Self {
@@ -115,72 +97,39 @@ impl From<KvStoreError> for Error {
     }
 }
 
-impl From<ConfigError> for Error {
-    fn from(value: ConfigError) -> Self {
-        Self::Config(value)
-    }
+impl From<RpcServerError> for Error {
+    fn from(value: RpcServerError) -> Self { Self::RpcServerError(value) }
 }
 
-impl From<radius_sdk::json_rpc::server::RpcServerError> for Error {
-    fn from(value: radius_sdk::json_rpc::server::RpcServerError) -> Self {
-        Self::RpcServerError(value)
-    }
+impl From<RpcClientError> for Error {
+    fn from(value: RpcClientError) -> Self { Self::RpcClientError(value) }
 }
 
-impl From<radius_sdk::json_rpc::client::RpcClientError> for Error {
-    fn from(value: radius_sdk::json_rpc::client::RpcClientError) -> Self {
-        Self::RpcClientError(value)
-    }
-}
-
-impl From<KeyGenerationError> for RpcError {
-    fn from(error: KeyGenerationError) -> Self {
+impl From<KeyServiceError> for RpcError {
+    fn from(error: KeyServiceError) -> Self {
         match error {
-            KeyGenerationError::NotRegistered(msg) => RpcError::from(std::io::Error::new(
+            KeyServiceError::NotRegistered(msg) => RpcError::from(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("Not registered key generator: {}", msg),
             )),
-            KeyGenerationError::InvalidPartialKey(msg) => RpcError::from(std::io::Error::new(
+            KeyServiceError::InvalidPartialKey(msg) => RpcError::from(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Invalid key format: {}", msg),
             )),
-            KeyGenerationError::InternalError(msg) => RpcError::from(std::io::Error::new(
+            KeyServiceError::InternalError(msg) => RpcError::from(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Internal error: {}", msg),
             )),
-            KeyGenerationError::InvalidSignature => RpcError::from(std::io::Error::new(
+            KeyServiceError::InvalidSignature(e) => RpcError::from(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                "Invalid signature",
+                format!("Invalid signature: {}", e),
             )),
         }
     }
 }
 
-#[derive(Debug)]
-pub enum ConfigError {
-    Load(std::io::Error),
-    Parse(toml::de::Error),
-    RemoveConfigDirectory(std::io::Error),
-    CreateConfigDirectory(std::io::Error),
-    CreateConfigFile(std::io::Error),
-    CreatePrivateKeyFile(std::io::Error),
-    NotFound(String),
-    InvalidExternalPort,
-    InvalidClusterPort,
-    AlreadyExists,
-    InvalidConfig,
-}
-
-impl std::fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl std::error::Error for ConfigError {}
-
 #[derive(thiserror::Error, Debug)]
-pub enum AuthError {
+pub enum AuthServiceError {
     #[error("Error on getting state from blockchain!")]
     GetStateError,
     #[error("Invalid role!")]

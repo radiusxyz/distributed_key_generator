@@ -32,38 +32,38 @@ where
             let derived_key = self.derive_partial_key(&selected_keys)?;
             selected_keys.push(derived_key);
             let enc_key = aggregate_key(&self.params, &selected_keys);
-            serde_json::to_vec(&enc_key).map_err(|err| Error::SecureBlockError(Box::new(err)))?
+            serde_json::to_vec(&enc_key).map_err(|err| Error::AnyError(Box::new(err)))?
         } else {
-            let (_, partial_key) = generate_partial_key(&self.params).map_err(|_| Error::SecureBlockError("Failed to generate partial key".into()))?;
-            serde_json::to_vec(&partial_key).map_err(|err| Error::SecureBlockError(Box::new(err)))?
+            let (_, partial_key) = generate_partial_key(&self.params).map_err(|_| Error::AnyError("Failed to generate partial key".into()))?;
+            serde_json::to_vec(&partial_key).map_err(|err| Error::AnyError(Box::new(err)))?
         };
         Ok(enc_key)
     }
 
     pub fn gen_dec_key(&self, enc_key: &Vec<u8>) -> Result<(Vec<u8>, u128), Error> {
         // TODO: Timeout
-        let enc_key = serde_json::from_slice::<AggregatedKey>(enc_key).map_err(|err| Error::SecureBlockError(Box::new(err)))?;
-        let secure_key = solve_time_lock_puzzle(&self.params, &enc_key).map_err(|err| Error::SecureBlockError(Box::new(err)))?;
-        Ok((serde_json::to_vec(&secure_key.sk).map_err(|err| Error::SecureBlockError(Box::new(err)))?, timestamp()))
+        let enc_key = serde_json::from_slice::<AggregatedKey>(enc_key).map_err(|err| Error::AnyError(Box::new(err)))?;
+        let secure_key = solve_time_lock_puzzle(&self.params, &enc_key).map_err(|err| Error::AnyError(Box::new(err)))?;
+        Ok((serde_json::to_vec(&secure_key.sk).map_err(|err| Error::AnyError(Box::new(err)))?, timestamp()))
     }
 
     pub fn verify_dec_key(&self, enc_key: &Vec<u8>, dec_key: &Vec<u8>) -> Result<(), Error> {
         let sample_message = "sample_message";
-        let enc_key = serde_json::from_slice::<AggregatedKey>(enc_key).map_err(|err| Error::SecureBlockError(Box::new(err)))?;
-        let dec_key = serde_json::from_slice::<String>(dec_key).map_err(|err| Error::SecureBlockError(Box::new(err)))?;
+        let enc_key = serde_json::from_slice::<AggregatedKey>(enc_key).map_err(|err| Error::AnyError(Box::new(err)))?;
+        let dec_key = serde_json::from_slice::<String>(dec_key).map_err(|err| Error::AnyError(Box::new(err)))?;
         let ciphertext = encrypt(&self.params, sample_message, &enc_key.u, true)
-            .map_err(|err| Error::SecureBlockError(Box::new(err)))?;
+            .map_err(|err| Error::AnyError(Box::new(err)))?;
 
         let decrypted_message = match decrypt(&self.params, &ciphertext, &dec_key) {
             Ok(message) => message,
             Err(err) => {
                 tracing::error!("Decryption failed: {}", err);
-                return Err(Error::SecureBlockError(Box::new(err)));
+                return Err(Error::AnyError(Box::new(err)));
             }
         };
 
         if decrypted_message.as_str() != sample_message {
-            return Err(Error::SecureBlockError("Decryption failed: message mismatch".into()));
+            return Err(Error::AnyError("Decryption failed: message mismatch".into()));
         }
 
         Ok(())

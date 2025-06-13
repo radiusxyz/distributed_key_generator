@@ -1,21 +1,39 @@
-use super::{Config, RpcParameter};
-use dkg_rpc::{RequestSubmitEncKey, SyncFinalizedEncKeys, FinalizedEncKeyPayload};
-use dkg_primitives::{
-    AsyncTask, Commitment, Event, SessionId, SignedCommitment, 
-    EncKeyCommitment, AuthService, KeyGenerator
-};
+use super::*;
+use dkg_primitives::{Event, SessionId, KeyGenerator, AuthService};
 use dkg_utils::timestamp;
 use std::{marker::PhantomData, sync::Arc, time::{Duration, Instant}};
 use futures_timer::Delay;
 use tokio::sync::Mutex;
-use tracing::{info, error};
+use tracing::{info, debug, error};
 use tokio::sync::mpsc::Receiver;
 
 pub struct SessionResult<Signature>(PhantomData<Signature>);
 
-pub async fn run_session_worker<C>(ctx: &C, worker: &mut SessionWorker<C>, session_duration: Duration) -> Result<(), C::Error> 
+impl<Signature> SessionResult<Signature> {
+    pub fn new() -> Self {
+        Self(Default::default())
+    }
+}
+
+/// Run the genesis session. Session will be started by the leader
+pub async fn run_genesis_session<C: Config>(ctx: &C, current_round: u64, threshold: u16, key_generators: Vec<KeyGenerator<C::Address>>) -> Result<(), C::Error> {
+    if ctx.is_solver() { return Ok(()); }
+    let session_id = SessionId::get().expect("Not initialized"); 
+    if current_round != 0 { panic!("Current round should be 0"); }
+    if !session_id.is_initial() { panic!("Session id is not initial"); }
+    loop {
+        if ctx.auth_service().is_ready(current_round, threshold).await.unwrap() {
+            break;
+        }
+    }
+    committee::init(ctx, key_generators, session_id); 
+    Ok(())
+}
+
+pub async fn run_session_worker<C, SW>(ctx: &C, worker: &mut SW, session_duration: Duration) -> Result<(), C::Error> 
 where
-    C: Config
+    C: Config,
+    SW: SessionWorker<C>
 {
     let mut sessions = Sessions::new(session_duration);
     loop {
@@ -116,163 +134,8 @@ pub enum SessionWorkerState {
     End(SessionId),
 }
 
-#[derive(Clone)]
-pub struct SessionWorker<C: Config> {
-    solver_rpc_url: String,
-    rx: Arc<Mutex<Receiver<Event<C::Signature, C::Address>>>>,
-    state: SessionWorkerState,
-    /// Key generators for the current session
-    key_generators: Vec<KeyGenerator<C::Address>>,
+#[async_trait::async_trait]
+pub trait SessionWorker<C: Config> {
+    /// Handle for every next session
+    async fn on_session(&mut self, ctx: &C, session_info: SessionInfo) -> Option<SessionResult<C::Signature>>;
 }
-
-impl<C: Config> SessionWorker<C> {
-
-    pub fn new(ctx: &C, solver_rpc_url: String, rx: Receiver<Event<C::Signature, C::Address>>, key_generators: Vec<KeyGenerator<C::Address>>) -> Self {
-        // on_before_session()
-        let session_id = SessionId::get().expect("Not initialized"); 
-        if !session_id.is_initial() { panic!("Session id is not initial"); }
-        init(ctx, key_generators.clone(), session_id); 
-        Self { solver_rpc_url, rx: Arc::new(Mutex::new(rx)), state: SessionWorkerState::Init, key_generators }
-    }
-
-    pub async fn on_session(&mut self, ctx: &C, session_info: SessionInfo) -> Option<SessionResult<C::Signature>> {
-        let session_id = session_info.session_id;
-        let mut key_generators = self.key_generators.clone();
-        // Ends at after this delay 
-        let mut timeout = Delay::new(session_info.ends_at.duration_since(Instant::now()));
-        loop {
-            tokio::select! {
-                event = async {
-                    let mut rx = self.rx.lock().await;
-                    rx.recv().await
-                } => {
-                    if let Some(event) = event {
-                        match event {
-                            Event::FinalizeKey { commitments, current_session_id } => {
-                                match self.state {
-                                    SessionWorkerState::Init => {
-                                        self.state = SessionWorkerState::Start(session_id);
-                                    },
-                                    SessionWorkerState::End(last_session_id) => {
-                                        // It should be greater 
-                                        if last_session_id > current_session_id {
-                                            continue;
-                                        }
-                                    },
-                                    _ => continue,
-                                }
-                                if let Err(err) =
-                                    broadcast_finalized_enc_keys::<C>(&ctx, &mut key_generators, commitments, self.solver_rpc_url.clone(), session_id).await
-                                {
-                                    error!("Error during encryption key broadcasting: {:?}", err);
-                                    return None;
-                                }
-                                continue;
-                            },
-                            Event::EndSession(mut end_session_id) => {
-                                match self.state {
-                                    SessionWorkerState::Start(current_session_id) => {
-                                        // Should be the same session id
-                                        if current_session_id != end_session_id {
-                                            continue;
-                                        }
-                                        self.state = SessionWorkerState::End(end_session_id);
-                                    }, 
-                                    _ => continue,
-                                }
-                                // Update the session id 
-                                if let Err(e) = end_session_id.next_mut() {
-                                    error!("Error during session id increment: {:?}", e);
-                                    return None;
-                                }
-                                if ctx.should_end_round((end_session_id + 1u64.into()).into()) {
-                                    match ctx.current_round() {
-                                        Ok(round) => {
-                                            if let Ok(next_key_generators) = ctx.auth_service().get_key_generators(round.into()).await {
-                                                self.key_generators = next_key_generators;
-                                            }
-                                        }
-                                        Err(e) => {
-                                            error!("Error getting current round: {:?}", e);
-                                            return None;
-                                        }
-                                    }
-                                }
-                                return None;
-                            }
-                        }
-                    }
-                },
-                _ = &mut timeout => {
-                    info!("Timeout for session {:?}", session_info.session_id);
-                    return None;
-                }
-            }
-        }
-    }
-}
-
-/// Request submit encryption key for the initial session
-pub fn init<C: Config>(
-    ctx: &C,
-    key_generators: Vec<KeyGenerator<C::Address>>,
-    session_id: SessionId,
-) {
-    if !ctx.is_leader() { return; }
-    let urls = key_generators.iter().map(|kg| kg.cluster_rpc_url().to_string()).collect::<Vec<_>>();
-    ctx.async_task().multicast(urls, <RequestSubmitEncKey as RpcParameter<C>>::method().to_string(), RequestSubmitEncKey { session_id });
-}
-
-/// Broadcast finalized encryption keys to the key generators including the solver
-pub async fn broadcast_finalized_enc_keys<C: Config>(
-    ctx: &C,
-    key_generators: &mut Vec<KeyGenerator<C::Address>>,
-    commitments: Vec<EncKeyCommitment<C::Signature, C::Address>>,
-    solver_url: String,
-    session_id: SessionId,
-) -> Result<(), C::Error> {
-    if !ctx.is_leader() { return Ok(()); }
-    let payload = FinalizedEncKeyPayload::<C::Signature, C::Address>::new(commitments);
-    let bytes = serde_json::to_vec(&payload).map_err(|e| C::Error::from(e))?;
-    let commitment = Commitment::new(bytes.into(), Some(ctx.address()), session_id);
-    let signature = ctx.sign(&commitment)?;
-    let mut urls = key_generators.iter().map(|kg| kg.cluster_rpc_url().to_string()).collect::<Vec<_>>();
-    urls.push(solver_url);
-    info!("Broadcasting finalized encryption keys to {:?}", urls);
-    ctx.async_task().multicast(urls, <SyncFinalizedEncKeys<C::Signature, C::Address> as RpcParameter<C>>::method().to_string(), SignedCommitment { signature, commitment });
-    Ok(())
-}
-
-// pub async fn wait_for_decryption_key<C: Config>(
-//     ctx: &C,
-//     session_id: SessionId,
-//     timeout_secs: u64,
-// ) -> Result<DecryptionKey, C::Error> {
-//     let poll_interval = Duration::from_secs(1);
-//     let mut waited = 0;
-//     loop {
-//         match DecryptionKey::get(session_id) {
-//             Ok(key) => {
-//                 info!("{} Received decryption key on session {:?}", ctx.log_prefix(), session_id);
-//                 return Ok(key);
-//             }
-//             Err(_) => {
-//                 if waited >= timeout_secs {
-//                     error!("{} Timeout waiting for decryption key on session {:?}", ctx.log_prefix(), session_id);
-//                     return Err(C::Error::from(RpcClientError::Response(format!(
-//                         "Solver did not submit decryption key for session {:?} in time",
-//                         session_id
-//                     ))));
-//                 }
-
-//                 debug!(
-//                     "{} Still waiting for decryption key on session {:?} (waited: {}s)",
-//                     ctx.log_prefix(), session_id, waited
-//                 );
-
-//                 sleep(poll_interval).await;
-//                 waited += 1;
-//             }
-//         }
-//     }
-// }

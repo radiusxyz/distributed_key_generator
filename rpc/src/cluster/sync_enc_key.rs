@@ -21,7 +21,7 @@ impl<C: Config> RpcParameter<C> for SyncEncKey<C::Signature, C::Address> {
 
     async fn handler(self, ctx: C) -> RpcResult<Self::Response> { 
         if let Some(sender) = self.sender() {
-            info!("Received encryption key from {:?}", sender);
+            info!("Received encryption key");
             let session_id = self.session_id();
             if sender == ctx.address() { return Ok(()); }
             let _ = ctx.verify_signature(&self.0.signature, &self.0.commitment, Some(sender.clone()))?;

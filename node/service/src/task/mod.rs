@@ -1,6 +1,6 @@
 pub mod rpc;
-pub mod worker;
-pub use worker::{SessionWorker, run_session_worker};
+mod worker;
+pub use worker::*;
 
 pub mod committee;
 pub mod solver;

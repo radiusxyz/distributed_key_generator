@@ -1,10 +1,11 @@
-use crate::{AuthError, Event, KeyGenerationError, SessionId, Error, Round, KeyGenerator};
+use crate::{AuthServiceError, Event, KeyServiceError, SessionId, Error, Round, KeyGenerator, KeyGeneratorList};
 use std::{hash::Hash, fmt::Debug, time::Duration};
 use futures::future::{select, Either};
 use futures_util::{pin_mut, future::Future};
 use futures_timer::Delay;
 use tokio::task::JoinHandle;
 use serde::{Serialize, de::DeserializeOwned};
+use serde_json::Error as SerdeJsonError;
 use async_trait::async_trait;
 use radius_sdk::{
     signature::{PrivateKeySigner, SignatureError}, 
@@ -22,23 +23,24 @@ pub trait Config: Clone + Send + Sync + 'static {
     /// Type that selects the leader
     type SelectLeader: SelectLeader;
     /// Type that serves related to verification 
-    type VerifyService: Verify<Self::Signature, Self::Address>;
+    type VerifyService: VerifyService<Self::Signature, Self::Address>;
     /// Type that serves related key generation(e.g Set trusted setup, generate encryption and decryption key)
     type KeyService: KeyService;
     /// Auth service of the runtime which interacts with the registry(e.g blockchain)
     type AuthService: AuthService<Self::Address>;
     /// Type that spawns tasks
     type AsyncTask: AsyncTask<Self::Signature, Self::Address, Self::Error>;
+    /// Type that serves related to backend services
+    type DbManager: DbManager<Self::Address>;
     /// The error type of the runtime
     type Error: std::error::Error 
         + From<Error>
-        + From<SignatureError>
         + From<KvStoreError>
-        + From<KeyGenerationError>
+        + From<KeyServiceError>
         + From<RpcServerError>
         + From<RpcClientError>
-        + From<serde_json::Error>
-        + From<AuthError>
+        + From<SerdeJsonError>
+        + From<AuthServiceError>
         + Send 
         + Sync 
         + 'static;
@@ -53,7 +55,7 @@ pub trait Config: Clone + Send + Sync + 'static {
     /// Check if the node is a solver
     fn is_solver(&self) -> bool;
     /// Get the node's signer
-    fn signer(&self) -> PrivateKeySigner;
+    fn signer(&self) -> &PrivateKeySigner;
     /// Get the node's address which is used for creating payload
     fn address(&self) -> Self::Address;
     /// Helper function to get signature
@@ -68,15 +70,13 @@ pub trait Config: Clone + Send + Sync + 'static {
     fn should_end_round(&self, current_session: u64) -> bool;
     /// Get the current leader on the current session which will return (address, rpc_url)
     fn current_leader(&self, is_sync: bool) -> Result<(Self::Address, String), Self::Error>;
-    /// Get the next leader on the next session which will return (address, rpc_url)
-    fn next_leader(&self, is_sync: bool) -> Result<(Self::Address, String), Self::Error>;
     /// Helper function to verify signature. Verification will be handled by `Self::VerifySignature` type
     fn verify_signature<T: Serialize>(&self, signature: &Self::Signature, message: &T, maybe_signer: Option<Self::Address>) -> Result<Self::Address, Self::Error> {
         let signer = Self::VerifyService::verify_signature(signature, message)
-            .map_err(|e| Self::Error::from(e))?;
+            .map_err(|e| KeyServiceError::InvalidSignature(e))?;
         if let Some(address) = maybe_signer {
             if signer != address {
-                return Err(Self::Error::from(KeyGenerationError::InvalidSignature));
+                return Err(KeyServiceError::InvalidSignature(SignatureError::Unauthorized).into());
             }
         }
         Ok(signer)
@@ -87,19 +87,61 @@ pub trait Config: Clone + Send + Sync + 'static {
     fn key_service(&self) -> &Self::KeyService;
     /// Get the instance of the task spawner
     fn async_task(&self) -> &Self::AsyncTask;
+    /// Get the instance of the db manager
+    fn db_manager(&self) -> &Self::DbManager;
 }
 
 /// Interface for selecting the leader
 pub trait SelectLeader {
     /// Get the current leader which will return the index of the leader
-    fn current_leader(current_session: u64, len: usize) -> Option<usize>;
-    /// Select the leader which will return the index of the leader
-    fn next_leader(current_session: u64, len: usize) -> Option<usize>;
+    fn select_leader(current_session: u64, len: usize) -> Option<usize>;
+} 
+
+/// Interface for backend services
+pub trait DbManager<Address: Parameter + AddressT> {
+
+    type Error: From<Error> + From<KvStoreError>;
+
+    /// Get the current session id
+    fn current_session(&self) -> Result<SessionId, Self::Error> {
+        let kv_store: SessionId = SessionId::get()?;
+        Ok(kv_store)
+    }
+
+    /// Get the current round
+    fn current_round(&self) -> Result<Round, Self::Error> {
+        let kv_store: Round = Round::get()?;
+        Ok(kv_store)
+    }
+
+    /// Increase the session id by one
+    fn increase_session(&self) -> Result<(), Self::Error> {
+        let mut kv_store: SessionId = SessionId::get()?;
+        kv_store.next_mut()?;
+        let _ = kv_store.put()?;
+        Ok(())
+    }
+
+    /// Increase the round by one
+    fn increase_round(&self) -> Result<(), Self::Error> {
+        let mut kv_store: Round = Round::get()?;
+        kv_store.next_mut()?;
+        let _ = kv_store.put()?;
+        Ok(())
+    }
+
+    /// Update the key generator list
+    fn update_key_generator_list(&self, key_generators: Vec<KeyGenerator<Address>>) -> Result<(), Self::Error> {
+        let current_round = self.current_round()?;
+        let kv_store: KeyGeneratorList<Address> = key_generators.into();
+        let _ = kv_store.put(current_round)?;
+        Ok(())
+    }
 }
 
 
 /// Inferface for verifying related 
-pub trait Verify<Signature, Address> {
+pub trait VerifyService<Signature, Address> {
 
     fn verify_signature<T: Serialize>(signature: &Signature, message: &T) -> Result<Address, SignatureError>;
 }
@@ -190,14 +232,14 @@ pub trait AuthService<Address>: Send + Sync + 'static {
     async fn update_trusted_setup(&self, bytes: Vec<u8>, signature: Vec<u8>) -> Result<(), Self::Error>;
     /// Get the trusted setup
     async fn get_trusted_setup(&self) -> Result<Vec<u8>, Self::Error>;
-    /// Get the authority info which will return (address, cluster_rpc_url, external_rpc_url)
-    async fn get_authority_info(&self) -> Result<(Address, String, String), Self::Error>;
     /// Get the solver info which will return (address, cluster_rpc_url, external_rpc_url)
     async fn get_solver_info(&self) -> Result<(Address, String, String), Self::Error>;
     /// Check if the given address is active at the given round
     async fn is_active(&self, current_round: u64, address: Address) -> Result<bool, Self::Error>;
-    /// Get the key generators for a given round
+    /// Get the key generators for the given round
     async fn get_key_generators(&self, current_round: u64) -> Result<Vec<KeyGenerator<Address>>, Self::Error>;
+    /// Check if the service is ready to go for the given round
+    async fn is_ready(&self, current_round: u64, theshold: u16) -> Result<bool, Self::Error>;
 }
 
 /// Using unwrap() inside the task block is caught by tracing::error!().

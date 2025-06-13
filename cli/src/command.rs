@@ -37,6 +37,7 @@ fn create_configuration(cli: Box<NodeCommand>) -> NodeConfig {
         db_path,
         Some(trusted_setup_path),
         cli.dkg.threshold,
+        cli.dkg.round_look_ahead,
     )
 }
 

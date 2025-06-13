@@ -1,6 +1,6 @@
 
 use async_trait::async_trait;
-use dkg_primitives::{AuthError, AuthService, Parameter, KeyGenerator};
+use dkg_primitives::{AuthServiceError, AuthService, Parameter, KeyGenerator};
 use alloy::{primitives::{Address as EthAddress, U256}, providers::{ProviderBuilder, RootProvider}, sol, transports::http::{reqwest::Url, Client, Http}};
 
 use DkgContract::DkgContractInstance;
@@ -65,31 +65,31 @@ impl<Address> AuthService<Address> for DefaultAuthService
 where
     Address: Parameter + From<Vec<u8>> + AsRef<[u8]>,
 {
-    type Error = AuthError;
+    type Error = AuthServiceError;
 
     async fn update_trusted_setup(&self, bytes: Vec<u8>, signature: Vec<u8>) -> Result<(), Self::Error> {
-        let _ = self.contract.updateTrustedSetup(bytes.into(), signature.into()).send().await.map_err(|e| AuthError::AnyError(e.to_string()))?;
+        let _ = self.contract.updateTrustedSetup(bytes.into(), signature.into()).send().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
         Ok(())
     }
     async fn get_trusted_setup(&self) -> Result<Vec<u8>, Self::Error> {
-        let res = self.contract.getTrustedSetup().call().await.map_err(|e| AuthError::AnyError(e.to_string()))?;
+        let res = self.contract.getTrustedSetup().call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
         Ok(res._0.to_vec())
     }
-    async fn get_authority_info(&self) -> Result<(Address, String, String), Self::Error> {
-        let res = self.contract.getAuthorityInfo().call().await.map_err(|e| AuthError::AnyError(e.to_string()))?;
-        Ok((convert(res.account), res.clusterRpcUrl, res.externalRpcUrl))
-    }
     async fn get_solver_info(&self) -> Result<(Address, String, String), Self::Error> {
-        let res = self.contract.getSolverInfo().call().await.map_err(|e| AuthError::AnyError(e.to_string()))?;
+        let res = self.contract.getSolverInfo().call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
         Ok((convert(res.account), res.clusterRpcUrl, res.externalRpcUrl))
     }
     async fn is_active(&self, current_round: u64, address: Address) -> Result<bool, Self::Error> { 
-        let res = self.contract.isCommittee(U256::from(current_round), convert_back(address).ok_or(AuthError::AnyError("Invalid address".to_string()))?).call().await.map_err(|e| AuthError::AnyError(e.to_string()))?;
+        let res = self.contract.isCommittee(U256::from(current_round), convert_back(address).ok_or(AuthServiceError::AnyError("Invalid address".to_string()))?).call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
         Ok(res._0)
     }
     async fn get_key_generators(&self, current_round: u64) -> Result<Vec<KeyGenerator<Address>>, Self::Error> { 
-        let res = self.contract.getCommitteeList(U256::from(current_round)).call().await.map_err(|e| AuthError::AnyError(e.to_string()))?;
+        let res = self.contract.getCommitteeList(U256::from(current_round)).call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
         Ok(res._0.into_iter().map(|info| KeyGenerator::new(convert(info.account), info.clusterRpcUrl, info.externalRpcUrl)).collect())
+    }
+    async fn is_ready(&self, current_round: u64, threshold: u16) -> Result<bool, Self::Error> {
+        let res: Vec<KeyGenerator<Address>> = self.get_key_generators(current_round).await?;
+        Ok(res.len() >= threshold as usize)
     }
 }
 

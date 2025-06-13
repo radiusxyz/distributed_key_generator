@@ -1,8 +1,7 @@
-use crate::{*, SubmitDecKeyResponse, SubmitDecKey, DecKeyPayload, FinalizedEncKeyPayload};
-use dkg_primitives::{Config, AsyncTask, Commitment, DecKey, EncKey, Payload, SessionId, SignedCommitment, SubmitterList, KeyService};
+use crate::{*, FinalizedEncKeyPayload };
+use dkg_primitives::{AsyncTask, Config, EncKey, Event, KeyService, Payload, SessionId, SignedCommitment, SubmitterList};
 use radius_sdk::json_rpc::server::RpcError;
 use serde::{Deserialize, Serialize};
-use tracing::{error, warn};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 /// Handler for syncing the finalized encryption keys.
@@ -41,59 +40,7 @@ impl<C: Config> RpcParameter<C> for SyncFinalizedEncKeys<C::Signature, C::Addres
         enc_keys.sort();
         let enc_key = ctx.key_service().gen_enc_key(ctx.randomness(session_id), Some(enc_keys))?;
         EncKey::new(enc_key.clone()).put(session_id)?;
-        if ctx.is_solver() {
-            let _ = ctx.verify_signature(&self.0.signature, &self.0.commitment, self.0.commitment.sender.clone())?;
-            // Since we already check before start the node, it is guaranteed to be Some
-            let leader = ctx.current_leader(false).map_err(|e| RpcError::from(e))?;
-            let cloned_ctx = ctx.clone();
-            cloned_ctx.async_task().spawn_task(
-                async move {
-                    match solve::<C>(&ctx, session_id, &enc_key) {
-                        Ok(commitment) => {
-                            info!("🔑 Solved!");
-                            // TODO: Handle Error
-                            let response: SubmitDecKeyResponse = match ctx
-                                .async_task()
-                                .request(
-                                    leader.1,
-                                    <SubmitDecKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(),
-                                    SubmitDecKey(commitment),
-                                )
-                                .await {
-                                    Ok(response) => response,
-                                    Err(e) => {
-                                        error!("Failed to submit dec key to leader: {:?}", e);
-                                        return;
-                                    }
-                                };
-                            if !response.0 {
-                                // TODO: SHOULD HANDLE ERROR
-                                warn!("Submission acknowledged but not successful - session_id: {:?}", session_id);
-                            }
-                        },
-                        Err(e) => {
-                            error!("Solve failed for session {:?}: {:?}", session_id, e);
-                        }
-                    }
-                }
-            );
-        }
+        ctx.async_task().emit_event(Event::SolveKey { enc_key, session_id }).await.map_err(|e| RpcError::from(e))?;
         Ok(())
     }
-}
-
-/// Solve based on the given encryption keys and create a signed commitment
-fn solve<C: Config>(
-    ctx: &C,
-    session_id: SessionId,
-    enc_key: &Vec<u8>,
-) -> Result<SignedCommitment<C::Signature, C::Address>, RpcError> {
-    let (dec_key, solve_at) = ctx.key_service().gen_dec_key(enc_key).map_err(|e| RpcError::from(e))?;
-    ctx.key_service().verify_dec_key(&enc_key, &dec_key).map_err(|e| RpcError::from(e))?;
-    DecKey::new(dec_key.clone()).put(session_id).map_err(|e| RpcError::from(e))?;
-    let payload = DecKeyPayload::new(dec_key, solve_at);
-    let bytes = serde_json::to_vec(&payload).map_err(|e| RpcError::from(e))?;
-    let commitment = Commitment::new(bytes.into(), Some(ctx.address()), session_id);
-    let signature = ctx.sign(&commitment)?;
-    Ok(SignedCommitment { signature, commitment })
 }

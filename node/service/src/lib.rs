@@ -1,4 +1,4 @@
-use dkg_node_primitives::{BasicDkgService, DefaultExecutor, DefaultAuthService, Role, Skde, NodeConfig};
+use dkg_node_primitives::{BasicDkgService, DefaultTaskExecutor, DefaultAuthService, Role, Skde, NodeConfig};
 use futures::future::join_all;
 use radius_sdk::{signature::{PrivateKeySigner, ChainType, Signature, Address}, kvstore::KvStoreBuilder};
 use dkg_primitives::{Config, TrustedSetupFor, Error, Event, SessionId, Sha3Hasher, AuthService, KeyService};
@@ -55,11 +55,11 @@ where
     AS: AuthService<Address> + Clone, 
 {
     let signer = create_signer(&config.private_key_path, config.chain_type);
-    let executor = DefaultExecutor::new(tx)?;
+    let task_executor = DefaultTaskExecutor::new(tx)?;
     info!("Creating app state for: {:?}", config.role);
     BasicDkgService::<KS, AS>::new(
         signer,
-        executor,
+        task_executor,
         config.role.clone(),
         config.threshold,
         auth_service,
@@ -123,7 +123,7 @@ pub async fn run_node(config: NodeConfig) -> Result<(), Error> {
     } else {
         let handles = match config.role {
             Role::Committee => committee::run_node(&mut dkg_service, config, rx).await?,
-            Role::Solver => solver::run_node(&mut dkg_service, config).await?,
+            Role::Solver => solver::run_node(&mut dkg_service, config, rx).await?,
             Role::Verifier => unimplemented!("Verifier is not implemented yet"),
             _ => panic!("Invalid role"),
         };

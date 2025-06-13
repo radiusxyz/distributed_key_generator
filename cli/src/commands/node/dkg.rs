@@ -1,5 +1,5 @@
 use crate::Args;
-use dkg_node_primitives::config::{Role, DEFAULT_TRUSTED_ADDRESS, DEFAULT_CHAIN_TYPE, DEFAULT_SESSION_DURATION, DEFAULT_THRESHOLD, DEFAULT_AUTH_SERVICE_ENDPOINT};
+use dkg_node_primitives::config::{Role, DEFAULT_TRUSTED_ADDRESS, DEFAULT_CHAIN_TYPE, DEFAULT_SESSION_DURATION, DEFAULT_THRESHOLD, DEFAULT_AUTH_SERVICE_ENDPOINT, DEFAULT_ROUND_LOOK_AHEAD};
 
 /// The arguments needed for DKG process
 #[derive(Debug, Args)]
@@ -21,6 +21,9 @@ pub struct DkgArgs {
     /// The threshold of encryption key submission
     #[arg(long = "dkg.threshold", default_value_t = DEFAULT_THRESHOLD)]
     pub threshold: u16,
+    /// The round look ahead for the DKG process
+    #[arg(long = "dkg.round-look-ahead", default_value_t = DEFAULT_ROUND_LOOK_AHEAD)]
+    pub round_look_ahead: u64,
 }
 
 impl Default for DkgArgs {
@@ -32,6 +35,7 @@ impl Default for DkgArgs {
             chain_type: DEFAULT_CHAIN_TYPE.to_string(),
             session_duration: DEFAULT_SESSION_DURATION,
             threshold: DEFAULT_THRESHOLD,
+            round_look_ahead: DEFAULT_ROUND_LOOK_AHEAD,
         }
     }
 }

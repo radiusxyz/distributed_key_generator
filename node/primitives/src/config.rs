@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 mod constants {
+    use crate::consts::DAY;
+
     pub const DEFAULT_HOME_PATH: &str = ".radius";
     pub const DATABASE_DIR_NAME: &str = "database";
     pub const SIGNING_KEY: &str = "signing_key";
@@ -18,6 +20,7 @@ mod constants {
     pub const DEFAULT_CHAIN_TYPE: &str = "ethereum";
     pub const DEFAULT_THRESHOLD: u16 = 1;
     pub const DEFAULT_AUTH_SERVICE_ENDPOINT: &str = "http://localhost:8545";
+    pub const DEFAULT_ROUND_LOOK_AHEAD: u64 = DAY;
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +37,7 @@ pub struct NodeConfig {
     pub db_path: PathBuf,
     pub trusted_setup_path: Option<PathBuf>,
     pub threshold: u16,
+    pub round_look_ahead: u64
 }
 
 impl NodeConfig {
@@ -50,6 +54,7 @@ impl NodeConfig {
         db_path: PathBuf,
         trusted_setup_path: Option<PathBuf>,
         threshold: u16,
+        round_look_ahead: u64
     ) -> Self {
         Self {
             external_rpc_url,
@@ -64,6 +69,7 @@ impl NodeConfig {
             db_path,
             trusted_setup_path,
             threshold,
+            round_look_ahead,
         }
     }
 
@@ -104,27 +110,6 @@ impl NodeConfig {
         log_lines.join("\n")
     }
 }
-
-#[derive(Debug)]
-pub enum NodeConfigError {
-    Load(std::io::Error),
-    Parse(toml::de::Error),
-    RemoveConfigDirectory(std::io::Error),
-    CreateConfigDirectory(std::io::Error),
-    CreateConfigFile(std::io::Error),
-    CreatePrivateKeyFile(std::io::Error),
-    InvalidExternalPort,
-    InvalidClusterPort,
-    InvalidConfig,
-}
-
-impl std::fmt::Display for NodeConfigError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl std::error::Error for NodeConfigError {}
 
 /// Roles in the DKG network
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
