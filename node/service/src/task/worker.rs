@@ -1,5 +1,5 @@
 use super::*;
-use dkg_primitives::{SessionId, KeyGenerator, AuthService};
+use dkg_primitives::SessionId;
 use dkg_utils::timestamp;
 use std::{marker::PhantomData, time::{Duration, Instant}};
 use futures_timer::Delay;
@@ -12,21 +12,6 @@ impl<Signature> SessionResult<Signature> {
     }
 }
 
-/// Run the genesis session. Session will be started by the leader
-pub async fn run_genesis_session<C: Config>(ctx: &C, current_round: u64, threshold: u16, key_generators: Vec<KeyGenerator<C::Address>>) -> Result<(), C::Error> {
-    if ctx.is_solver() { return Ok(()); }
-    let session_id = SessionId::get().expect("Not initialized"); 
-    if current_round != 0 { panic!("Current round should be 0"); }
-    if !session_id.is_initial() { panic!("Session id is not initial"); }
-    loop {
-        if ctx.auth_service().is_ready(current_round, threshold).await.unwrap() {
-            break;
-        }
-    }
-    committee::init(ctx, key_generators, session_id); 
-    Ok(())
-}
-
 pub async fn run_session_worker<C, SW>(ctx: &C, worker: &mut SW, session_duration: Duration) -> Result<(), C::Error> 
 where
     C: Config,
@@ -35,8 +20,12 @@ where
     let mut sessions = Sessions::new(session_duration);
     loop {
         let session_info = sessions.next_session().await;
+        tracing::info!("Session info: {:?}", session_info.session_id);
+        if session_info.session_id.is_initial() {
+            worker.on_genesis_session(ctx).await?; 
+        }
         let _ = worker.on_session(ctx, session_info).await;
-    }
+    }   
 }
 
 /// Calculate the duration in milliseconds until the next session starts from now 
@@ -103,20 +92,22 @@ impl Sessions {
             let wait_dur = time_until_next_session(self.session_duration);
             // Delay from `now` to the next session
             self.until_next_session = Some(Delay::new(wait_dur));
-            if self.last_session.is_initial() {
-                // We don't update the last session for the initial session
-                break SessionInfo::new(self.last_session, self.session_duration);
-            } else {
-                let current_session = match SessionId::get() {
-                    Ok(session_id) => session_id,
-                    Err(_) => { tracing::error!("Error getting session id"); continue; }
-                };
-                // Current session should be greater than the last session
+            let current_session = match SessionId::get() {
+                Ok(session_id) => session_id,
+                Err(_) => { tracing::error!("Error getting session id"); continue; }
+            };
+            tracing::info!("Current session: {:?}", current_session);
+            if !current_session.is_initial() {
                 if current_session > self.last_session {
                     self.last_session = current_session;
-                    break SessionInfo::new(current_session, self.session_duration);
+                    break SessionInfo::new(current_session, self.session_duration); 
+                } else {
+                    // Should never reach here
+                    panic!("Session not updated? {:?}", current_session);
                 }
-            }   
+            } else {
+                break SessionInfo::new(current_session, self.session_duration); 
+            }
         }
     }
 }
@@ -133,6 +124,8 @@ pub enum SessionWorkerState {
 
 #[async_trait::async_trait]
 pub trait SessionWorker<C: Config> {
+    /// Handle the genesis session
+    async fn on_genesis_session(&mut self, ctx: &C) -> Result<(), C::Error>;
     /// Handle for every next session
     async fn on_session(&mut self, ctx: &C, session_info: SessionInfo) -> Option<SessionResult<C::Signature>>;
 }

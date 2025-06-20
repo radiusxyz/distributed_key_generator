@@ -17,6 +17,7 @@ impl<C: Config> RpcParameter<C> for RequestSubmitEncKey {
     }
 
     async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
+        info!("{}", <Self as RpcParameter<C>>::method());
         let session_id = self.session_id;
         if !session_id.is_initial() { return Ok(()); } 
         info!("Generate enc key for session {:?}", session_id);

@@ -62,6 +62,8 @@ pub trait Config: Clone + Send + Sync + 'static {
     fn sign<T: Serialize>(&self, message: &T) -> Result<Self::Signature, Self::Error>;
     /// Get the randomness for a given session id
     fn randomness(&self, session_id: SessionId) -> Vec<u8>;
+    /// Check if the node should force generate the encryption key
+    fn should_force_generating(&self, current_round: &Round) -> Result<bool, Self::Error>;
     /// Check if the node should move to the next round
     fn should_end_round(&self, current_session: u64) -> bool;
     /// Get the current leader on the current session which will return (address, rpc_url)
@@ -125,9 +127,9 @@ pub trait DbManager<Address: AddressT> {
     }
 
     /// Update the key generator list
-    fn update_key_generator_list(&self, round: Round, key_generators: Vec<KeyGenerator<Address>>) -> Result<(), Self::Error> {
+    fn update_key_generator_list(&self, round: &Round, key_generators: Vec<KeyGenerator<Address>>) -> Result<(), Self::Error> {
         let kv_store: KeyGeneratorList<Address> = key_generators.into();
-        let _ = kv_store.put(round)?;
+        let _ = kv_store.put(round.clone())?;
         Ok(())
     }
 
@@ -228,26 +230,34 @@ where
         P: Serialize + Send + Sync + 'static;
 }
 
-
 /// Interface for providing auth service
 #[async_trait]
 pub trait AuthService<Address>: Send + Sync + 'static {
-
+    
+    type TrustedSetup;
     /// The error type of the auth service
     type Error: std::error::Error + Send + Sync + 'static + Into<RuntimeError>;
 
-    /// Update the trusted setup
-    async fn update_trusted_setup(&self, bytes: Vec<u8>, signature: Vec<u8>) -> Result<(), Self::Error>;
-    /// Get the trusted setup
-    async fn get_trusted_setup(&self) -> Result<Vec<u8>, Self::Error>;
+    /// Update the trusted setup with given `T` which will be converted to `Self::TrustedSetup`
+    async fn update_trusted_setup<T>(&self, trusted_setup: T, signature: Vec<u8>) -> Result<(), Self::Error> 
+    where
+        T: Into<Self::TrustedSetup> + Send + Sync + 'static;
+    /// Get the trusted setup which will be converted to `T`
+    async fn get_trusted_setup<T>(&self) -> Result<T, Self::Error>
+    where
+        Self::TrustedSetup: Into<T>;
     /// Get the solver info which will return (address, cluster_rpc_url, external_rpc_url)
     async fn get_solver_info(&self) -> Result<(Address, String, String), Self::Error>;
+    /// Add the key generator info to the auth service
+    async fn register_key_generator(&self, round: Round, address: Address, cluster_rpc_url: &str, external_rpc_url: &str) -> Result<(), Self::Error>;
+    /// Remove the key generator info from the auth service
+    async fn unregister_key_generator(&self, round: Round, address: Address) -> Result<(), Self::Error>;
     /// Check if the given address is active at the given round
-    async fn is_active(&self, current_round: u64, address: Address) -> Result<bool, Self::Error>;
+    async fn is_active(&self, current_round: Round, address: Address) -> Result<bool, Self::Error>;
     /// Get the key generators for the given round
-    async fn get_key_generators(&self, current_round: u64) -> Result<Vec<KeyGenerator<Address>>, Self::Error>;
+    async fn get_key_generators(&self, current_round: &Round) -> Result<Vec<KeyGenerator<Address>>, Self::Error>;
     /// Check if the service is ready to go for the given round
-    async fn is_ready(&self, current_round: u64, theshold: u16) -> Result<bool, Self::Error>;
+    async fn is_ready(&self, current_round: &Round, theshold: u16) -> Result<bool, Self::Error>;
 }
 
 /// Using unwrap() inside the task block is caught by tracing::error!().

@@ -1,6 +1,6 @@
 use crate::*;
 use serde::{Deserialize, Serialize};
-use dkg_primitives::{Config, EncKeyCommitment, SessionId, SignedCommitment, SubmitterList};
+use dkg_primitives::{Config, EncKeyCommitment, SessionId, SignedCommitment};
 use tracing::info;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -25,8 +25,6 @@ impl<C: Config> RpcParameter<C> for SyncEncKey<C::Signature, C::Address> {
             let session_id = self.session_id();
             if sender == ctx.address() { return Ok(()); }
             let _ = ctx.verify_signature(&self.0.signature, &self.0.commitment, Some(sender.clone()))?;
-            SubmitterList::<C::Address>::initialize(session_id)?;
-            SubmitterList::<C::Address>::apply(session_id, |list| { list.insert(sender.clone());})?;
             let enc_key_commitment = self.0.commitment.payload.decode::<EncKeyCommitment<C::Signature, C::Address>>()?;
             enc_key_commitment.put(&session_id, &sender)?;
         } 

@@ -1,9 +1,26 @@
-
+use std::str::FromStr;
 use async_trait::async_trait;
-use dkg_primitives::{AuthServiceError, AuthService, Parameter, KeyGenerator};
-use alloy::{primitives::{Address as EthAddress, U256}, providers::{ProviderBuilder, RootProvider}, sol, transports::http::{reqwest::Url, Client, Http}};
+use dkg_primitives::{AuthServiceError, AuthService, Parameter, KeyGenerator, Round};
+use alloy::{
+    network::{Ethereum, EthereumWallet}, primitives::{Address as EthAddress, U256}, providers::{fillers::{BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller, WalletFiller}, Identity, ProviderBuilder, RootProvider}, signers::local::LocalSigner, sol, sol_types::SolValue, transports::http::{reqwest::Url, Client, Http}
+};
+use crate::key_service::SkdeParams;
 
-use DkgContract::DkgContractInstance;
+type ContractInstance = DkgContract::DkgContractInstance<
+    Http<Client>,
+    FillProvider<
+        JoinFill<
+            JoinFill<
+                Identity,
+                JoinFill<GasFiller, JoinFill<BlobGasFiller, JoinFill<NonceFiller, ChainIdFiller>>>,
+            >,
+            WalletFiller<EthereumWallet>,
+        >,
+        RootProvider<Http<Client>>,
+        Http<Client>,
+        Ethereum,
+    >,
+>;
 
 sol! {
     #[sol(rpc)]
@@ -13,29 +30,56 @@ sol! {
             string clusterRpcUrl;
             string externalRpcUrl;
         }
+
+        struct TrustedSetupParams {
+            string n;
+            string g;
+            uint32 t;
+            string h;
+            string max_sequencer_number;
+        }
+
         function isAuthority(address account) public view returns (bool);
         function isSolver(address account) public view returns (bool);
         function isCommittee(uint256 round, address account) public view returns (bool);
         function getAuthorityInfo() public view returns (address account, string memory clusterRpcUrl, string memory externalRpcUrl);
         function getSolverInfo() public view returns (address account, string memory clusterRpcUrl, string memory externalRpcUrl);
         function getCommitteeList(uint256 round) public view returns (CommitteeInfo[] memory);
-        function updateTrustedSetup(bytes memory trusted_setup, bytes memory signature) public;
+        function updateTrustedSetup(bytes memory params, bytes memory authoritySignature) public;
         function getTrustedSetup() public view returns (bytes memory);
+        function registerCommittee(uint256 round, address account, string memory clusterRpcUrl, string memory externalRpcUrl) public;
+        function unregisterCommittee(uint256 round, address account) public;    
+    }
+}
+
+impl From<DkgContract::TrustedSetupParams> for SkdeParams {
+    fn from(params: DkgContract::TrustedSetupParams) -> Self {
+        Self {
+            n: params.n,
+            g: params.g,
+            t: params.t,
+            h: params.h,
+            max_sequencer_number: params.max_sequencer_number,
+        }
     }
 }
 
 #[derive(Clone)]
 /// Client that interacts with the blockchain
 pub struct DefaultAuthService {
-    pub contract: DkgContractInstance<Http<Client>, RootProvider<Http<Client>>>,
+    pub contract: ContractInstance,
 }
 
 impl DefaultAuthService {
-    pub fn new(endpoint: &str, address: &str) -> Self {
+    pub fn new(endpoint: &str, private_key: &str, contract_address: &str) -> Self {
         let url = Url::parse(endpoint).unwrap();
-        let address = address.parse::<EthAddress>().unwrap();
-        let provider = ProviderBuilder::new().on_http(url);
-        let contract = DkgContract::new(address, provider);
+        let signer = LocalSigner::from_str(private_key).unwrap();
+        let wallet = EthereumWallet::new(signer);
+        let provider = ProviderBuilder::new()
+            .with_recommended_fillers()
+            .wallet(wallet)
+            .on_http(url);
+        let contract = DkgContract::new(contract_address.parse::<EthAddress>().unwrap(), provider);
         Self { contract }
     }
 }
@@ -63,56 +107,56 @@ where
 #[async_trait]
 impl<Address> AuthService<Address> for DefaultAuthService 
 where
-    Address: Parameter + From<Vec<u8>> + AsRef<[u8]>,
+    Address: Parameter + From<Vec<u8>> + AsRef<[u8]>
 {
+    type TrustedSetup = DkgContract::TrustedSetupParams;
     type Error = AuthServiceError;
 
-    async fn update_trusted_setup(&self, bytes: Vec<u8>, signature: Vec<u8>) -> Result<(), Self::Error> {
-        let _ = self.contract.updateTrustedSetup(bytes.into(), signature.into()).send().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
+    async fn update_trusted_setup<T>(&self, trusted_setup: T, signature: Vec<u8>) -> Result<(), Self::Error> 
+    where
+        T: Into<Self::TrustedSetup> + Send + Sync + 'static
+    {
+        let trusted_setup: Self::TrustedSetup = trusted_setup.into();
+        let bytes = trusted_setup.abi_encode();
+        let _ = self.contract
+            .updateTrustedSetup(bytes.into(), signature.into())
+            .gas(15_000_000)
+            .gas_price(20000000000)
+            .send()
+            .await
+            .map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
         Ok(())
     }
-    async fn get_trusted_setup(&self) -> Result<Vec<u8>, Self::Error> {
+    async fn get_trusted_setup<T>(&self) -> Result<T, Self::Error>
+    where
+        Self::TrustedSetup: Into<T>
+    {
         let res = self.contract.getTrustedSetup().call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
-        Ok(res._0.to_vec())
+        let trusted_setup = Self::TrustedSetup::abi_decode(&res._0.to_vec(), false).map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
+        Ok(trusted_setup.into())
     }
     async fn get_solver_info(&self) -> Result<(Address, String, String), Self::Error> {
         let res = self.contract.getSolverInfo().call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
         Ok((convert(res.account), res.clusterRpcUrl, res.externalRpcUrl))
     }
-    async fn is_active(&self, current_round: u64, address: Address) -> Result<bool, Self::Error> { 
-        let res = self.contract.isCommittee(U256::from(current_round), convert_back(address).ok_or(AuthServiceError::AnyError("Invalid address".to_string()))?).call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
+    async fn register_key_generator(&self, round: Round, address: Address, cluster_rpc_url: &str, external_rpc_url: &str) -> Result<(), Self::Error> {
+        let _ = self.contract.registerCommittee(U256::from(round.0), convert_back(address).ok_or(AuthServiceError::AnyError("Invalid address".to_string()))?, cluster_rpc_url.to_string(), external_rpc_url.to_string()).call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
+        Ok(())
+    }
+    async fn unregister_key_generator(&self, round: Round, address: Address) -> Result<(), Self::Error> {
+        let _ = self.contract.unregisterCommittee(U256::from(round.0), convert_back(address).ok_or(AuthServiceError::AnyError("Invalid address".to_string()))?).call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
+        Ok(())
+    }
+    async fn is_active(&self, current_round: Round, address: Address) -> Result<bool, Self::Error> { 
+        let res = self.contract.isCommittee(U256::from(current_round.0), convert_back(address).ok_or(AuthServiceError::AnyError("Invalid address".to_string()))?).call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
         Ok(res._0)
     }
-    async fn get_key_generators(&self, current_round: u64) -> Result<Vec<KeyGenerator<Address>>, Self::Error> { 
-        let res = self.contract.getCommitteeList(U256::from(current_round)).call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
+    async fn get_key_generators(&self, current_round: &Round) -> Result<Vec<KeyGenerator<Address>>, Self::Error> { 
+        let res = self.contract.getCommitteeList(U256::from(current_round.0)).call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
         Ok(res._0.into_iter().map(|info| KeyGenerator::new(convert(info.account), info.clusterRpcUrl, info.externalRpcUrl)).collect())
     }
-    async fn is_ready(&self, current_round: u64, threshold: u16) -> Result<bool, Self::Error> {
+    async fn is_ready(&self, current_round: &Round, threshold: u16) -> Result<bool, Self::Error> {
         let res: Vec<KeyGenerator<Address>> = self.get_key_generators(current_round).await?;
         Ok(res.len() >= threshold as usize)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn dkg_auth_works() {
-        let auth_service = DefaultAuthService::new("http://localhost:8545", "0x5FbDB2315678afecb367f032d93F642f64180aa3"); 
-        let authority_address = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8".parse::<EthAddress>().unwrap();
-        let is_authority = auth_service.contract.isAuthority(authority_address).call().await.unwrap();
-        let solver_address = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC".parse::<EthAddress>().unwrap();
-        let is_solver = auth_service.contract.isAuthority(solver_address).call().await.unwrap();
-        println!("{:?}", is_authority._0);
-        println!("{:?}", is_solver._0);
-        let authority_info = auth_service.contract.getAuthorityInfo().call().await.unwrap();
-        println!("{:?}", authority_info.account);
-        println!("{:?}", authority_info.clusterRpcUrl);
-        println!("{:?}", authority_info.externalRpcUrl);
-        let solver_info = auth_service.contract.getSolverInfo().call().await.unwrap();
-        println!("{:?}", solver_info.account);
-        println!("{:?}", solver_info.clusterRpcUrl);
-        println!("{:?}", solver_info.externalRpcUrl);
     }
 }

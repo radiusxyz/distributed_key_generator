@@ -1,7 +1,7 @@
 use dkg_node_primitives::{BasicDkgService, DefaultTaskExecutor, DefaultAuthService, Role, Skde, NodeConfig, DefaultDbManager, DbManager};
 use futures::future::join_all;
 use radius_sdk::{signature::{PrivateKeySigner, ChainType, Signature, Address}, kvstore::KvStoreBuilder};
-use dkg_primitives::{Config, TrustedSetupFor, RuntimeError, RuntimeEvent, SessionId, Sha3Hasher, AuthService, KeyService, RuntimeResult};
+use dkg_primitives::{AuthService, AuthTrustedSetupFor, Config, KeyService, Round, RuntimeError, RuntimeEvent, RuntimeResult, SessionId, Sha3Hasher, TrustedSetupFor};
 use std::{fs, path::PathBuf};
 use tokio::sync::mpsc::{channel, Sender};
 use tracing::{info, error};
@@ -12,7 +12,10 @@ pub use task::*;
 #[cfg(feature = "experimental")]
 mod builder;
 
-async fn create_key_service<C: Config>(ctx: &C, config: &NodeConfig) -> Result<C::KeyService, C::Error> {
+async fn create_key_service<C: Config>(ctx: &C, config: &NodeConfig) -> Result<C::KeyService, C::Error> 
+where
+    AuthTrustedSetupFor<C>: From<TrustedSetupFor<C>> + Into<TrustedSetupFor<C>>,
+{
     // If the role is authority, setup the trusted setup 
     if config.role.is_authority() {
         let path = config.trusted_setup_path().join("trusted_setup.json");  
@@ -21,10 +24,9 @@ async fn create_key_service<C: Config>(ctx: &C, config: &NodeConfig) -> Result<C
                 match serde_json::from_str::<TrustedSetupFor<C>>(&data) {
                     Ok(trusted_setup) => {
                         let signature = ctx.sign(&trusted_setup)?;
-                        let trusted_setup_bytes = serde_json::to_vec(&trusted_setup)?;
                         let signature_bytes = serde_json::to_vec(&signature)?;
-                        if let Err(_) = ctx.auth_service().update_trusted_setup(trusted_setup_bytes, signature_bytes).await {
-                            error!("Failed to update trusted setup");
+                        if let Err(e) = ctx.auth_service().update_trusted_setup(trusted_setup.clone(), signature_bytes).await {
+                            panic!("Failed to update trusted setup: {}", e);
                         }
                         Ok(C::KeyService::setup(trusted_setup))
                     },
@@ -35,9 +37,8 @@ async fn create_key_service<C: Config>(ctx: &C, config: &NodeConfig) -> Result<C
         }
     } else {
         loop {
-            match ctx.auth_service().get_trusted_setup().await {
+            match ctx.auth_service().get_trusted_setup::<TrustedSetupFor<C>>().await {
                 Ok(trusted_setup) => {
-                    let trusted_setup = serde_json::from_slice::<TrustedSetupFor<C>>(&trusted_setup).map_err(|e| C::Error::from(e))?;
                     return Ok(C::KeyService::setup(trusted_setup))
                 }
                 Err(e) => { 
@@ -49,13 +50,12 @@ async fn create_key_service<C: Config>(ctx: &C, config: &NodeConfig) -> Result<C
     }
 }
 
-fn create_dkg_service<KS, AS, DB>(config: &NodeConfig, tx: Sender<RuntimeEvent<Signature, Address>>, auth_service: AS, db_manager: DB) -> RuntimeResult<BasicDkgService<KS, AS, DB>> 
+fn create_dkg_service<KS, AS, DB>(config: &NodeConfig, signer: PrivateKeySigner, tx: Sender<RuntimeEvent<Signature, Address>>, auth_service: AS, db_manager: DB) -> RuntimeResult<BasicDkgService<KS, AS, DB>> 
 where
     KS: KeyService + Clone,
     AS: AuthService<Address> + Clone, 
     DB: DbManager<Address> + Clone + Send + Sync + 'static,
 {
-    let signer = create_signer(&config.private_key_path, config.chain_type);
     let task_executor = DefaultTaskExecutor::new(tx)?;
     info!("Creating app state for: {:?}", config.role);
     BasicDkgService::<KS, AS, DB>::new(
@@ -69,14 +69,14 @@ where
     .map_err(RuntimeError::from)
 }
 
-fn create_signer(path: &PathBuf, chain_type: ChainType) -> PrivateKeySigner {
+fn create_signer(path: &PathBuf, chain_type: ChainType) -> (PrivateKeySigner, String) {
     match fs::read_to_string(path) {
         Ok(key_string) => {
             let clean_key = key_string.trim().replace("\n", "").replace("\r", "");
             match PrivateKeySigner::from_str(chain_type, &clean_key) {
                 Ok(signer) => {
                     tracing::info!("Created signer for: {:?}", path);
-                    signer
+                    (signer, clean_key)
                 },
                 Err(err) => {
                     panic!("Invalid signing key in file: {}", err);
@@ -97,6 +97,7 @@ fn init_db(config: &NodeConfig) -> RuntimeResult<()> {
     // Initialize neccessary kv stores
     let session_id = SessionId::new();
     session_id.put()?;
+    Round::new().put()?;
     tracing::info!("Successfully initialized the database at {:?}.", config.db_path);
     Ok(())
 }
@@ -114,9 +115,11 @@ pub async fn run_node(config: NodeConfig) -> RuntimeResult<()> {
     init_db(&config)?;
     
     let (tx, rx) = channel(10);
-    let auth_service = DefaultAuthService::new(&config.auth_service_endpoint, &config.trusted_address);
+    let (signer, private_key) = create_signer(&config.private_key_path, config.chain_type);
+    let auth_service = DefaultAuthService::new(&config.auth_service_endpoint, &private_key, &config.trusted_address);
     let db_manager = DefaultDbManager;
-    let mut dkg_service = create_dkg_service::<Skde<Sha3Hasher>, DefaultAuthService, DefaultDbManager>(&config, tx, auth_service, db_manager)?;
+    let mut dkg_service = create_dkg_service::<Skde<Sha3Hasher>, DefaultAuthService, DefaultDbManager>(&config, signer, tx, auth_service, db_manager)?;
+    info!("Node address: {:?}", dkg_service.address().as_hex_string());
     dkg_service.key_service = Some(create_key_service(&dkg_service, &config).await?);
 
     info!("{}", config.log());

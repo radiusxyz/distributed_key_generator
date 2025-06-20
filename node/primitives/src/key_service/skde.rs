@@ -1,7 +1,8 @@
 use super::KeyServiceResult;
+use crate::auth::DkgContract::TrustedSetupParams;
 use std::marker::PhantomData;
 use dkg_primitives::{Hasher, KeyService, KeyServiceError};
-use skde::{
+pub use skde::{
     delay_encryption::{decrypt, encrypt, solve_time_lock_puzzle, SkdeParams},
     key_aggregation::{aggregate_key, AggregatedKey},
     key_generation::{generate_partial_key, generate_uv_pair, PartialKey},
@@ -9,11 +10,24 @@ use skde::{
 };
 use dkg_utils::timestamp;
 use serde::{Serialize, Deserialize};
+use tracing::info;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Skde<H> {
     params: SkdeParams,
     _phantom: PhantomData<H>,
+}
+
+impl From<SkdeParams> for TrustedSetupParams {
+    fn from(params: SkdeParams) -> Self {
+        Self {
+            n: params.n,
+            g: params.g,
+            t: params.t,
+            h: params.h,
+            max_sequencer_number: params.max_sequencer_number,
+        }
+    }
 }
 
 impl<H: Hasher> Skde<H> 
@@ -42,9 +56,10 @@ where
     }
 
     pub fn gen_dec_key(&self, enc_key: &Vec<u8>) -> KeyServiceResult<(Vec<u8>, u128)> {
-        // TODO: Timeout
+        info!("Start generating decryption key");
         let enc_key = serde_json::from_slice::<AggregatedKey>(enc_key)?;
         let secure_key = solve_time_lock_puzzle(&self.params, &enc_key).map_err(|e| KeyServiceError::InternalError(e.to_string()))?;
+        info!("End generating decryption key");
         Ok((serde_json::to_vec(&secure_key.sk)?, timestamp()))
     }
 

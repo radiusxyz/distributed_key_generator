@@ -27,17 +27,18 @@ impl<C: Config> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
 
     async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
         // Leader of the session will handle the enc key submission
-        if !ctx.is_leader() { return Ok(()) }
+        let session_id = self.0.session_id();
+        info!("{} for session: {:?}", <Self as RpcParameter<C>>::method(), session_id);
+        if !ctx.is_leader() { 
+            info!("Not a leader for session: {:?}. Skipping...", session_id);
+            return Ok(()); 
+        }
         let current_round = ctx.db_manager().current_round().map_err(|e| RpcError::from(e))?;
         let sender = ctx.verify_signature(&self.0.signature, &self.0.commitment, self.sender())?;
         let key_generators = KeyGeneratorList::<C::Address>::get(current_round)?;
         if !key_generators.contains(&sender) {
             return Err(RpcError::from(KeyServiceError::NotRegistered(sender.into())));
         } 
-
-        let session_id = self.0.session_id();
-        info!("Received enc key - session_id: {:?}, sender: {:?}", session_id, sender);
-
         // Store commitment for `session` and `sender`
         let commitment = EncKeyCommitment::new(self.inner());
         commitment.put(&session_id, &sender)?;
@@ -45,6 +46,10 @@ impl<C: Config> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
         let mut is_threshold_met = false;
         let mut commitments = Vec::new();
 
+        if SubmitterList::<C::Address>::get(session_id).is_err() {
+            info!("Initializing submitter list for session {:?}", session_id);
+            SubmitterList::<C::Address>::new().put(session_id)?;
+        }
         SubmitterList::<C::Address>::apply(session_id, |submitter_list| {
             submitter_list.insert(sender.clone());
             if submitter_list.len() >= ctx.threshold() as usize {

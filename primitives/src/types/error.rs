@@ -105,7 +105,7 @@ pub enum AuthServiceError {
     UnregisterError,
     #[error("Already registered!")]
     AlreadyRegistered,
-    #[error("Any error: {0}")]
+    #[error("{0}")]
     AnyError(String),
 }
     

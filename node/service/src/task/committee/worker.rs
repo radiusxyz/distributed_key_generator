@@ -1,11 +1,11 @@
-use super::{Config, sync_finalized_enc_keys, submit_enc_key};
-use crate::{SessionWorkerState, SessionWorker, SessionInfo, SessionResult, AuthService, DbManager, KeyService};
+use super::{Config, sync_finalized_enc_keys, submit_enc_key, init_genesis_session};
+use crate::{SessionWorkerState, SessionWorker, SessionInfo, SessionResult, AuthService, DbManager, KeyService, SessionId};
 use std::sync::Arc;
 use tokio::sync::{mpsc::Receiver, Mutex};
 use futures_timer::Delay;
 use std::time::Instant;
 
-use dkg_primitives::{KeyGenerator, RuntimeError, RuntimeEvent};
+use dkg_primitives::{KeyGenerator, Round, RuntimeError, RuntimeEvent};
 use tracing::{debug, error, info};
 
 
@@ -18,7 +18,7 @@ pub struct CommitteeWorker<C: Config> {
     /// Internal state of the worker
     state: SessionWorkerState,
     /// Key generators for the current session
-    key_generators: Vec<KeyGenerator<C::Address>>,
+    key_generators: Option<Vec<KeyGenerator<C::Address>>>,
     /// Look ahead for the next round
     round_look_ahead: u64,
     /// Amount of sessions to add to the current session id
@@ -27,6 +27,28 @@ pub struct CommitteeWorker<C: Config> {
 
 #[async_trait::async_trait]
 impl<C: Config> SessionWorker<C> for CommitteeWorker<C> {
+
+    async fn on_genesis_session(&mut self, ctx: &C) -> Result<(), C::Error> {
+        let session_id = SessionId::get().expect("Not initialized"); 
+        if !session_id.is_initial() { panic!("Session id is not initial"); }
+        let current_round = Round::get().expect("Not initialized");
+        if !current_round.is_initial() { panic!("Current round is not initial"); }
+        let key_generators_for_round_0 = ctx.auth_service().get_key_generators(&current_round).await.expect("Failed to get initial key generators");
+        self.key_generators = Some(key_generators_for_round_0.clone());
+        let key_generators_for_round_1 = ctx.auth_service().get_key_generators(&(current_round.clone()+ 1)).await.expect("Failed to get key generators for round 1");
+        loop {
+            if ctx.auth_service().is_ready(&current_round, ctx.threshold()).await.unwrap() {
+                // Update the key generator list for round 0 
+                ctx.db_manager().update_key_generator_list(&current_round, key_generators_for_round_0.clone()).expect("Failed to update key generator list for round 0");
+                // Update the key generator list for round 1
+                ctx.db_manager().update_key_generator_list(&(current_round.clone()+1), key_generators_for_round_1.clone()).expect("Failed to update key generator list for round 1");
+                init_genesis_session(ctx, key_generators_for_round_0, session_id); 
+                break;
+            }
+        }
+        Ok(())
+    }
+
     async fn on_session(&mut self, ctx: &C, session_info: SessionInfo) -> Option<SessionResult<C::Signature>> {
         match self.on_session(ctx, session_info).await {
             Ok(res) => Some(res),
@@ -41,15 +63,19 @@ impl<C: Config> SessionWorker<C> for CommitteeWorker<C> {
 impl<C: Config> CommitteeWorker<C> {
 
     /// Create a new instance of `CommitteeWorker`
-    pub fn new(solver_rpc_url: String, rx: Receiver<RuntimeEvent<C::Signature, C::Address>>, key_generators: Vec<KeyGenerator<C::Address>>, round_look_ahead: u64, add_session_amount: u64) -> Self {
-        Self { solver_rpc_url, rx: Arc::new(Mutex::new(rx)), state: SessionWorkerState::Init, key_generators, round_look_ahead, add_session_amount }
+    pub fn new(solver_rpc_url: String, rx: Receiver<RuntimeEvent<C::Signature, C::Address>>, round_look_ahead: u64, add_session_amount: u64) -> Self {
+        Self { solver_rpc_url, rx: Arc::new(Mutex::new(rx)), state: SessionWorkerState::Init, key_generators: None, round_look_ahead, add_session_amount }
     }
 
     /// For every next session, worker will wait for the `FinalizeKey` event and broadcast the encryption keys to the participants including the solver.
     /// Each session should be ended before timeout
     pub async fn on_session(&mut self, ctx: &C, session_info: SessionInfo) -> Result<SessionResult<C::Signature>, C::Error> {
-        let on_session_id = session_info.session_id;
-        let mut key_generators = self.key_generators.clone();
+        let mut on_session_id = session_info.session_id;
+        let mut key_generators = self.key_generators.clone()
+            .ok_or(RuntimeError::AnyError("Empty key generators".into()))?
+            .into_iter()
+            .filter(|kg| kg.address() != ctx.address())
+            .collect();
         // Ends at after this delay 
         let mut timeout = Delay::new(session_info.ends_at.duration_since(Instant::now()));
         loop {
@@ -59,6 +85,7 @@ impl<C: Config> CommitteeWorker<C> {
                     rx.recv().await
                 } => {
                     if let Some(event) = event {
+                        info!("{:?}", event);
                         match event {
                             RuntimeEvent::FinalizeKey { commitments, start_session_id } => {
                                 if start_session_id != on_session_id { 
@@ -86,7 +113,10 @@ impl<C: Config> CommitteeWorker<C> {
                                 }
                                 continue;
                             },
-                            RuntimeEvent::EndSession(mut end_session_id) => {
+                            RuntimeEvent::EndSession(end_session_id) => {
+                                if end_session_id != on_session_id {
+                                    return Err(RuntimeError::AnyError(format!("End session id mismatch: {:?} != {:?}", end_session_id, on_session_id).into()).into());
+                                }
                                 match self.state {
                                     SessionWorkerState::Start(current_session_id) => {
                                         // Should be the same session id
@@ -99,26 +129,29 @@ impl<C: Config> CommitteeWorker<C> {
                                     _ => continue,
                                 }
                                 // Update the session id 
-                                end_session_id.next_mut(self.add_session_amount)?.put()?;
-                                if !ctx.is_leader() {
+                                on_session_id.next_mut(self.add_session_amount)?.put()?;
+                                let current_round = ctx.db_manager().current_round().map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+                                if ctx.should_force_generating(&current_round)? || !ctx.is_leader() {
+                                    info!("Force generating encryption key");
                                     // Send the encryption key to the leader before session ends
                                     let enc_key = ctx.key_service().gen_enc_key(ctx.randomness(on_session_id), None).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
-                                    submit_enc_key(end_session_id, enc_key, ctx).map_err(|_| RuntimeError::AnyError("Failed to submit encryption key".into()))?;
+                                    submit_enc_key(on_session_id, enc_key, ctx).map_err(|_| RuntimeError::AnyError("Failed to submit encryption key".into()))?;
                                 }
                                 if ctx.should_end_round((end_session_id + self.round_look_ahead.into()).into()) {
-                                    let round = ctx.db_manager().current_round().map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
-                                    let next_round = round.next().ok_or(RuntimeError::Arithmetic)?;
-                                    let key_generators = ctx.auth_service().get_key_generators(next_round.clone().into()).await.map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
-                                    ctx.db_manager().update_key_generator_list(next_round, key_generators).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+                                    let next_round = current_round.next().ok_or(RuntimeError::Arithmetic)?;
+                                    let key_generators = ctx.auth_service().get_key_generators(&next_round).await.map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+                                    ctx.db_manager().update_key_generator_list(&next_round, key_generators).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
                                 }
                                 return Ok(SessionResult::<C::Signature>::new());
                             }
-                            _ => continue,
+                            _ => {
+                                info!("Ignore event: {:?}", event);
+                                continue;
+                            },
                         }
                     }
                 },
                 _ = &mut timeout => {
-                    info!("Timeout for session {:?}", session_info.session_id);
                     return Err(RuntimeError::AnyError("Timeout".into()).into());
                 }
             }

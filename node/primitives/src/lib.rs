@@ -97,6 +97,10 @@ where
             }
         }
     }
+    fn should_force_generating(&self, current_round: &Round) -> Result<bool, Self::Error> { 
+        let key_generator_list = KeyGeneratorList::<Self::Address>::get(current_round.clone())?;
+        Ok(key_generator_list.len() == 1)
+    }
     fn should_end_round(&self, current_session: u64) -> bool { 
         if current_session == 0 {
             tracing::info!("First round");

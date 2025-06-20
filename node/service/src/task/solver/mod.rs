@@ -3,7 +3,7 @@ use crate::rpc::{default_external_rpc_server, default_cluster_rpc_server};
 use dkg_rpc::{DecKeyPayload, SubmitDecKeyResponse, SubmitDecKey};
 use dkg_primitives::{AsyncTask, Commitment, DecKey, SessionId, SignedCommitment, KeyService};
 use radius_sdk::json_rpc::server::{RpcError, RpcParameter};
-use tracing::debug;
+use tracing::info;
 use tokio::task::JoinHandle;
 use tokio::sync::mpsc::Receiver;
 use dkg_primitives::RuntimeEvent;
@@ -38,14 +38,14 @@ pub async fn run_node<C: Config>(ctx: &mut C, config: NodeConfig, rx: Receiver<R
 }
 
 /// Solve based on the given encryption keys and create a signed commitment
-pub fn solve<C: Config>(
+pub fn do_solve_key<C: Config>(
     ctx: &C,
     session_id: SessionId,
     enc_key: &Vec<u8>,
 ) -> Result<SignedCommitment<C::Signature, C::Address>, RpcError> {
-    debug!("Start solving");
+    info!("Start solving");
     let (dec_key, solve_at) = ctx.key_service().gen_dec_key(enc_key).map_err(|e| RpcError::from(e))?;
-    debug!("End solving");
+    info!("End solving");
     ctx.key_service().verify_dec_key(&enc_key, &dec_key).map_err(|e| RpcError::from(e))?;
     DecKey::new(dec_key.clone()).put(session_id).map_err(|e| RpcError::from(e))?;
     let payload = DecKeyPayload::new(dec_key, solve_at);

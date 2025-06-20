@@ -22,7 +22,7 @@ impl<C: Config> RpcParameter<C> for SyncDecKey<C::Signature, C::Address> {
 
     async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
         if let Some(sender) = self.0.sender() {
-            info!("Received decryption key from {:?}", sender);
+            info!("{:?} at session {:?}", <Self as RpcParameter<C>>::method(), self.0.session_id());
             let _ = ctx.verify_signature(&self.0.signature, &self.0.commitment, Some(sender))?;
             let session_id = self.0.session_id();
             let payload = self.dec_key()?;

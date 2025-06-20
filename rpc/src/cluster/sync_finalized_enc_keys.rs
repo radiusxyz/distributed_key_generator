@@ -1,5 +1,5 @@
 use crate::{*, FinalizedEncKeyPayload };
-use dkg_primitives::{AsyncTask, Config, EncKey, RuntimeEvent, KeyService, Payload, SessionId, SignedCommitment, SubmitterList};
+use dkg_primitives::{AsyncTask, Config, EncKey, RuntimeEvent, KeyService, Payload, SessionId, SignedCommitment};
 use radius_sdk::json_rpc::server::RpcError;
 use serde::{Deserialize, Serialize};
 
@@ -22,18 +22,14 @@ impl<C: Config> RpcParameter<C> for SyncFinalizedEncKeys<C::Signature, C::Addres
     }
 
     async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
-        info!("Syncing finalized encryption keys");
         let session_id = self.get_session_id();
-        SubmitterList::<C::Address>::initialize(session_id)?;
+        info!("{:?} at session {:?}", <Self as RpcParameter<C>>::method(), session_id);
         let mut enc_keys = self.payload()
             .decode::<FinalizedEncKeyPayload<C::Signature, C::Address>>()
             .map_err(|e| RpcError::from(e))?
             .inner()
             .iter()
             .map(|key| {
-                let signer = ctx.verify_signature(&key.inner().signature, &key.inner().commitment, key.inner().commitment.sender.clone())?;
-                SubmitterList::<C::Address>::apply(session_id, |list| { list.insert(signer.clone()); })?;
-                key.put(&session_id, &signer)?;
                 Ok(key.inner().commitment.payload.inner())
             })
             .collect::<Result<Vec<Vec<u8>>, RpcError>>()?;

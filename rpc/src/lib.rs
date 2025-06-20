@@ -39,13 +39,13 @@ pub mod helper {
             ctx.db_manager().get_key_generator_list(current_round)
                 .map_err(|e| RpcError::from(e))?
                 .into_iter()
-                .filter(|kg| kg.address() != ctx.address())
+                .filter(|kg| kg.address() != ctx.address()) // Exclude self
                 .map(|kg| kg.cluster_rpc_url().to_owned())
-                .collect();
+                .collect::<Vec<_>>();
         let payload = serde_json::to_vec(&commitment)?;
         let commitment = Commitment::new(payload.into(), Some(ctx.address()), session_id);
         let signature = ctx.sign(&commitment)?;
-        info!("Broadcasting enc key ack to {:?}", key_generators);
+        if !key_generators.is_empty() { info!("Broadcasting enc key ack to {:?}", key_generators); }
         ctx.async_task().multicast(key_generators, <SyncEncKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncEncKey(SignedCommitment { commitment, signature }));
         Ok(())
     }
@@ -55,12 +55,13 @@ pub mod helper {
         ctx: &C,
         payload: Payload,
         session_id: SessionId,
+        exclude_list: Vec<C::Address>,
     ) -> RpcResult<()> {    
         let current_round = ctx.db_manager().current_round().map_err(|e| RpcError::from(e))?;
         let key_generators = ctx.db_manager().get_key_generator_list(current_round)
             .map_err(|e| RpcError::from(e))?
-            .all_rpc_urls(true);
-        info!("Broadcast decryption key - session_id: {:?}, all_dkg_list: {:?}", session_id, key_generators);
+            .all_rpc_urls(true, exclude_list);
+        info!("Broadcast decryption key at session: {:?}, all_dkg_list: {:?}", session_id, key_generators);
         let commitment = Commitment::new(payload, Some(ctx.address()), session_id);
         let signature = ctx.sign(&commitment)?;
         ctx.async_task().multicast(key_generators, <SyncDecKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncDecKey(SignedCommitment { commitment, signature }));

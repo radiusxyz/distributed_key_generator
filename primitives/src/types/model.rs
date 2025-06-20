@@ -47,10 +47,6 @@ impl<Address: AddressT> SubmitterList<Address> {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
-
-    pub fn initialize(session_id: SessionId) -> Result<(), RuntimeError> {
-        Self(Vec::new()).put(session_id).map_err(RuntimeError::from)
-    }
 }
 
 impl<Address> IntoIterator for SubmitterList<Address> {
@@ -183,9 +179,10 @@ impl<Address: AddressT> KeyGeneratorList<Address> {
     /// Returns all RPC URLs of the key generators.
     /// If `is_sync` is true, it returns the RPC URLs of the key generators in the cluster.
     /// Otherwise, it returns the external RPC URLs of all key generators.
-    pub fn all_rpc_urls(&self, is_sync: bool) -> Vec<String> {
+    pub fn all_rpc_urls(&self, is_sync: bool, exclude_list: Vec<Address>) -> Vec<String> {
         self.0
             .iter()
+            .filter(|kg| !exclude_list.contains(&kg.address()))
             .map(|key_generator| {
                 if is_sync {
                     key_generator.cluster_rpc_url().to_owned()
@@ -229,8 +226,8 @@ impl Into<u64> for Round {
 
 impl Round {
 
-    pub fn initialize() -> Result<(), RuntimeError> {
-        Self(0).put().map_err(RuntimeError::from)
+    pub fn new() -> Self {
+        Self(0)
     }
 
     pub fn is_initial(&self) -> bool {
@@ -244,6 +241,13 @@ impl Round {
     pub fn next_mut(&mut self) -> Result<Self, RuntimeError> {
         self.0 = self.next().ok_or(RuntimeError::Arithmetic)?.into();
         Ok(self.clone())
+    }
+}
+
+impl Add<u64> for Round {
+    type Output = Self;
+    fn add(self, other: u64) -> Self::Output {
+        Self(self.0 + other)
     }
 }
 
