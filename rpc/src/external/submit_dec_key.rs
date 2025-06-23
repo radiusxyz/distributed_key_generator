@@ -24,9 +24,9 @@ impl<C: Config> RpcParameter<C> for SubmitDecKey<C::Signature, C::Address> {
     }
 
     async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
-        info!("{}", <Self as RpcParameter<C>>::method());
         let _ = ctx.verify_signature(&self.0.signature, &self.0.commitment, self.0.sender())?;
         let session_id = self.0.session_id();
+        info!("{} at session: {:?}", <Self as RpcParameter<C>>::method(), session_id);
         multicast_dec_key_ack::<C>(&ctx, self.payload(), session_id, vec![ctx.address()])?;
         // This is end of the session
         ctx.async_task().emit_event(RuntimeEvent::EndSession(session_id.into())).await.map_err(|e| RpcError::from(e))?;

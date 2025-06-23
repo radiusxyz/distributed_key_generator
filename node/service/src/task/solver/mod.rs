@@ -1,8 +1,8 @@
 use super::{Config, NodeConfig, run_session_worker};
 use crate::rpc::{default_external_rpc_server, default_cluster_rpc_server};
 use dkg_rpc::{DecKeyPayload, SubmitDecKeyResponse, SubmitDecKey};
-use dkg_primitives::{AsyncTask, Commitment, DecKey, SessionId, SignedCommitment, KeyService};
-use radius_sdk::json_rpc::server::{RpcError, RpcParameter};
+use dkg_primitives::{AsyncTask, Commitment, DecKey, SessionId, SignedCommitment, KeyService, RuntimeError};
+use radius_sdk::json_rpc::server::RpcParameter;
 use tracing::info;
 use tokio::task::JoinHandle;
 use tokio::sync::mpsc::Receiver;
@@ -42,14 +42,13 @@ pub fn do_solve_key<C: Config>(
     ctx: &C,
     session_id: SessionId,
     enc_key: &Vec<u8>,
-) -> Result<SignedCommitment<C::Signature, C::Address>, RpcError> {
-    info!("Start solving");
-    let (dec_key, solve_at) = ctx.key_service().gen_dec_key(enc_key).map_err(|e| RpcError::from(e))?;
-    info!("End solving");
-    ctx.key_service().verify_dec_key(&enc_key, &dec_key).map_err(|e| RpcError::from(e))?;
-    DecKey::new(dec_key.clone()).put(session_id).map_err(|e| RpcError::from(e))?;
+) -> Result<SignedCommitment<C::Signature, C::Address>, C::Error> {
+    info!("Start solving at session: {:?}", session_id);
+    let (dec_key, solve_at) = ctx.key_service().gen_dec_key(enc_key).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+    info!("End solving at session: {:?}", session_id);
+    DecKey::new(dec_key.clone()).put(session_id).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
     let payload = DecKeyPayload::new(dec_key, solve_at);
-    let bytes = serde_json::to_vec(&payload).map_err(|e| RpcError::from(e))?;
+    let bytes = serde_json::to_vec(&payload).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
     let commitment = Commitment::new(bytes.into(), Some(ctx.address()), session_id);
     let signature = ctx.sign(&commitment)?;
     Ok(SignedCommitment { signature, commitment })

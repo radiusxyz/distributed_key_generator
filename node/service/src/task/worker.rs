@@ -96,7 +96,6 @@ impl Sessions {
                 Ok(session_id) => session_id,
                 Err(_) => { tracing::error!("Error getting session id"); continue; }
             };
-            tracing::info!("Current session: {:?}", current_session);
             if !current_session.is_initial() {
                 if current_session > self.last_session {
                     self.last_session = current_session;
@@ -116,10 +115,18 @@ impl Sessions {
 pub enum SessionWorkerState {
     /// The session is not started yet
     Init, 
-    /// The session has started
-    Start(SessionId),
-    /// The session has ended
-    End(SessionId),
+    /// This is view point that worker sees at the start of the session
+    Active(SessionId),
+}
+
+impl SessionWorkerState {
+    pub fn is_init(&self) -> bool {
+        matches!(self, Self::Init)
+    }
+
+    pub fn set_active_session(&mut self, session_id: SessionId) {
+        *self = Self::Active(session_id);
+    }
 }
 
 #[async_trait::async_trait]

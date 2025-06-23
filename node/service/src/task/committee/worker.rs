@@ -6,7 +6,7 @@ use futures_timer::Delay;
 use std::time::Instant;
 
 use dkg_primitives::{KeyGenerator, Round, RuntimeError, RuntimeEvent};
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 
 #[derive(Clone)]
@@ -67,6 +67,24 @@ impl<C: Config> CommitteeWorker<C> {
         Self { solver_rpc_url, rx: Arc::new(Mutex::new(rx)), state: SessionWorkerState::Init, key_generators: None, round_look_ahead, add_session_amount }
     }
 
+    pub async fn do_end_session(&mut self, ctx: &C, on_session_id: &mut SessionId) -> Result<(), C::Error> {
+        self.state = SessionWorkerState::Active(*on_session_id);
+        on_session_id.next_mut(self.add_session_amount)?.put()?;
+        let current_round = ctx.db_manager().current_round().map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+        if ctx.should_force_generating(&current_round)? || !ctx.is_leader() {
+            info!("Force generating encryption key at session: {:?}", *on_session_id);
+            // Send the encryption key to the leader before session ends
+            let enc_key = ctx.key_service().gen_enc_key(ctx.randomness(*on_session_id), None).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+            submit_enc_key(*on_session_id, enc_key, ctx).map_err(|_| RuntimeError::AnyError("Failed to submit encryption key".into()))?;
+        }
+        if ctx.should_end_round((*on_session_id + self.round_look_ahead.into()).into()) {
+            let next_round = current_round.next().ok_or(RuntimeError::Arithmetic)?;
+            let key_generators = ctx.auth_service().get_key_generators(&next_round).await.map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+            ctx.db_manager().update_key_generator_list(&next_round, key_generators).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+        }
+        Ok(())
+    }
+
     /// For every next session, worker will wait for the `FinalizeKey` event and broadcast the encryption keys to the participants including the solver.
     /// Each session should be ended before timeout
     pub async fn on_session(&mut self, ctx: &C, session_info: SessionInfo) -> Result<SessionResult<C::Signature>, C::Error> {
@@ -88,25 +106,9 @@ impl<C: Config> CommitteeWorker<C> {
                         info!("{:?}", event);
                         match event {
                             RuntimeEvent::FinalizeKey { commitments, start_session_id } => {
-                                if start_session_id != on_session_id { 
-                                    info!("Session id mismatch: {:?} != {:?}", start_session_id, on_session_id);
+                                if start_session_id < on_session_id { 
+                                    info!("Stale session {:?}. Ignore it", start_session_id);
                                     continue;
-                                }
-                                match self.state {
-                                    SessionWorkerState::Init => {
-                                        self.state = SessionWorkerState::Start(start_session_id);
-                                    },
-                                    SessionWorkerState::End(last_session_id) => {
-                                        // It should be greater 
-                                        if last_session_id > start_session_id {
-                                            continue;
-                                        }
-                                        self.state = SessionWorkerState::Start(start_session_id);
-                                    },
-                                    _ => {
-                                        debug!("Wrong internal state");
-                                        continue;
-                                    },
                                 }
                                 if ctx.is_leader() {
                                     sync_finalized_enc_keys::<C>(&ctx, &mut key_generators, commitments, self.solver_rpc_url.clone(), start_session_id).await?;
@@ -114,34 +116,14 @@ impl<C: Config> CommitteeWorker<C> {
                                 continue;
                             },
                             RuntimeEvent::EndSession(end_session_id) => {
-                                if end_session_id != on_session_id {
-                                    return Err(RuntimeError::AnyError(format!("End session id mismatch: {:?} != {:?}", end_session_id, on_session_id).into()).into());
+                                if end_session_id < on_session_id {
+                                    info!("Stale session {:?}. Ignore it", end_session_id);
+                                    continue;
                                 }
-                                match self.state {
-                                    SessionWorkerState::Start(current_session_id) => {
-                                        // Should be the same session id
-                                        if current_session_id != end_session_id {
-                                            debug!("End and start session id should be equal!");
-                                            continue;
-                                        }
-                                        self.state = SessionWorkerState::End(end_session_id);
-                                    }, 
-                                    _ => continue,
+                                if self.state.is_init() {
+                                    self.state = SessionWorkerState::Active(end_session_id);
                                 }
-                                // Update the session id 
-                                on_session_id.next_mut(self.add_session_amount)?.put()?;
-                                let current_round = ctx.db_manager().current_round().map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
-                                if ctx.should_force_generating(&current_round)? || !ctx.is_leader() {
-                                    info!("Force generating encryption key");
-                                    // Send the encryption key to the leader before session ends
-                                    let enc_key = ctx.key_service().gen_enc_key(ctx.randomness(on_session_id), None).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
-                                    submit_enc_key(on_session_id, enc_key, ctx).map_err(|_| RuntimeError::AnyError("Failed to submit encryption key".into()))?;
-                                }
-                                if ctx.should_end_round((end_session_id + self.round_look_ahead.into()).into()) {
-                                    let next_round = current_round.next().ok_or(RuntimeError::Arithmetic)?;
-                                    let key_generators = ctx.auth_service().get_key_generators(&next_round).await.map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
-                                    ctx.db_manager().update_key_generator_list(&next_round, key_generators).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
-                                }
+                                self.do_end_session(ctx, &mut on_session_id).await?;
                                 return Ok(SessionResult::<C::Signature>::new());
                             }
                             _ => {
@@ -152,7 +134,9 @@ impl<C: Config> CommitteeWorker<C> {
                     }
                 },
                 _ = &mut timeout => {
-                    return Err(RuntimeError::AnyError("Timeout".into()).into());
+                    error!("⏳Timeout on session: {:?}. Force ending session: {:?}", on_session_id, on_session_id);
+                    self.do_end_session(ctx, &mut on_session_id).await?;
+                    return Ok(SessionResult::<C::Signature>::new());
                 }
             }
         }

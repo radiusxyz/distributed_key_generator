@@ -287,6 +287,11 @@ impl SessionId {
         self.0.checked_sub(1).map(Self)
     }
 
+    pub fn set(&mut self, value: u64) -> Self {
+        self.0 = value;
+        *self
+    }
+
     pub fn next(&self, amount: u64) -> Option<Self> {
         self.0.checked_add(amount).map(Self)
     }

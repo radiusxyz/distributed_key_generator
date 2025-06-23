@@ -56,10 +56,8 @@ where
     }
 
     pub fn gen_dec_key(&self, enc_key: &Vec<u8>) -> KeyServiceResult<(Vec<u8>, u128)> {
-        info!("Start generating decryption key");
         let enc_key = serde_json::from_slice::<AggregatedKey>(enc_key)?;
         let secure_key = solve_time_lock_puzzle(&self.params, &enc_key).map_err(|e| KeyServiceError::InternalError(e.to_string()))?;
-        info!("End generating decryption key");
         Ok((serde_json::to_vec(&secure_key.sk)?, timestamp()))
     }
 

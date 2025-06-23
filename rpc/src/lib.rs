@@ -45,8 +45,10 @@ pub mod helper {
         let payload = serde_json::to_vec(&commitment)?;
         let commitment = Commitment::new(payload.into(), Some(ctx.address()), session_id);
         let signature = ctx.sign(&commitment)?;
-        if !key_generators.is_empty() { info!("Broadcasting enc key ack to {:?}", key_generators); }
-        ctx.async_task().multicast(key_generators, <SyncEncKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncEncKey(SignedCommitment { commitment, signature }));
+        if !key_generators.is_empty() { 
+            info!("Broadcasting enc key ack to {:?} at session: {:?}", key_generators, session_id); 
+            ctx.async_task().multicast(key_generators, <SyncEncKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncEncKey(SignedCommitment { commitment, signature }));
+        }
         Ok(())
     }
 
@@ -61,10 +63,12 @@ pub mod helper {
         let key_generators = ctx.db_manager().get_key_generator_list(current_round)
             .map_err(|e| RpcError::from(e))?
             .all_rpc_urls(true, exclude_list);
-        info!("Broadcast decryption key at session: {:?}, all_dkg_list: {:?}", session_id, key_generators);
-        let commitment = Commitment::new(payload, Some(ctx.address()), session_id);
-        let signature = ctx.sign(&commitment)?;
-        ctx.async_task().multicast(key_generators, <SyncDecKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncDecKey(SignedCommitment { commitment, signature }));
+        if !key_generators.is_empty() { 
+            info!("Broadcasting dec key to {:?} at session: {:?}", key_generators, session_id); 
+            let commitment = Commitment::new(payload, Some(ctx.address()), session_id);
+            let signature = ctx.sign(&commitment)?;
+            ctx.async_task().multicast(key_generators, <SyncDecKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncDecKey(SignedCommitment { commitment, signature }));
+        }
         Ok(())
     } 
 }
