@@ -83,25 +83,26 @@ impl NodeConfig {
 
     pub fn log(&self) -> String {
         let mut log_lines = Vec::new();
-        
-        // Node role and basic info
         log_lines.push(format!("👤 Role: {}", self.role.to_string().to_uppercase()));
-        log_lines.push(format!("🔗 Chain Type: {:?}", self.chain_type));
-        
-        // RPC endpoints
-        log_lines.push(format!("🌐 External RPC: {}", self.external_rpc_url));
-        log_lines.push(format!("🔒 Internal RPC: {}", self.internal_rpc_url));
-        log_lines.push(format!("🔄 Cluster RPC: {}", self.cluster_rpc_url));
+        if !self.role.is_authority() {
+            // Node role and basic info
+            log_lines.push(format!("🔗 Chain Type: {:?}", self.chain_type));
+                        
+            // RPC endpoints
+            log_lines.push(format!("🌐 External RPC: {}", self.external_rpc_url));
+            log_lines.push(format!("🔒 Internal RPC: {}", self.internal_rpc_url));
+            log_lines.push(format!("🔄 Cluster RPC: {}", self.cluster_rpc_url));
 
-        // Security and configuration
-        log_lines.push(format!("🔑 Trusted Address: {}", self.trusted_address));
-        log_lines.push(format!("⏱️ Session Duration: {}ms", self.session_duration_millis.as_millis()));
-        log_lines.push(format!("📊 Threshold: {}", self.threshold));
-        
-        // Paths
-        log_lines.push(format!("💾 DB opens at: {}", self.db_path.display()));
-        if let Some(setup_path) = &self.trusted_setup_path {
-            log_lines.push(format!("🔧 Trusted Setup Path: {}", setup_path.display()));
+            // Security and configuration
+            log_lines.push(format!("🔑 Trusted Address: {}", self.trusted_address));
+            log_lines.push(format!("⏱️ Session Duration: {}ms", self.session_duration_millis.as_millis()));
+            log_lines.push(format!("📊 Threshold: {}", self.threshold));
+
+            // Paths
+            log_lines.push(format!("💾 DB opens at: {}", self.db_path.display()));
+            if let Some(setup_path) = &self.trusted_setup_path {
+                log_lines.push(format!("🔧 Trusted Setup Path: {}", setup_path.display()));
+            }
         }
         
         // Auth service

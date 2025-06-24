@@ -1,5 +1,5 @@
 use super::{Config, sync_finalized_enc_keys, submit_enc_key, init_genesis_session};
-use crate::{SessionWorkerState, SessionWorker, SessionInfo, SessionResult, AuthService, DbManager, KeyService, SessionId};
+use crate::{SessionWorker, SessionInfo, SessionResult, AuthService, DbManager, KeyService, SessionId};
 use std::sync::Arc;
 use tokio::sync::{mpsc::Receiver, Mutex};
 use futures_timer::Delay;
@@ -15,8 +15,8 @@ pub struct CommitteeWorker<C: Config> {
     solver_rpc_url: String,
     /// Receiver for the events
     rx: Arc<Mutex<Receiver<RuntimeEvent<C::Signature, C::Address>>>>,
-    /// Internal state of the worker
-    state: SessionWorkerState,
+    /// Whether the solver has solved the key
+    has_solved: bool,
     /// Key generators for the current session
     key_generators: Option<Vec<KeyGenerator<C::Address>>>,
     /// Look ahead for the next round
@@ -64,19 +64,25 @@ impl<C: Config> CommitteeWorker<C> {
 
     /// Create a new instance of `CommitteeWorker`
     pub fn new(solver_rpc_url: String, rx: Receiver<RuntimeEvent<C::Signature, C::Address>>, round_look_ahead: u64, add_session_amount: u64) -> Self {
-        Self { solver_rpc_url, rx: Arc::new(Mutex::new(rx)), state: SessionWorkerState::Init, key_generators: None, round_look_ahead, add_session_amount }
+        Self { solver_rpc_url, rx: Arc::new(Mutex::new(rx)), has_solved: false, key_generators: None, round_look_ahead, add_session_amount }
     }
 
+    /// End the current session
+    /// 1. Update the current session
+    /// 2. (Optional) Force generating encryption key if there is only one committee member
+    /// 3. (Optional) Update the key generator list at `T+round_look_ahead`
     pub async fn do_end_session(&mut self, ctx: &C, on_session_id: &mut SessionId) -> Result<(), C::Error> {
-        self.state = SessionWorkerState::Active(*on_session_id);
+        // Update the current session
         on_session_id.next_mut(self.add_session_amount)?.put()?;
         let current_round = ctx.db_manager().current_round().map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+        // If there is only one committee member, we need to force generating
         if ctx.should_force_generating(&current_round)? || !ctx.is_leader() {
             info!("Force generating encryption key at session: {:?}", *on_session_id);
             // Send the encryption key to the leader before session ends
             let enc_key = ctx.key_service().gen_enc_key(ctx.randomness(*on_session_id), None).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
             submit_enc_key(*on_session_id, enc_key, ctx).map_err(|_| RuntimeError::AnyError("Failed to submit encryption key".into()))?;
         }
+        // Update the key generator list at `T+round_look_ahead`
         if ctx.should_end_round((*on_session_id + self.round_look_ahead.into()).into()) {
             let next_round = current_round.next().ok_or(RuntimeError::Arithmetic)?;
             let key_generators = ctx.auth_service().get_key_generators(&next_round).await.map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
@@ -94,6 +100,7 @@ impl<C: Config> CommitteeWorker<C> {
             .into_iter()
             .filter(|kg| kg.address() != ctx.address())
             .collect();
+        self.has_solved = false;
         // Ends at after this delay 
         let mut timeout = Delay::new(session_info.ends_at.duration_since(Instant::now()));
         loop {
@@ -120,9 +127,9 @@ impl<C: Config> CommitteeWorker<C> {
                                     info!("Stale session {:?}. Ignore it", end_session_id);
                                     continue;
                                 }
-                                if self.state.is_init() {
-                                    self.state = SessionWorkerState::Active(end_session_id);
-                                }
+                                // If solver has decrypted the key, it means the key generation process has started
+                                // We only update `has_started` at session `0`
+                                self.has_solved = true;
                                 self.do_end_session(ctx, &mut on_session_id).await?;
                                 return Ok(SessionResult::<C::Signature>::new());
                             }
@@ -134,8 +141,13 @@ impl<C: Config> CommitteeWorker<C> {
                     }
                 },
                 _ = &mut timeout => {
-                    error!("⏳Timeout on session: {:?}. Force ending session: {:?}", on_session_id, on_session_id);
-                    self.do_end_session(ctx, &mut on_session_id).await?;
+                    if !self.has_solved{
+                        error!("Timeout. Force ending session: {:?}", on_session_id);
+                        self.do_end_session(ctx, &mut on_session_id).await?;
+                    } else {
+                        // Don't update the session id until the solver has solved the key
+                        error!("Timeout. Maybe solver not started yet?")
+                    }
                     return Ok(SessionResult::<C::Signature>::new());
                 }
             }

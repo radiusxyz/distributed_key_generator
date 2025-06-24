@@ -92,7 +92,7 @@ where
                 Err(_) => b"default-randomness".to_vec(),
             },
             None => {
-                // Underflow means `initial session`
+                // Underflow or initial session
                 return b"initial-randomness".to_vec();
             }
         }

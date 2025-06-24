@@ -10,7 +10,6 @@ pub use skde::{
 };
 use dkg_utils::timestamp;
 use serde::{Serialize, Deserialize};
-use tracing::info;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Skde<H> {

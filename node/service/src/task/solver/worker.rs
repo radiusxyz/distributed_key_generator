@@ -1,7 +1,7 @@
 use super::{do_solve_key, submit_dec_key};
-use crate::{SessionWorkerState, SessionInfo, SessionResult, SessionWorker};
+use crate::{SessionInfo, SessionResult, SessionWorker};
 use std::sync::Arc;
-use tokio::sync::{mpsc::Receiver, Mutex, Notify};
+use tokio::sync::{mpsc::{self, Receiver, Sender}, Mutex};
 use dkg_rpc::{Config, SessionId};
 use futures_timer::Delay;
 use std::time::Instant;
@@ -9,17 +9,18 @@ use std::time::Instant;
 use dkg_primitives::{RuntimeEvent, Round, AuthService, DbManager};
 use tracing::{error, info};
 
-#[derive(Clone)]
 pub struct SolverWorker<C: Config> {
     rx: Arc<Mutex<Receiver<RuntimeEvent<C::Signature, C::Address>>>>,
-    state: Arc<Mutex<SessionWorkerState>>,
-    notify: Arc<Notify>,
+    has_started: bool,
+    session_tx: Sender<SessionId>,
+    session_rx: Receiver<SessionId>,
 }
 
 #[async_trait::async_trait]
 impl<C: Config> SessionWorker<C> for SolverWorker<C> {
 
     async fn on_genesis_session(&mut self, ctx: &C) -> Result<(), C::Error> {
+        info!("On genesis session");
         let current_round = Round::get().expect("Not initialized");
         if !current_round.is_initial() { panic!("Current round is not initial"); }
         let key_generators_for_round_0 = ctx.auth_service().get_key_generators(&current_round).await.expect("Failed to get initial key generators");
@@ -52,25 +53,20 @@ impl<C: Config> SolverWorker<C> {
 
     /// Create a instance of `SessionWorker`
     pub fn new(rx: Receiver<RuntimeEvent<C::Signature, C::Address>>) -> Self {
-        Self { rx: Arc::new(Mutex::new(rx)), state: Arc::new(Mutex::new(SessionWorkerState::Init)), notify: Arc::new(Notify::new()) }
+        let (session_tx, session_rx) = mpsc::channel(10);
+        Self { rx: Arc::new(Mutex::new(rx)), has_started: false, session_tx, session_rx }
     }
 
-    pub async fn do_end_session(&self, on_session_id: Arc<Mutex<SessionId>>, amount: u64) -> Result<(), C::Error> {
-        // We only force update session if the worker is in the initial state
-        let mut state = self.state.lock().await;
-        let mut session_id = on_session_id.lock().await; 
-        if !state.is_init() {
-            *state = SessionWorkerState::Active(*session_id);
-            session_id.next_mut(amount)?.put()?;
-        }
+    pub async fn do_end_session(&self, on_session_id: &mut SessionId, amount: u64) -> Result<(), C::Error> {
+        on_session_id.next_mut(amount)?.put()?;
         Ok(())
     }
 
     /// For every next session, worker will wait for the `SolveKey` event and submit the decryption key to the leader.
     /// Each session should be ended before timeout
     pub async fn on_session(&mut self, ctx: &C, session_info: SessionInfo) -> Result<SessionResult<C::Signature>, C::Error> {
+        let mut on_session_id = session_info.session_id;
         // Ends at after this delay 
-        let on_session_id = Arc::new(Mutex::new(session_info.session_id));
         let mut timeout = Delay::new(session_info.ends_at.duration_since(Instant::now()));
         loop {
             tokio::select! {
@@ -83,30 +79,12 @@ impl<C: Config> SolverWorker<C> {
                         match event {
                             RuntimeEvent::SolveKey { enc_key, session_id } => {
                                 let ctx = ctx.clone();
-                                let state = self.state.clone();
-                                let notify = self.notify.clone();
-                                let on_session_id = on_session_id.clone();
+                                let _tx = self.session_tx.clone();
                                 tokio::spawn(async move {
                                     // Since do_solve_key is a blocking operation, solutions that exceed the session duration
                                     // will be discarded to maintain timing consistency
                                     match do_solve_key(&ctx, session_id, &enc_key) {
                                         Ok(commitment) => {
-                                            let _lock = state.lock().await;
-                                            match *_lock {
-                                                SessionWorkerState::Init => {
-                                                    let mut on_session_id = on_session_id.lock().await;
-                                                    if *on_session_id != session_id {
-                                                        info!("Syncing session session from {:?} to {:?}", on_session_id, session_id);
-                                                        let _ = on_session_id.set(session_id.into()).put();
-                                                    }
-                                                }
-                                                SessionWorkerState::Active(active_session_id) => {
-                                                    if active_session_id > session_id {
-                                                        error!("Stale session {:?}. Ignore it", session_id);
-                                                        return;
-                                                    }
-                                                },
-                                            }
                                             if let Err(e) = submit_dec_key(&ctx, commitment).await {
                                                 error!("Error submitting dec key: {:?}", e);
                                             }
@@ -116,8 +94,7 @@ impl<C: Config> SolverWorker<C> {
                                             error!("Error solving key: {:?}", e);
                                         }
                                     }
-                                    // Notify anyway
-                                    notify.notify_one();
+                                    let _ = _tx.send(session_id).await;
                                 });
                             },
                             _ => {
@@ -127,14 +104,26 @@ impl<C: Config> SolverWorker<C> {
                         }
                     }
                 },
-                _ = self.notify.notified() => {
-                    info!("Received notification on session: {:?}", *on_session_id);
-                    self.do_end_session(on_session_id, 1).await?;
+                Some(solved_session_id) = self.session_rx.recv() => {
+                    if solved_session_id < on_session_id {
+                        error!("Stale session {:?}. Ignore it", solved_session_id);
+                        continue; 
+                    } else {
+                        info!("End session: {:?}", solved_session_id);
+                        if on_session_id.is_initial() {
+                            self.has_started = true;
+                        }
+                        self.do_end_session(&mut on_session_id, 1).await?;
+                    }
                     return Ok(SessionResult::<C::Signature>::new());
                 },
                 _ = &mut timeout => {
-                    tracing::error!("Timeout. Force updating session: {:?}", *on_session_id);
-                    self.do_end_session(on_session_id, 1).await?;
+                    if self.has_started {
+                        error!("Timeout. Force ending session: {:?}", on_session_id);
+                        self.do_end_session(&mut on_session_id, 1).await?;
+                    } else {
+                        error!("Timeout but not started yet. Maybe committee not started yet?")
+                    }
                     return Ok(SessionResult::<C::Signature>::new());
                 }
             }

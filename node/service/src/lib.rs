@@ -111,22 +111,19 @@ fn init_db(config: &NodeConfig) -> RuntimeResult<()> {
 // service.start();
 //```
 pub async fn run_node(config: NodeConfig) -> RuntimeResult<()> {
-
-    init_db(&config)?;
     
+    info!("{}", config.log());
     let (tx, rx) = channel(10);
+    let db_manager = DefaultDbManager;
     let (signer, private_key) = create_signer(&config.private_key_path, config.chain_type);
     let auth_service = DefaultAuthService::new(&config.auth_service_endpoint, &private_key, &config.trusted_address);
-    let db_manager = DefaultDbManager;
     let mut dkg_service = create_dkg_service::<Skde<Sha3Hasher>, DefaultAuthService, DefaultDbManager>(&config, signer, tx, auth_service, db_manager)?;
-    info!("Node address: {:?}", dkg_service.address().as_hex_string());
     dkg_service.key_service = Some(create_key_service(&dkg_service, &config).await?);
-
-    info!("{}", config.log());
-
     if config.role.is_authority() {
         return Ok(());
     } else {
+        init_db(&config)?;
+
         let handles = match config.role {
             Role::Committee => committee::run_node(&mut dkg_service, config, rx).await?,
             Role::Solver => solver::run_node(&mut dkg_service, config, rx).await?,
