@@ -1,3 +1,4 @@
+mod get_heartbeat;
 mod get_decryption_key;
 mod get_encryption_key;
 mod get_finalized_enc_keys;
@@ -8,6 +9,7 @@ mod request_submit_enc_key;
 mod submit_dec_key;
 // mod submit_final_reveal;
 
+pub use get_heartbeat::*;
 pub use get_decryption_key::GetDecKey;
 pub use get_encryption_key::*;
 pub use get_finalized_enc_keys::GetFinalizedEncKeys;

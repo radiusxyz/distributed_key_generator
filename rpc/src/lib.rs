@@ -1,4 +1,4 @@
-pub use dkg_primitives::{Config, SessionId, KeyGeneratorList, Commitment, Payload, SignedCommitment, AsyncTask, EncKeyCommitment, DbManager};
+pub use dkg_primitives::{Config, SessionId, KeyGeneratorList, Commitment, Payload, SignedCommitment, AsyncTask, EncKeyCommitment, DbManager, to_signed_commitment};
 pub use tracing::info;
 pub use radius_sdk::json_rpc::server::{RpcParameter, RpcError};
 
@@ -17,11 +17,11 @@ pub mod helper {
     
     /// Helper function to submit encryption key 
     pub fn submit_enc_key<C: Config>(
+        ctx: &C,
         session_id: SessionId,
         enc_key: Vec<u8>,
-        ctx: &C,
     ) -> RpcResult<()> {
-        let leader = ctx.current_leader(false).map_err(|e| RpcError::from(e))?;
+        let leader = ctx.current_leader(session_id, false).map_err(|e| RpcError::from(e))?;
         let commitment = Commitment::new(enc_key.into(), Some(ctx.address()), session_id);
         let signature = ctx.sign(&commitment)?;
         ctx.async_task().multicast(vec![leader.1], <SubmitEncKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SubmitEncKey(SignedCommitment { commitment, signature }));
@@ -42,12 +42,10 @@ pub mod helper {
                 .filter(|kg| kg.address() != ctx.address()) // Exclude self
                 .map(|kg| kg.cluster_rpc_url().to_owned())
                 .collect::<Vec<_>>();
-        let payload = serde_json::to_vec(&commitment)?;
-        let commitment = Commitment::new(payload.into(), Some(ctx.address()), session_id);
-        let signature = ctx.sign(&commitment)?;
+        let commitment = to_signed_commitment(ctx, session_id, commitment)?;
         if !key_generators.is_empty() { 
             info!("Broadcasting enc key ack to {:?} at session: {:?}", key_generators, session_id); 
-            ctx.async_task().multicast(key_generators, <SyncEncKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncEncKey(SignedCommitment { commitment, signature }));
+            ctx.async_task().multicast(key_generators, <SyncEncKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncEncKey(commitment));
         }
         Ok(())
     }

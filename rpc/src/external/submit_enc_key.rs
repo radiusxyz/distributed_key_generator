@@ -28,8 +28,8 @@ impl<C: Config> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
     async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
         // Leader of the session will handle the enc key submission
         let session_id = self.0.session_id();
-        info!("{} for session: {:?}", <Self as RpcParameter<C>>::method(), session_id);
-        if !ctx.is_leader() { 
+        info!("method::{} for session: {:?}", <Self as RpcParameter<C>>::method(), session_id);
+        if !ctx.is_leader(session_id) { 
             info!("Not a leader for session: {:?}. Skipping...", session_id);
             return Ok(()); 
         }
@@ -53,7 +53,7 @@ impl<C: Config> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
         SubmitterList::<C::Address>::apply(session_id, |submitter_list| {
             submitter_list.insert(sender.clone());
             if submitter_list.len() >= ctx.threshold() as usize {
-                info!("Threshold met for session {:?}", session_id);
+                info!("Threshold({}/{}) met for session {:?}", submitter_list.len(), ctx.threshold(), session_id);
                 is_threshold_met = true;
                 commitments = match submitter_list.clone().into_iter().map(|addr| {
                     EncKeyCommitment::<C::Signature, C::Address>::get(&session_id, &addr)

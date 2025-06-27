@@ -23,7 +23,7 @@ impl<C: Config> RpcParameter<C> for SyncFinalizedEncKeys<C::Signature, C::Addres
 
     async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
         let session_id = self.get_session_id();
-        info!("{:?} at session {:?}", <Self as RpcParameter<C>>::method(), session_id);
+        info!("method::{:?} at session {:?}", <Self as RpcParameter<C>>::method(), session_id);
         let mut enc_keys = self.payload()
             .decode::<FinalizedEncKeyPayload<C::Signature, C::Address>>()
             .map_err(|e| RpcError::from(e))?

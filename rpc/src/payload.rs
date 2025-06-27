@@ -54,8 +54,16 @@ pub struct FinalRevealPayload<Signature, Address> {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct AddKeyGeneratorPayload<Address> {
-    address: Address,
-    cluster_rpc_url: String,
-    external_rpc_url: String,
+pub struct HeartbeatPayload<Address> {
+    pub address: Address,
+    pub at: SessionId,
 }
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct StartTimePayload(u128);
+
+impl StartTimePayload {
+    pub fn new(start_time: u128) -> Self { Self(start_time) }
+
+    pub fn start_time(&self) -> u128 { self.0 }
+}   

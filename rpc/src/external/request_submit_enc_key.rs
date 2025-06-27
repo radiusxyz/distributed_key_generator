@@ -17,12 +17,11 @@ impl<C: Config> RpcParameter<C> for RequestSubmitEncKey {
     }
 
     async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
-        info!("{}", <Self as RpcParameter<C>>::method());
+        info!("method::{}", <Self as RpcParameter<C>>::method());
         let session_id = self.session_id;
         if !session_id.is_initial() { return Ok(()); } 
-        info!("Generate enc key for session {:?}", session_id);
         let enc_key = ctx.key_service().gen_enc_key(ctx.randomness(session_id), None)?;
-        submit_enc_key::<C>(session_id, enc_key, &ctx)?;
+        submit_enc_key(&ctx, session_id, enc_key)?;
         Ok(())
     }
 }
