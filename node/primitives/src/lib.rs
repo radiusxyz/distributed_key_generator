@@ -76,8 +76,8 @@ where
     const ROUND_DURATION: u64 = consts::WEEK;
 
     fn threshold(&self) -> u16 { self.threshold }
-    fn is_leader(&self) -> bool { 
-        match self.current_leader(false) {
+    fn is_leader(&self, session_id: SessionId) -> bool { 
+        match self.current_leader(session_id, false) {
             Ok((leader, _)) => leader == self.address(),
             Err(_) => false,
         }    
@@ -108,11 +108,10 @@ where
         }
         current_session % Self::ROUND_DURATION == 0 
     }
-    fn current_leader(&self, is_sync: bool) -> Result<(Self::Address, String), Self::Error> {
-        let current_session = self.db_manager().current_session()?;
-        let current_round = self.db_manager().current_round()?;
-        let key_generator_list = KeyGeneratorList::<Self::Address>::get(current_round).map_err(Self::Error::from)?;
-        let index = if current_session.is_initial() { 0 } else { Self::SelectLeader::select_leader(current_session.into(), key_generator_list.len()).ok_or(RuntimeError::LeaderNotFound)? };
+    fn current_leader(&self, session_id: SessionId, is_sync: bool) -> Result<(Self::Address, String), Self::Error> {
+        let round = self.db_manager().current_round()?;
+        let key_generator_list = KeyGeneratorList::<Self::Address>::get(round).map_err(Self::Error::from)?;
+        let index = if session_id.is_initial() { 0 } else { Self::SelectLeader::select_leader(session_id.into(), key_generator_list.len()).ok_or(RuntimeError::LeaderNotFound)? };
         let key_generator = key_generator_list.get_by_index(index).ok_or(RuntimeError::LeaderNotFound)?;
         if is_sync {
             Ok((key_generator.address(), key_generator.cluster_rpc_url().to_string()))

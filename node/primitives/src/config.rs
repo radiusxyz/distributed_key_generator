@@ -25,6 +25,8 @@ mod constants {
 
 #[derive(Debug, Clone)]
 pub struct NodeConfig {
+    pub is_dev: bool,
+    pub node_name: Option<String>,
     pub external_rpc_url: String,
     pub internal_rpc_url: String,
     pub cluster_rpc_url: String,
@@ -42,6 +44,8 @@ pub struct NodeConfig {
 
 impl NodeConfig {
     pub fn new(
+        is_dev: bool,
+        node_name: Option<String>,
         external_rpc_url: String, 
         internal_rpc_url: String, 
         cluster_rpc_url: String,
@@ -57,6 +61,8 @@ impl NodeConfig {
         round_look_ahead: u64
     ) -> Self {
         Self {
+            is_dev,
+            node_name,
             external_rpc_url,
             internal_rpc_url,
             cluster_rpc_url,
@@ -85,6 +91,8 @@ impl NodeConfig {
         let mut log_lines = Vec::new();
         log_lines.push(format!("👤 Role: {}", self.role.to_string().to_uppercase()));
         if !self.role.is_authority() {
+            log_lines.push("Is dev mode?: ".to_string() + &self.is_dev.to_string());
+            log_lines.push(format!("🔍 Node Name: {}", self.node_name.clone().unwrap_or("N/A".to_string())));
             // Node role and basic info
             log_lines.push(format!("🔗 Chain Type: {:?}", self.chain_type));
                         

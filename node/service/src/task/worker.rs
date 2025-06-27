@@ -18,12 +18,10 @@ where
     SW: SessionWorker<C>
 {
     let mut sessions = Sessions::new(session_duration);
+    worker.on_genesis_session(ctx).await?;
     loop {
         let session_info = sessions.next_session().await;
         tracing::info!("Session info: {:?}", session_info.session_id);
-        if session_info.session_id.is_initial() {
-            worker.on_genesis_session(ctx).await?; 
-        }
         let _ = worker.on_session(ctx, session_info).await;
     }   
 }
@@ -32,8 +30,8 @@ where
 fn time_until_next_session(session_duration: Duration) -> Duration {
     let now = timestamp();
     let session_duration_millis = session_duration.as_millis();
-    let next_session = (now + session_duration_millis) / session_duration_millis;
-    let remaining_millis = (next_session * session_duration_millis) - now;
+    let next_session = ((now / session_duration_millis) + 1) * session_duration_millis;
+    let remaining_millis = next_session - now;
     Duration::from_millis(remaining_millis as u64) 
 }
 
@@ -70,6 +68,10 @@ impl Sessions {
             session_duration,
             until_next_session: None, 
         }
+    }
+
+    pub fn is_genesis_session(&self) -> bool {
+        self.last_session.is_initial()
     }
     
     /// Simple function that returns the next session info if any

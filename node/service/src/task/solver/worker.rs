@@ -20,7 +20,6 @@ pub struct SolverWorker<C: Config> {
 impl<C: Config> SessionWorker<C> for SolverWorker<C> {
 
     async fn on_genesis_session(&mut self, ctx: &C) -> Result<(), C::Error> {
-        info!("On genesis session");
         let current_round = Round::get().expect("Not initialized");
         if !current_round.is_initial() { panic!("Current round is not initial"); }
         let key_generators_for_round_0 = ctx.auth_service().get_key_generators(&current_round).await.expect("Failed to get initial key generators");
@@ -85,7 +84,7 @@ impl<C: Config> SolverWorker<C> {
                                     // will be discarded to maintain timing consistency
                                     match do_solve_key(&ctx, session_id, &enc_key) {
                                         Ok(commitment) => {
-                                            if let Err(e) = submit_dec_key(&ctx, commitment).await {
+                                            if let Err(e) = submit_dec_key(&ctx, session_id, commitment).await {
                                                 error!("Error submitting dec key: {:?}", e);
                                             }
                                         }

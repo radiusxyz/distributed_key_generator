@@ -3,7 +3,7 @@ use futures::future::join_all;
 use radius_sdk::{signature::{PrivateKeySigner, ChainType, Signature, Address}, kvstore::KvStoreBuilder};
 use dkg_primitives::{AuthService, AuthTrustedSetupFor, Config, KeyService, Round, RuntimeError, RuntimeEvent, RuntimeResult, SessionId, Sha3Hasher, TrustedSetupFor};
 use std::{fs, path::PathBuf};
-use tokio::sync::mpsc::{channel, Sender};
+use tokio::{signal, sync::mpsc::{channel, Sender}, task::JoinHandle};
 use tracing::{info, error};
 
 mod task;
@@ -95,11 +95,45 @@ fn init_db(config: &NodeConfig) -> RuntimeResult<()> {
         .map_err(RuntimeError::Database)?
         .init();
     // Initialize neccessary kv stores
-    let session_id = SessionId::new();
-    session_id.put()?;
+    SessionId::new().put()?;
     Round::new().put()?;
     tracing::info!("Successfully initialized the database at {:?}.", config.db_path);
     Ok(())
+}
+
+fn cleanup_db(config: &NodeConfig) {
+    if config.is_dev {
+        info!("🧹 Cleaning up database at {:?} (dev mode)", config.db_path);
+        if let Err(e) = fs::remove_dir_all(&config.db_path) {
+            error!("Failed to clean up database at {:?}: {}", config.db_path, e);
+        } else {
+            info!("✅ Database cleaned up successfully");
+        }
+    }
+}
+
+async fn handle_shutdown(config: NodeConfig, handles: Vec<JoinHandle<()>>) -> RuntimeResult<()> {
+    tokio::select! {
+        _ = join_all(handles) => {
+            error!("❌ Node tasks completed unexpectedly - there may be an issue");
+            cleanup_db(&config);
+            Ok(())
+        },
+        _ = signal::ctrl_c() => {
+            info!("Ctrl+C received, shutting down...");
+            cleanup_db(&config);
+            Ok(())
+        },
+        _ = async {
+            if let Ok(mut sigterm) = signal::unix::signal(signal::unix::SignalKind::terminate()) {
+                sigterm.recv().await;
+            }
+        } => {
+            info!("Terminate signal received, shutting down...");
+            cleanup_db(&config);
+            Ok(())
+        }
+    }
 }
 
 // TODO: Refactor me! - Service Builder pattern
@@ -117,7 +151,7 @@ pub async fn run_node(config: NodeConfig) -> RuntimeResult<()> {
     let db_manager = DefaultDbManager;
     let (signer, private_key) = create_signer(&config.private_key_path, config.chain_type);
     let auth_service = DefaultAuthService::new(&config.auth_service_endpoint, &private_key, &config.trusted_address);
-    let mut dkg_service = create_dkg_service::<Skde<Sha3Hasher>, DefaultAuthService, DefaultDbManager>(&config, signer, tx, auth_service, db_manager)?;
+    let mut dkg_service = create_dkg_service::<Skde<Sha3Hasher>, DefaultAuthService, DefaultDbManager>(&config, signer, tx.clone(), auth_service, db_manager)?;
     dkg_service.key_service = Some(create_key_service(&dkg_service, &config).await?);
     if config.role.is_authority() {
         return Ok(());
@@ -125,13 +159,23 @@ pub async fn run_node(config: NodeConfig) -> RuntimeResult<()> {
         init_db(&config)?;
 
         let handles = match config.role {
-            Role::Committee => committee::run_node(&mut dkg_service, config, rx).await?,
-            Role::Solver => solver::run_node(&mut dkg_service, config, rx).await?,
+            Role::Committee => {
+                if !dkg_service.auth_service.is_committee(Round::get().expect("Not initialized"), dkg_service.address()).await? {
+                    panic!("Node is not registered as a committee member");
+                }
+                committee::run_node(&mut dkg_service, &config, tx, rx).await?
+            },
+            Role::Solver => {
+                if !dkg_service.auth_service.is_solver(dkg_service.address()).await? {
+                    panic!("Node is not registered as a solver");
+                }
+                solver::run_node(&mut dkg_service, &config, rx).await?
+            },
             Role::Verifier => unimplemented!("Verifier is not implemented yet"),
             _ => panic!("Invalid role"),
         };
-    
-        join_all(handles).await;
+
+        let _ = handle_shutdown(config.clone(), handles).await?;
     
         Ok(())
     }

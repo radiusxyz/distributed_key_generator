@@ -112,6 +112,15 @@ where
     type TrustedSetup = DkgContract::TrustedSetupParams;
     type Error = AuthServiceError;
 
+    async fn is_solver(&self, address: Address) -> Result<bool, Self::Error> {
+        let res = self.contract.isSolver(convert_back(address).ok_or(AuthServiceError::AnyError("Invalid address".to_string()))?).call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
+        Ok(res._0)
+    }
+    async fn is_committee(&self, current_round: Round, address: Address) -> Result<bool, Self::Error> {
+        let res = self.contract.isCommittee(U256::from(current_round.0), convert_back(address).ok_or(AuthServiceError::AnyError("Invalid address".to_string()))?).call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
+        Ok(res._0)
+    }
+
     async fn update_trusted_setup<T>(&self, trusted_setup: T, signature: Vec<u8>) -> Result<(), Self::Error> 
     where
         T: Into<Self::TrustedSetup> + Send + Sync + 'static
@@ -146,10 +155,6 @@ where
     async fn unregister_key_generator(&self, round: Round, address: Address) -> Result<(), Self::Error> {
         let _ = self.contract.unregisterCommittee(U256::from(round.0), convert_back(address).ok_or(AuthServiceError::AnyError("Invalid address".to_string()))?).call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
         Ok(())
-    }
-    async fn is_active(&self, current_round: Round, address: Address) -> Result<bool, Self::Error> { 
-        let res = self.contract.isCommittee(U256::from(current_round.0), convert_back(address).ok_or(AuthServiceError::AnyError("Invalid address".to_string()))?).call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
-        Ok(res._0)
     }
     async fn get_key_generators(&self, current_round: &Round) -> Result<Vec<KeyGenerator<Address>>, Self::Error> { 
         let res = self.contract.getCommitteeList(U256::from(current_round.0)).call().await.map_err(|e| AuthServiceError::AnyError(e.to_string()))?;
