@@ -51,7 +51,7 @@ pub trait Config: Clone + Send + Sync + 'static {
     /// Get the threshold for the key generator
     fn threshold(&self) -> u16;
     /// Check if the node is a leader
-    fn is_leader(&self) -> bool;
+    fn is_leader(&self, session_id: SessionId) -> bool;
     /// Check if the node is a solver
     fn is_solver(&self) -> bool;
     /// Get the node's signer
@@ -67,7 +67,7 @@ pub trait Config: Clone + Send + Sync + 'static {
     /// Check if the node should move to the next round
     fn should_end_round(&self, current_session: u64) -> bool;
     /// Get the current leader on the current session which will return (address, rpc_url)
-    fn current_leader(&self, is_sync: bool) -> Result<(Self::Address, String), Self::Error>;
+    fn current_leader(&self, session_id: SessionId, is_sync: bool) -> Result<(Self::Address, String), Self::Error>;
     /// Helper function to verify signature. Verification will be handled by `Self::VerifySignature` type
     fn verify_signature<T: Serialize>(&self, signature: &Self::Signature, message: &T, maybe_signer: Option<Self::Address>) -> Result<Self::Address, Self::Error> {
         let signer = Self::VerifyService::verify_signature(signature, message)
@@ -238,6 +238,12 @@ pub trait AuthService<Address>: Send + Sync + 'static {
     /// The error type of the auth service
     type Error: std::error::Error + Send + Sync + 'static + Into<RuntimeError>;
 
+    /// Check if the given address is a solver
+    async fn is_solver(&self, address: Address) -> Result<bool, Self::Error>;
+
+    /// Check if the given address is a committee member
+    async fn is_committee(&self, current_round: Round, address: Address) -> Result<bool, Self::Error>;
+
     /// Update the trusted setup with given `T` which will be converted to `Self::TrustedSetup`
     async fn update_trusted_setup<T>(&self, trusted_setup: T, signature: Vec<u8>) -> Result<(), Self::Error> 
     where
@@ -252,8 +258,6 @@ pub trait AuthService<Address>: Send + Sync + 'static {
     async fn register_key_generator(&self, round: Round, address: Address, cluster_rpc_url: &str, external_rpc_url: &str) -> Result<(), Self::Error>;
     /// Remove the key generator info from the auth service
     async fn unregister_key_generator(&self, round: Round, address: Address) -> Result<(), Self::Error>;
-    /// Check if the given address is active at the given round
-    async fn is_active(&self, current_round: Round, address: Address) -> Result<bool, Self::Error>;
     /// Get the key generators for the given round
     async fn get_key_generators(&self, current_round: &Round) -> Result<Vec<KeyGenerator<Address>>, Self::Error>;
     /// Check if the service is ready to go for the given round

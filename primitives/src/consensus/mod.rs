@@ -5,6 +5,21 @@ mod payload;
 pub use commitment::*;
 pub use payload::*;
 
+use crate::{SessionId, Config as ConfigT, ConfigErrorFor, SignatureFor, AddressFor};
+
+use serde::Serialize;
+
+pub fn to_signed_commitment<Config, Payload>(ctx: &Config, session_id: SessionId, payload: Payload) -> Result<SignedCommitment<SignatureFor<Config>, AddressFor<Config>>, ConfigErrorFor<Config>> 
+    where
+        Config: ConfigT,
+        Payload: Serialize,
+{
+    let bytes = serde_json::to_vec(&payload)?;
+    let commitment = Commitment::new(bytes.into(), Some(ctx.address()), session_id);
+    let signature = ctx.sign(&commitment)?;
+    Ok(SignedCommitment { signature, commitment })
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ConsensusError {
     #[error("Invalid payload: {0}")]
