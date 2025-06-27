@@ -25,6 +25,8 @@ fn create_configuration(cli: Box<NodeCommand>) -> NodeConfig {
     let trusted_setup_path = cli.data_dir.trusted_setup.map_or(PathBuf::from(format!("./tmp/{}/trusted_setup", cli.dkg.role)), |path| path.into());
     let chain_type = cli.dkg.chain_type.try_into().expect("Invalid chain type");
     NodeConfig::new(
+        cli.is_dev,
+        cli.node_name,
         cli.rpc.external_rpc_url(),
         cli.rpc.internal_rpc_url(),
         cli.rpc.cluster_rpc_url(),

@@ -9,6 +9,10 @@ use crate::Parser;
 
 #[derive(Debug, Parser)]
 pub struct NodeCommand {
+    #[arg(long = "dev")]
+    pub is_dev: bool,
+    #[arg(long = "node-name")]
+    pub node_name: Option<String>,
     #[command(flatten)]
     pub rpc: RpcServerArgs,
     #[command(flatten)]
