@@ -30,7 +30,7 @@ dkg-node-service = { path = "node/service" }
 dkg-node-primitives = { path = "node/primitives" }
 
 # Radius
-skde = { git = "https://github.com/radiusxyz/skde", rev = "d6ef27d4f1e34b391eddb039cf0b9f994f7cc2fe" }
+skde = { git = "https://github.com/radiusxyz/skde", rev = "69e70ac0ab071000b3d13557cdbed43ffeddc878" }
 radius-sdk = { path = "../radius-sdk-rs/radius-sdk", features = ["full"] }
 # External
 async-trait = "0.1.88"
