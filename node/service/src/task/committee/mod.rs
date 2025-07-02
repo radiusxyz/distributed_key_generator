@@ -31,11 +31,11 @@ pub async fn run_node<C: Config>(ctx: &mut C, config: &NodeConfig, event_tx: Sen
     handle.push(ctx.async_task().spawn_task(async move { server_handle.stopped().await; }));
 
     // Start the DKG worker
-    let mut key_generator_worker = CommitteeWorker::<C>::new(solver_cluster_rpc_url, event_tx, event_rx, config.round_look_ahead, 1u64);
+    let mut key_generator_worker = CommitteeWorker::<C>::new(solver_cluster_rpc_url, event_tx, event_rx, config.round_look_ahead, 1u64, config.collecting_duration);
     let cloned_ctx = ctx.clone();
-    let session_duration_millis = config.session_duration_millis();
+    let session_duration = config.session_duration();
     let worker_handle = ctx.async_task().spawn_task(async move {
-        if let Err(e) = run_session_worker(&cloned_ctx, &mut key_generator_worker, session_duration_millis).await {
+        if let Err(e) = run_session_worker(&cloned_ctx, &mut key_generator_worker, session_duration).await {
             // TODO: Spawn critical task to start DKG worker
             panic!("Error running DKG worker: {}", e);
         }

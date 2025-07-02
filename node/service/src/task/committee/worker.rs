@@ -3,14 +3,13 @@ use crate::{committee::check_heartbeat, AuthService, DbManager, KeyService, Sess
 use std::{sync::Arc, time::Duration};
 use dkg_utils::timestamp;
 use tokio::sync::{mpsc::{Sender, Receiver}, Mutex};
+use dkg_primitives::{SubmitterList, EncKeyCommitment, to_signed_commitment};
+use dkg_rpc::{helper::multicast_enc_key_ack, AsyncTask};
 use futures_timer::Delay;
 use std::time::Instant;
-
 use dkg_primitives::{KeyGenerator, Round, RuntimeError, RuntimeEvent, RuntimeResult};
 use tracing::{error, info};
 
-
-#[derive(Clone)]
 pub struct CommitteeWorker<C: Config> {
     /// RPC url of the solver 
     solver_rpc_url: String,
@@ -28,6 +27,12 @@ pub struct CommitteeWorker<C: Config> {
     add_session_amount: u64,
     /// Pending events
     pending: Option<RuntimeEvent<C::Signature, C::Address>>,
+    /// Whether collecting key has been started
+    start_collecting_key: Mutex<bool>,
+    /// Duration of collecting key
+    collecting_duration: Duration,
+    /// List of submitters 
+    submitters: Option<Vec<C::Address>>,
 }
 
 #[async_trait::async_trait]
@@ -68,8 +73,20 @@ impl<C: Config> SessionWorker<C> for CommitteeWorker<C> {
 impl<C: Config> CommitteeWorker<C> {
 
     /// Create a new instance of `CommitteeWorker`
-    pub fn new(solver_rpc_url: String, event_tx: Sender<RuntimeEvent<C::Signature, C::Address>>, event_rx: Receiver<RuntimeEvent<C::Signature, C::Address>>, round_look_ahead: u64, add_session_amount: u64) -> Self {
-        Self { solver_rpc_url, event_tx, event_rx: Arc::new(Mutex::new(event_rx)), has_solved: false, key_generators: None, round_look_ahead, add_session_amount, pending: None }
+    pub fn new(solver_rpc_url: String, event_tx: Sender<RuntimeEvent<C::Signature, C::Address>>, event_rx: Receiver<RuntimeEvent<C::Signature, C::Address>>, round_look_ahead: u64, add_session_amount: u64, collecting_duration: Duration) -> Self {
+        Self { 
+            solver_rpc_url, 
+            event_tx, 
+            event_rx: Arc::new(Mutex::new(event_rx)), 
+            round_look_ahead, 
+            add_session_amount, 
+            has_solved: false, 
+            key_generators: None, 
+            pending: None, 
+            start_collecting_key: Mutex::new(true), 
+            collecting_duration,
+            submitters: None 
+        }
     }
 
     pub fn add_pending_event(&mut self, event: RuntimeEvent<C::Signature, C::Address>) {
@@ -86,6 +103,24 @@ impl<C: Config> CommitteeWorker<C> {
 
     fn start_at() -> u128 {
         timestamp() + Duration::from_secs(10).as_millis()
+    }
+
+    fn key_len(&self) -> usize {
+        self.submitters.as_ref().map_or(0, |submitters| submitters.len())
+    }
+
+    async fn start_collecting(&mut self, ctx: &C, event_tx: Sender<RuntimeEvent<C::Signature, C::Address>>) {
+        *self.start_collecting_key.lock().await = false;
+        let duration = self.collecting_duration;
+        ctx.async_task().spawn_task(async move { 
+            Delay::new(duration).await;
+            let _ = event_tx.send(RuntimeEvent::CollectingTimeout).await;
+        });
+    }
+
+    async fn reset_collecting(&mut self) {
+        self.submitters = None;
+        *self.start_collecting_key.lock().await = true;
     }
 
     // TODO: Do we need to check node is live at this time?
@@ -180,6 +215,51 @@ impl<C: Config> CommitteeWorker<C> {
         return Ok((is_ready, ready_nodes));
     }
 
+    async fn add_submitter(&mut self, ctx: &C, event_tx: Sender<RuntimeEvent<C::Signature, C::Address>>, session_id: SessionId, submitter: C::Address) {
+        if let Some(submitters) = self.submitters.as_mut() {
+            submitters.push(submitter);
+        } else {
+            info!("Start collecting key at session: {:?}", session_id);
+            self.submitters = Some(vec![submitter]);
+            self.start_collecting(ctx, event_tx).await;
+        }
+    }
+
+    async fn handle_submit_enc_key(&mut self, ctx: &C, event_tx: Sender<RuntimeEvent<C::Signature, C::Address>>, session_id: SessionId, submitter: C::Address) -> Result<(), C::Error> {
+        let is_collecting = {
+            let lock = self.start_collecting_key.lock().await;
+            *lock
+        };
+        if is_collecting {
+            self.add_submitter(ctx, event_tx, session_id, submitter).await;
+        }
+        Ok(())
+    }
+
+    fn do_gen_enc_key(&self, ctx: &C, session_id: SessionId) -> Result<EncKeyCommitment<C::Signature, C::Address>, C::Error> {
+        let enc_key = ctx.key_service().gen_enc_key(ctx.randomness(session_id), None).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+        let commitment = to_signed_commitment(ctx, session_id, enc_key)?;
+        Ok(EncKeyCommitment::<C::Signature, C::Address>::new(commitment))
+    }
+
+    async fn finalize_key(&mut self, ctx: &C, session_id: SessionId) -> Result<(), C::Error> {
+        let mut commitments = Vec::new();
+        if let Some(submitters) = self.submitters.take() {
+            commitments = submitters.into_iter().map(|submitter| {
+                EncKeyCommitment::<C::Signature, C::Address>::get(&session_id, &submitter)
+            }).collect::<Result<Vec<_>, _>>()?;
+        } else {
+            error!("No submitters to finalize key. Creating a new key at session: {:?}", session_id);
+            let enc_key_commitment = self.do_gen_enc_key(ctx, session_id)?;
+            enc_key_commitment.put(&session_id, &ctx.address())?;
+            let _ = multicast_enc_key_ack(ctx, session_id, enc_key_commitment.clone());
+            commitments.push(enc_key_commitment);
+        }
+        self.reset_collecting().await;
+        self.event_tx.send(RuntimeEvent::FinalizeKey { commitments, start_session_id: session_id }).await.map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+        Ok(())
+    }
+
     async fn do_submit_enc_key(&mut self, ctx: &C, session_id: SessionId) -> Result<(), C::Error> {
         let enc_key = ctx.key_service().gen_enc_key(ctx.randomness(session_id), None).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
         submit_enc_key(ctx, session_id, enc_key).map_err(|_| RuntimeError::AnyError("Failed to submit encryption key".into()))?;
@@ -235,6 +315,7 @@ impl<C: Config> CommitteeWorker<C> {
         let mut timeout = Delay::new(session_info.ends_at.duration_since(Instant::now()));
         loop {
             tokio::select! {
+                // Event from the the sender channel
                 event = async {
                     let mut rx = self.event_rx.lock().await;
                     rx.recv().await
@@ -242,6 +323,14 @@ impl<C: Config> CommitteeWorker<C> {
                     if let Some(event) = event {
                         info!("{:?}", event);
                         match event.clone() {
+                            RuntimeEvent::SubmitEncKey { submitter, session_id } => {
+                                if session_id < on_session_id {
+                                    info!("Stale session {:?}. Ignore it", session_id);
+                                    continue;
+                                }
+                                self.handle_submit_enc_key(ctx, self.event_tx.clone(), on_session_id, submitter).await?;
+                                continue;
+                            },
                             RuntimeEvent::FinalizeKey { commitments, start_session_id } => {
                                 if start_session_id < on_session_id { 
                                     info!("Stale session {:?}. Ignore it", start_session_id);
@@ -264,7 +353,12 @@ impl<C: Config> CommitteeWorker<C> {
                                 self.has_solved = true;
                                 self.do_end_session(ctx, &mut on_session_id).await?;
                                 return Ok(SessionResult::<C::Signature>::new());
-                            }
+                            },
+                            RuntimeEvent::CollectingTimeout => {
+                                info!("Collecting key timeout. Finalizing {} keys at session: {:?}", self.key_len(), on_session_id);
+                                self.finalize_key(ctx, on_session_id).await?;
+                                continue;
+                            },
                             _ => {
                                 info!("Ignore event: {:?}", event);
                                 continue;
@@ -272,6 +366,7 @@ impl<C: Config> CommitteeWorker<C> {
                         }
                     }
                 },
+                // Timeout for the session
                 _ = &mut timeout => {
                     if self.has_solved {
                         error!("Timeout. Force ending session: {:?}", on_session_id);

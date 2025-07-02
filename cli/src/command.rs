@@ -35,6 +35,7 @@ fn create_configuration(cli: Box<NodeCommand>) -> NodeConfig {
         cli.dkg.auth_service_endpoint,
         chain_type,
         Duration::from_millis(cli.dkg.session_duration),
+        Duration::from_millis(cli.dkg.collecting_duration),
         private_key_path,
         db_path,
         Some(trusted_setup_path),

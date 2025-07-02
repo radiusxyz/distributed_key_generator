@@ -6,20 +6,35 @@ use std::time::Duration;
 
 mod constants {
     use crate::consts::DAY;
-
+    /// The default home path for storing configuration and data
     pub const DEFAULT_HOME_PATH: &str = ".radius";
+    /// The directory name for storing database files
     pub const DATABASE_DIR_NAME: &str = "database";
+    /// The file name for storing the signing key
     pub const SIGNING_KEY: &str = "signing_key";
+    /// The default port number for external RPC communication
     pub const DEFAULT_EXTERNAL_RPC_PORT: u16 = 3000;
+    /// The default port number for internal RPC communication
     pub const DEFAULT_INTERNAL_RPC_PORT: u16 = 4000;
+    /// The default port number for cluster RPC communication
     pub const DEFAULT_CLUSTER_RPC_PORT: u16 = 5000;
+    /// The default port number for leader RPC communication
     pub const DEFAULT_LEADER_RPC_PORT: u16 = 6000;
+    /// The default port number for authority RPC communication
     pub const DEFAULT_AUTHORITY_RPC_PORT: u16 = 7000;
+    /// The default trusted address for the admin contract
     pub const DEFAULT_TRUSTED_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
-    pub const DEFAULT_SESSION_DURATION: u64 = 2000; // 2s
+    /// The duration of a session in milliseconds (2 seconds)
+    pub const DEFAULT_SESSION_DURATION: u64 = 2000;
+    /// The duration for collecting keys in milliseconds (0.1 seconds)
+    pub const DEFAULT_COLLECTING_DURATION: u64 = 100;
+    /// The default blockchain type for signatures
     pub const DEFAULT_CHAIN_TYPE: &str = "ethereum";
+    /// The default threshold for encryption key submission
     pub const DEFAULT_THRESHOLD: u16 = 1;
+    /// The default endpoint for the authentication service
     pub const DEFAULT_AUTH_SERVICE_ENDPOINT: &str = "http://localhost:8545";
+    /// The number of rounds to look ahead (1 day)
     pub const DEFAULT_ROUND_LOOK_AHEAD: u64 = DAY;
 }
 
@@ -34,7 +49,8 @@ pub struct NodeConfig {
     pub trusted_address: String,
     pub auth_service_endpoint: String,
     pub chain_type: ChainType,
-    pub session_duration_millis: Duration,
+    pub session_duration: Duration,
+    pub collecting_duration: Duration,
     pub private_key_path: PathBuf,
     pub db_path: PathBuf,
     pub trusted_setup_path: Option<PathBuf>,
@@ -53,7 +69,8 @@ impl NodeConfig {
         trusted_address: String,
         auth_service_endpoint: String,
         chain_type: ChainType,
-        session_duration_millis: Duration,
+        session_duration: Duration,
+        collecting_duration: Duration,
         private_key_path: PathBuf,
         db_path: PathBuf,
         trusted_setup_path: Option<PathBuf>,
@@ -70,7 +87,8 @@ impl NodeConfig {
             trusted_address,
             auth_service_endpoint,
             chain_type,
-            session_duration_millis,
+            session_duration,
+            collecting_duration,
             private_key_path,
             db_path,
             trusted_setup_path,
@@ -83,8 +101,8 @@ impl NodeConfig {
         self.trusted_setup_path.clone().expect("Trusted setup path not set")
     }
 
-    pub fn session_duration_millis(&self) -> Duration {
-        self.session_duration_millis
+    pub fn session_duration(&self) -> Duration {
+        self.session_duration
     }
 
     pub fn log(&self) -> String {
@@ -103,7 +121,8 @@ impl NodeConfig {
 
             // Security and configuration
             log_lines.push(format!("🔑 Trusted Address: {}", self.trusted_address));
-            log_lines.push(format!("⏱️ Session Duration: {}ms", self.session_duration_millis.as_millis()));
+            log_lines.push(format!("⏱️ Session Duration: {}ms", self.session_duration.as_millis()));
+            log_lines.push(format!("⏱️ Collecting Duration: {}ms", self.collecting_duration.as_millis()));
             log_lines.push(format!("📊 Threshold: {}", self.threshold));
 
             // Paths

@@ -36,7 +36,9 @@ impl<C: Config> RpcParameter<C> for SyncFinalizedEncKeys<C::Signature, C::Addres
         enc_keys.sort();
         let enc_key = ctx.key_service().gen_enc_key(ctx.randomness(session_id), Some(enc_keys))?;
         EncKey::new(enc_key.clone()).put(session_id)?;
-        ctx.async_task().emit_event(RuntimeEvent::SolveKey { enc_key, session_id }).await.map_err(|e| RpcError::from(e))?;
+        if ctx.is_solver() {
+            ctx.async_task().emit_event(RuntimeEvent::SolveKey { enc_key, session_id }).await.map_err(|e| RpcError::from(e))?;
+        }
         Ok(())
     }
 }

@@ -1,5 +1,5 @@
 use crate::Args;
-use dkg_node_primitives::config::{Role, DEFAULT_TRUSTED_ADDRESS, DEFAULT_CHAIN_TYPE, DEFAULT_SESSION_DURATION, DEFAULT_THRESHOLD, DEFAULT_AUTH_SERVICE_ENDPOINT, DEFAULT_ROUND_LOOK_AHEAD};
+use dkg_node_primitives::config::{Role, DEFAULT_TRUSTED_ADDRESS, DEFAULT_CHAIN_TYPE, DEFAULT_SESSION_DURATION, DEFAULT_COLLECTING_DURATION, DEFAULT_THRESHOLD, DEFAULT_AUTH_SERVICE_ENDPOINT, DEFAULT_ROUND_LOOK_AHEAD};
 
 /// The arguments needed for DKG process
 #[derive(Debug, Args)]
@@ -18,6 +18,9 @@ pub struct DkgArgs {
     /// The session cycle in milliseconds
     #[arg(long = "dkg.session-duration", default_value_t = DEFAULT_SESSION_DURATION)]
     pub session_duration: u64,
+    /// The duration of collecting key in milliseconds
+    #[arg(long = "dkg.collecting-duration", default_value_t = DEFAULT_COLLECTING_DURATION)]
+    pub collecting_duration: u64,
     /// The threshold of encryption key submission
     #[arg(long = "dkg.threshold", default_value_t = DEFAULT_THRESHOLD)]
     pub threshold: u16,
@@ -34,6 +37,7 @@ impl Default for DkgArgs {
             auth_service_endpoint: DEFAULT_AUTH_SERVICE_ENDPOINT.to_string(),
             chain_type: DEFAULT_CHAIN_TYPE.to_string(),
             session_duration: DEFAULT_SESSION_DURATION,
+            collecting_duration: DEFAULT_COLLECTING_DURATION,
             threshold: DEFAULT_THRESHOLD,
             round_look_ahead: DEFAULT_ROUND_LOOK_AHEAD,
         }

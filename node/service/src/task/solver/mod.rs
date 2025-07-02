@@ -25,9 +25,9 @@ pub async fn run_node<C: Config>(ctx: &mut C, config: &NodeConfig, rx: Receiver<
 
     let mut worker = SolverWorker::<C>::new(rx);
     let cloned_ctx = ctx.clone();
-    let session_duration_millis = config.session_duration_millis();
+    let session_duration = config.session_duration();
     let worker_handle = ctx.async_task().spawn_task(async move {
-        if let Err(e) = run_session_worker(&cloned_ctx, &mut worker, session_duration_millis).await {
+        if let Err(e) = run_session_worker(&cloned_ctx, &mut worker, session_duration).await {
             // TODO: Spawn critical task to start DKG worker
             panic!("Error running DKG worker: {}", e);
         }

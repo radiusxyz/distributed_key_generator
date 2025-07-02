@@ -22,6 +22,7 @@ pub mod helper {
         enc_key: Vec<u8>,
     ) -> RpcResult<()> {
         let leader = ctx.current_leader(session_id, false).map_err(|e| RpcError::from(e))?;
+        info!("Submitting enc key to leader: {:?}", leader.1);
         let commitment = Commitment::new(enc_key.into(), Some(ctx.address()), session_id);
         let signature = ctx.sign(&commitment)?;
         ctx.async_task().multicast(vec![leader.1], <SubmitEncKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SubmitEncKey(SignedCommitment { commitment, signature }));

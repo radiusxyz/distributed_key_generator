@@ -67,6 +67,7 @@ where
         let ciphertext = encrypt(&self.params, sample_message, &enc_key.u, true)?;
         let decrypted_message = decrypt(&self.params, &ciphertext, &dec_key)?;
         if decrypted_message.as_str() != sample_message { return Err(KeyServiceError::MessageMismatch); }
+        tracing::info!("Decryption key verified");
         Ok(())
     }
 
