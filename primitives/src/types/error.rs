@@ -1,4 +1,4 @@
-use super::RuntimeEvent;
+use super::SessionEvent;
 use crate::ConsensusError;
 use radius_sdk::{
     json_rpc::{client::RpcClientError, server::RpcServerError},
@@ -24,13 +24,13 @@ pub enum RuntimeError {
     RpcClientError(#[from] RpcClientError),
     /// Key service errors
     #[error(transparent)]
-    KeyServiceError(#[from] KeyServiceError),
+    KeyGeneratorError(#[from] KeyGeneratorError),
     /// Task join error
     #[error(transparent)]
     TaskJoinError(#[from] JoinError),
     /// Event emission error
     #[error(transparent)]
-    EventError(#[from] SendError<RuntimeEvent<Signature, Address>>),
+    EventError(#[from] SendError<SessionEvent<Signature, Address>>),
     /// Conversion error
     #[error("Conversion error: {0}")]
     ConvertError(String),
@@ -43,9 +43,9 @@ pub enum RuntimeError {
     /// Any error wrapped type
     #[error(transparent)]
     AnyError(#[from] Box<dyn std::error::Error>),
-    /// Auth service error
+    /// Operator service error
     #[error(transparent)]
-    AuthServiceError(#[from] AuthServiceError),
+    OperatorServiceError(#[from] OperatorServiceError),
     /// Maybe overflow or underflow
     #[error("Arithmetic error(e.g. overflow or underflow)")]
     Arithmetic,
@@ -63,7 +63,7 @@ unsafe impl Sync for RuntimeError {}
 
 /// Error type for key generation process
 #[derive(Debug, Error)]
-pub enum KeyServiceError {
+pub enum KeyGeneratorError {
     /// Key generator not registered
     #[error("Key generator not registered: {0}")]
     NotRegistered(String),
@@ -90,11 +90,11 @@ pub enum KeyServiceError {
     SerdeError(#[from] SerdeError),
 }
 
-unsafe impl Send for KeyServiceError {}
-unsafe impl Sync for KeyServiceError {}
+unsafe impl Send for KeyGeneratorError {}
+unsafe impl Sync for KeyGeneratorError {}
 
 #[derive(Debug, Error)]
-pub enum AuthServiceError {
+pub enum OperatorServiceError {
     #[error("Error on getting state from blockchain!")]
     GetStateError,
     #[error("Invalid role!")]
@@ -107,5 +107,7 @@ pub enum AuthServiceError {
     AlreadyRegistered,
     #[error("{0}")]
     AnyError(String),
+    #[error("Round is over 64 bits")]
+    Overflow
 }
     

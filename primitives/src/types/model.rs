@@ -95,33 +95,33 @@ impl EncKey {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct KeyGenerator<Address> {
+pub struct Operator<Address> {
     address: Address,
     cluster_rpc_url: String,
     external_rpc_url: String,
 }
 
-impl<Address: Debug> Display for KeyGenerator<Address> {
+impl<Address: Debug> Display for Operator<Address> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "address: {:?}, cluster_rpc_url: {:?}, external_rpc_url: {:?}", self.address, self.cluster_rpc_url, self.external_rpc_url)
     }
 }
 
-impl<Address: PartialEq> PartialEq for KeyGenerator<Address> {
+impl<Address: PartialEq> PartialEq for Operator<Address> {
     fn eq(&self, other: &Self) -> bool {
         self.address == other.address
     }
 }
 
-impl<Address: Eq> Eq for KeyGenerator<Address> {}
+impl<Address: Eq> Eq for Operator<Address> {}
 
-impl<Address: Hash> Hash for KeyGenerator<Address> {
+impl<Address: Hash> Hash for Operator<Address> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.address.hash(state);
     }
 }
 
-impl<Address: Clone> KeyGenerator<Address> {
+impl<Address: Clone> Operator<Address> {
     pub fn new(address: Address, cluster_rpc_url: String, external_rpc_url: String) -> Self {
         Self {
             address,
@@ -144,15 +144,15 @@ impl<Address: Clone> KeyGenerator<Address> {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
-#[kvstore(key(round: Round))]
-pub struct KeyGeneratorList<Address>(Vec<KeyGenerator<Address>>);
+#[kvstore(key())]
+pub struct ActiveOperatorList<Address>(Vec<Operator<Address>>);
 
-impl<Address: AddressT> KeyGeneratorList<Address> {
+impl<Address: AddressT> ActiveOperatorList<Address> {
     pub fn new() -> Self {
         Self(Vec::new())
     }
 
-    pub fn get_by_index(&self, index: usize) -> Option<&KeyGenerator<Address>> {
+    pub fn get_by_index(&self, index: usize) -> Option<&Operator<Address>> {
         self.0.get(index)
     }
 
@@ -160,20 +160,20 @@ impl<Address: AddressT> KeyGeneratorList<Address> {
         self.0.len()
     }
 
-    pub fn insert(&mut self, key_generator: KeyGenerator<Address>) {
-        self.0.push(key_generator);
+    pub fn insert(&mut self, operator: Operator<Address>) {
+        self.0.push(operator);
     }
 
-    pub fn remove(&mut self, key_generator: &KeyGenerator<Address>) {
-        self.0.retain(|kg| kg != key_generator);
+    pub fn remove(&mut self, operator: &Operator<Address>) {
+        self.0.retain(|o| o != operator);
     }
 
     pub fn contains(&self, address: &Address) -> bool {
-        self.0.iter().any(|kg| kg.address == *address)
+        self.0.iter().any(|o| o.address == *address)
     }
 
     pub fn all_addresses(&self) -> Vec<Address> {
-        self.0.iter().map(|kg| kg.address()).collect()
+        self.0.iter().map(|o| o.address()).collect()
     }
 
     /// Returns all RPC URLs of the key generators.
@@ -182,72 +182,45 @@ impl<Address: AddressT> KeyGeneratorList<Address> {
     pub fn all_rpc_urls(&self, is_sync: bool, exclude_list: Vec<Address>) -> Vec<String> {
         self.0
             .iter()
-            .filter(|kg| !exclude_list.contains(&kg.address()))
-            .map(|key_generator| {
+                .filter(|o| !exclude_list.contains(&o.address()))
+            .map(|operator| {
                 if is_sync {
-                    key_generator.cluster_rpc_url().to_owned()
+                    operator.cluster_rpc_url().to_owned()
                 } else {
-                    key_generator.external_rpc_url().to_owned()
+                    operator.external_rpc_url().to_owned()
                 }
             })
             .collect()
     }
 }
 
-impl<Address: AddressT> From<Vec<KeyGenerator<Address>>> for KeyGeneratorList<Address> {
-    fn from(value: Vec<KeyGenerator<Address>>) -> Self {
+impl<Address: AddressT> From<Vec<Operator<Address>>> for ActiveOperatorList<Address> {
+    fn from(value: Vec<Operator<Address>>) -> Self {
         Self(value)
     }
 }
 
-impl<Address> Iterator for KeyGeneratorList<Address> {
-    type Item = KeyGenerator<Address>;
+impl<Address> Iterator for ActiveOperatorList<Address> {
+    type Item = Operator<Address>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.pop()
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize, Model)]
+#[derive(Clone, Debug, Deserialize, Serialize, Model)]
 #[kvstore(key())]
-pub struct Round(pub u64);
+pub struct NextOperatorList<Address>(Vec<Operator<Address>>);
 
-impl From<u64> for Round {
-    fn from(value: u64) -> Self {
+impl<Address: AddressT> NextOperatorList<Address> {
+    pub fn inner(&self) -> Vec<Operator<Address>> {
+        self.0.clone()
+    }
+}
+
+impl<Address: AddressT> From<Vec<Operator<Address>>> for NextOperatorList<Address> {
+    fn from(value: Vec<Operator<Address>>) -> Self {
         Self(value)
-    }
-}
-
-impl Into<u64> for Round {
-    fn into(self) -> u64 {
-        self.0
-    }
-}
-
-impl Round {
-
-    pub fn new() -> Self {
-        Self(0)
-    }
-
-    pub fn is_initial(&self) -> bool {
-        self.0 == 0
-    }
-
-    pub fn next(&self) -> Option<Self> {
-        self.0.checked_add(1).map(Self)
-    }
-
-    pub fn next_mut(&mut self) -> Result<Self, RuntimeError> {
-        self.0 = self.next().ok_or(RuntimeError::Arithmetic)?.into();
-        Ok(self.clone())
-    }
-}
-
-impl Add<u64> for Round {
-    type Output = Self;
-    fn add(self, other: u64) -> Self::Output {
-        Self(self.0 + other)
     }
 }
 
@@ -306,3 +279,16 @@ impl SessionId {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, Model)]
+#[kvstore(key())]
+pub struct OperatorTask(Vec<u8>);
+
+impl OperatorTask {
+    pub fn new(task: Vec<u8>) -> Self {
+        Self(task)
+    }
+
+    pub fn inner(&self) -> Vec<u8> {
+        self.0.clone()
+    }
+}
