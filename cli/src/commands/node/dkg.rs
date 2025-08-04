@@ -1,45 +1,30 @@
 use crate::Args;
-use dkg_node_primitives::config::{Role, DEFAULT_TRUSTED_ADDRESS, DEFAULT_CHAIN_TYPE, DEFAULT_SESSION_DURATION, DEFAULT_COLLECTING_DURATION, DEFAULT_THRESHOLD, DEFAULT_AUTH_SERVICE_ENDPOINT, DEFAULT_ROUND_LOOK_AHEAD};
+use dkg_node_primitives::config::Role;
 
 /// The arguments needed for DKG process
 #[derive(Debug, Args)]
 pub struct DkgArgs {
-    #[arg(long = "dkg.role", default_value_t = Role::Committee)]
-    pub role: Role,
+    #[arg(long = "dkg.role")]
+    pub role: Option<Role>,
     /// The address of the trusted address(e.g Admin contract address)
-    #[arg(long = "dkg.trusted-address", default_value_t = DEFAULT_TRUSTED_ADDRESS.to_string())]
-    pub trusted_address: String,
+    #[arg(long = "dkg.trusted-address")]
+    pub trusted_address: Option<String>,
     /// The endpoint of the auth service(e.g blockchain rpc endpoint)
-    #[arg(long = "dkg.auth-service-endpoint", default_value_t = DEFAULT_AUTH_SERVICE_ENDPOINT.to_string())]
-    pub auth_service_endpoint: String,
+    #[arg(long = "dkg.auth-service-url")]
+    pub auth_service_url: Option<String>,
     /// The type of the chain for signature type(e.g ethereum, solana)
-    #[arg(long = "dkg.chaintype", default_value_t = DEFAULT_CHAIN_TYPE.to_string())]
-    pub chain_type: String,
+    #[arg(long = "dkg.chaintype")]
+    pub chain_type: Option<String>,
     /// The session cycle in milliseconds
-    #[arg(long = "dkg.session-duration", default_value_t = DEFAULT_SESSION_DURATION)]
-    pub session_duration: u64,
+    #[arg(long = "dkg.session-duration")]
+    pub session_duration: Option<u64>,
     /// The duration of collecting key in milliseconds
-    #[arg(long = "dkg.collecting-duration", default_value_t = DEFAULT_COLLECTING_DURATION)]
-    pub collecting_duration: u64,
+    #[arg(long = "dkg.collecting-duration")]
+    pub collecting_duration: Option<u64>,
     /// The threshold of encryption key submission
-    #[arg(long = "dkg.threshold", default_value_t = DEFAULT_THRESHOLD)]
-    pub threshold: u16,
+    #[arg(long = "dkg.threshold")]
+    pub threshold: Option<u16>,
     /// The round look ahead for the DKG process
-    #[arg(long = "dkg.round-look-ahead", default_value_t = DEFAULT_ROUND_LOOK_AHEAD)]
-    pub round_look_ahead: u64,
-}
-
-impl Default for DkgArgs {
-    fn default() -> Self {
-        Self {
-            role: Role::Committee,
-            trusted_address: DEFAULT_TRUSTED_ADDRESS.to_string(),
-            auth_service_endpoint: DEFAULT_AUTH_SERVICE_ENDPOINT.to_string(),
-            chain_type: DEFAULT_CHAIN_TYPE.to_string(),
-            session_duration: DEFAULT_SESSION_DURATION,
-            collecting_duration: DEFAULT_COLLECTING_DURATION,
-            threshold: DEFAULT_THRESHOLD,
-            round_look_ahead: DEFAULT_ROUND_LOOK_AHEAD,
-        }
-    }
+    #[arg(long = "dkg.round-look-ahead")]
+    pub round_look_ahead: Option<u64>,
 }

@@ -1,23 +1,17 @@
-use std::net::{IpAddr, Ipv4Addr};
 use crate::Args;
 use dkg_node_primitives::config::{
-    DEFAULT_INTERNAL_RPC_PORT, DEFAULT_EXTERNAL_RPC_PORT, DEFAULT_CLUSTER_RPC_PORT,
+    DEFAULT_INTERNAL_RPC_URL, DEFAULT_EXTERNAL_RPC_URL, DEFAULT_CLUSTER_RPC_URL, DEFAULT_AUTHORITY_RPC_URL,
+    DEFAULT_SOLVER_RPC_URL,
 };
 
 #[derive(Debug, Args)]
 pub struct RpcServerArgs {
-    #[arg(long = "internal.addr", default_value_t = IpAddr::V4(Ipv4Addr::LOCALHOST))]
-    pub internal_rpc_url: IpAddr,
-    #[arg(long = "internal.port", default_value_t = DEFAULT_INTERNAL_RPC_PORT)]
-    pub internal_rpc_port: u16,
-    #[arg(long = "external.addr", default_value_t = IpAddr::V4(Ipv4Addr::LOCALHOST))]
-    pub external_rpc_url: IpAddr,
-    #[arg(long = "external.port", default_value_t = DEFAULT_EXTERNAL_RPC_PORT)]
-    pub external_rpc_port: u16,
-    #[arg(long = "cluster.addr", default_value_t = IpAddr::V4(Ipv4Addr::LOCALHOST))]
-    pub cluster_rpc_url: IpAddr,
-    #[arg(long = "cluster.port", default_value_t = DEFAULT_CLUSTER_RPC_PORT)]
-    pub cluster_rpc_port: u16,
+    #[arg(long = "internal.addr")]
+    pub internal_rpc_url: Option<String>,
+    #[arg(long = "external.addr")]
+    pub external_rpc_url: Option<String>,
+    #[arg(long = "cluster.addr")]
+    pub cluster_rpc_url: Option<String>,
     /// Args for leader node
     #[arg(long = "authority.rpc.url")]
     pub authority_rpc_url: Option<String>,
@@ -29,28 +23,11 @@ pub struct RpcServerArgs {
 impl Default for RpcServerArgs {
     fn default() -> Self {
         Self {
-            internal_rpc_url: IpAddr::V4(Ipv4Addr::LOCALHOST).into(),
-            internal_rpc_port: DEFAULT_INTERNAL_RPC_PORT,
-            external_rpc_url: IpAddr::V4(Ipv4Addr::LOCALHOST).into(),
-            external_rpc_port: DEFAULT_EXTERNAL_RPC_PORT,
-            cluster_rpc_url: IpAddr::V4(Ipv4Addr::LOCALHOST).into(),
-            cluster_rpc_port: DEFAULT_CLUSTER_RPC_PORT,
-            authority_rpc_url: None,
-            solver_rpc_url: None,
+            internal_rpc_url: Some(DEFAULT_INTERNAL_RPC_URL.to_string()),
+            external_rpc_url: Some(DEFAULT_EXTERNAL_RPC_URL.to_string()),
+            cluster_rpc_url: Some(DEFAULT_CLUSTER_RPC_URL.to_string()),
+            authority_rpc_url: Some(DEFAULT_AUTHORITY_RPC_URL.to_string()),
+            solver_rpc_url: Some(DEFAULT_SOLVER_RPC_URL.to_string()),
         }
-    }
-}
-
-impl RpcServerArgs {
-    pub fn external_rpc_url(&self) -> String {
-        format!("http://{}:{}", self.external_rpc_url, self.external_rpc_port)
-    }
-
-    pub fn internal_rpc_url(&self) -> String {
-        format!("http://{}:{}", self.internal_rpc_url, self.internal_rpc_port)
-    }
-
-    pub fn cluster_rpc_url(&self) -> String {
-        format!("http://{}:{}", self.cluster_rpc_url, self.cluster_rpc_port)
     }
 }
