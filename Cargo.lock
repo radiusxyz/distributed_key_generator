@@ -1861,14 +1861,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
-name = "cli"
-version = "0.1.0"
-dependencies = [
- "futures",
- "tokio",
-]
-
-[[package]]
 name = "cobs"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2426,6 +2418,21 @@ dependencies = [
  "serde_json",
  "skde",
  "tokio",
+ "toml",
+]
+
+[[package]]
+name = "dkg-node-operator"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "async-trait",
+ "dkg-node-primitives",
+ "dkg-node-skde-key-generator",
+ "dkg-primitives",
+ "futures",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -2438,6 +2445,7 @@ dependencies = [
  "dkg-primitives",
  "dkg-utils",
  "ethers",
+ "futures",
  "futures-util",
  "radius-sdk",
  "serde",
@@ -2457,7 +2465,9 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bincode",
+ "dkg-node-operator",
  "dkg-node-primitives",
+ "dkg-node-skde-key-generator",
  "dkg-primitives",
  "dkg-rpc",
  "dkg-utils",
@@ -2470,6 +2480,23 @@ dependencies = [
  "serde_json",
  "skde",
  "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "dkg-node-skde-key-generator"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "async-trait",
+ "dkg-node-primitives",
+ "dkg-primitives",
+ "dkg-utils",
+ "futures",
+ "serde",
+ "serde_json",
+ "skde",
  "tokio",
  "tracing",
 ]
@@ -5703,7 +5730,6 @@ checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
 name = "radius-sdk"
 version = "0.1.0"
 dependencies = [
- "cli",
  "context",
  "json-rpc-client",
  "json-rpc-server",

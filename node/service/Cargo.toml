@@ -9,13 +9,15 @@ repository.workspace = true
 [dependencies]
 dkg-primitives.workspace = true
 dkg-node-primitives.workspace = true
+dkg-node-operator.workspace = true
+dkg-node-skde-key-generator = { workspace = true, optional = true }
 dkg-rpc.workspace = true
 dkg-utils.workspace = true
 radius-sdk.workspace = true
 
 serde.workspace = true
 serde_json.workspace = true
-skde.workspace = true
+skde = { workspace = true, optional = true }
 tokio.workspace = true
 tracing.workspace = true
 ethers.workspace = true
@@ -27,4 +29,6 @@ thiserror.workspace = true
 async-trait.workspace = true
 
 [features]
+default = ["skde"]
+skde = ["dep:skde", "dep:dkg-node-skde-key-generator"]
 experimental = []

@@ -16,6 +16,8 @@ members = [
     "src",
     "node/primitives",
     "node/service",
+    "node/operator",
+    "node/key_generator/skde",
 ]
 
 default-members = ["src"]
@@ -28,6 +30,8 @@ dkg-cli = { path = "cli" }
 dkg-utils = { path = "utils" }
 dkg-node-service = { path = "node/service" }
 dkg-node-primitives = { path = "node/primitives" }
+dkg-node-operator = { path = "node/operator" }
+dkg-node-skde-key-generator = { path = "node/key_generator/skde" }
 
 # Radius
 skde = { git = "https://github.com/radiusxyz/skde", rev = "69e70ac0ab071000b3d13557cdbed43ffeddc878" }
