@@ -1,4 +1,4 @@
-pub use dkg_primitives::{Config, SessionId, KeyGeneratorList, Commitment, Payload, SignedCommitment, AsyncTask, EncKeyCommitment, DbManager, to_signed_commitment};
+pub use dkg_primitives::{Config, SessionId, ActiveOperatorList, Commitment, Payload, SignedCommitment, AsyncTask, EncKeyCommitment, DbManager, to_signed_commitment};
 pub use tracing::info;
 pub use radius_sdk::json_rpc::server::{RpcParameter, RpcError};
 
@@ -35,18 +35,17 @@ pub mod helper {
         session_id: SessionId,
         commitment: EncKeyCommitment<C::Signature, C::Address>,
     ) -> RpcResult<()> {
-        let current_round = ctx.db_manager().current_round().map_err(|e| RpcError::from(e))?;
-        let key_generators =
-            ctx.db_manager().get_key_generator_list(current_round)
+        let operators =
+            ctx.db_manager().get_active_operator_list()
                 .map_err(|e| RpcError::from(e))?
                 .into_iter()
                 .filter(|kg| kg.address() != ctx.address()) // Exclude self
                 .map(|kg| kg.cluster_rpc_url().to_owned())
                 .collect::<Vec<_>>();
         let commitment = to_signed_commitment(ctx, session_id, commitment)?;
-        if !key_generators.is_empty() { 
-            info!("Broadcasting enc key ack to {:?} at session: {:?}", key_generators, session_id); 
-            ctx.async_task().multicast(key_generators, <SyncEncKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncEncKey(commitment));
+        if !operators.is_empty() { 
+            info!("Broadcasting enc key ack to {:?} at session: {:?}", operators, session_id); 
+            ctx.async_task().multicast(operators, <SyncEncKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncEncKey(commitment));
         }
         Ok(())
     }
@@ -58,15 +57,17 @@ pub mod helper {
         session_id: SessionId,
         exclude_list: Vec<C::Address>,
     ) -> RpcResult<()> {    
-        let current_round = ctx.db_manager().current_round().map_err(|e| RpcError::from(e))?;
-        let key_generators = ctx.db_manager().get_key_generator_list(current_round)
+        let operators = ctx.db_manager().get_active_operator_list()
             .map_err(|e| RpcError::from(e))?
-            .all_rpc_urls(true, exclude_list);
-        if !key_generators.is_empty() { 
-            info!("Broadcasting dec key to {:?} at session: {:?}", key_generators, session_id); 
+            .into_iter()
+            .filter(|kg| !exclude_list.contains(&kg.address()))
+            .map(|kg| kg.cluster_rpc_url().to_owned())
+            .collect::<Vec<_>>();
+        if !operators.is_empty() { 
+            info!("Broadcasting dec key to {:?} at session: {:?}", operators, session_id); 
             let commitment = Commitment::new(payload, Some(ctx.address()), session_id);
             let signature = ctx.sign(&commitment)?;
-            ctx.async_task().multicast(key_generators, <SyncDecKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncDecKey(SignedCommitment { commitment, signature }));
+            ctx.async_task().multicast(operators, <SyncDecKey::<C::Signature, C::Address> as RpcParameter<C>>::method().into(), SyncDecKey(SignedCommitment { commitment, signature }));
         }
         Ok(())
     } 

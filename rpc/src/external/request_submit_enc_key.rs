@@ -1,5 +1,5 @@
 use crate::*;
-use dkg_primitives::{Config, SessionId, KeyService};
+use dkg_primitives::{Config, SessionId, KeyGenerator};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -20,7 +20,7 @@ impl<C: Config> RpcParameter<C> for RequestSubmitEncKey {
         info!("method::{}", <Self as RpcParameter<C>>::method());
         let session_id = self.session_id;
         if !session_id.is_initial() { return Ok(()); } 
-        let enc_key = ctx.key_service().gen_enc_key(ctx.randomness(session_id), None)?;
+        let enc_key = ctx.key_generator().gen_enc_key(ctx.randomness(session_id), None)?;
         submit_enc_key(&ctx, session_id, enc_key)?;
         Ok(())
     }

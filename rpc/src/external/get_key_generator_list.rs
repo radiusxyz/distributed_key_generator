@@ -1,6 +1,6 @@
 use crate::*;
 use serde::{Deserialize, Serialize};
-use dkg_primitives::{Config, KeyGeneratorList, KeyGenerator, AddressT, DbManager};
+use dkg_primitives::{Config, ActiveOperatorList, Operator, AddressT};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetKeyGeneratorList;
@@ -18,14 +18,14 @@ pub struct Response {
     pub urls: Vec<KeyGeneratorRpcInfo>,
 }
 
-impl<Address: AddressT> From<Response> for KeyGeneratorList<Address> {
+impl<Address: AddressT> From<Response> for ActiveOperatorList<Address> {
     fn from(value: Response) -> Self {
-        let mut key_generator_list = KeyGeneratorList::<Address>::new();
-        let key_generator_rpc_url_list = value.urls;
-        for key_generator_rpc_info in key_generator_rpc_url_list {
-            key_generator_list.insert(KeyGenerator::new(key_generator_rpc_info.address.into(), key_generator_rpc_info.cluster_rpc_url, key_generator_rpc_info.external_rpc_url));
+        let mut operator_list = ActiveOperatorList::<Address>::new();
+        let operator_rpc_url_list = value.urls;
+        for operator_rpc_info in operator_rpc_url_list {
+            operator_list.insert(Operator::new(operator_rpc_info.address.into(), operator_rpc_info.cluster_rpc_url, operator_rpc_info.external_rpc_url));
         }
-        key_generator_list
+        operator_list
     }
 }
 
@@ -36,11 +36,10 @@ impl<C: Config> RpcParameter<C> for GetKeyGeneratorList {
         "get_key_generator_list"
     }
 
-    async fn handler(self, ctx: C) -> Result<Self::Response, RpcError> {
-        let current_round = ctx.db_manager().current_round().map_err(|e| RpcError::from(e))?;
-        let key_generator_list = KeyGeneratorList::<C::Address>::get(current_round)?;
+    async fn handler(self, _ctx: C) -> Result<Self::Response, RpcError> {
+        let operator_list = ActiveOperatorList::<C::Address>::get()?;
 
-        let urls: Vec<KeyGeneratorRpcInfo> = key_generator_list
+        let urls: Vec<KeyGeneratorRpcInfo> = operator_list
             .into_iter()
             .filter_map(|key_generator| {
                 Some(KeyGeneratorRpcInfo {

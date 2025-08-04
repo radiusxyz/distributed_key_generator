@@ -1,6 +1,6 @@
 
 use crate::*;
-use dkg_primitives::RuntimeEvent;
+use dkg_primitives::SessionEvent;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -34,7 +34,7 @@ impl<C: Config> RpcParameter<C> for SyncStartTime<C::Signature, C::Address> {
                 return Ok(None);
             }
             let start_time = self.start_time()?;
-            ctx.async_task().emit_event(RuntimeEvent::StartTimeSynced(start_time)).await?;
+            ctx.async_task().emit_event(SessionEvent::GenesisSession(start_time)).await?;
             return Ok(Some(start_time));   
         } 
         Ok(None)

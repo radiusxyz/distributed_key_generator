@@ -1,8 +1,7 @@
 use crate::*;
-use dkg_primitives::{Config, AsyncTask, EncKeyCommitment, RuntimeEvent, KeyServiceError, KeyGeneratorList, SignedCommitment, SubmitterList, DbManager};
-use radius_sdk::kvstore::KvStoreError;
+use dkg_primitives::{Config, EncKeyCommitment, SessionEvent, ActiveOperatorList, SignedCommitment, SubmitterList};
 use serde::{Deserialize, Serialize};
-use tracing::{info, error};
+use tracing::info;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SubmitEncKey<Signature, Address>(pub SignedCommitment<Signature, Address>);
@@ -33,12 +32,11 @@ impl<C: Config> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
             info!("Not a leader for session: {:?}. Skipping...", session_id);
             return Ok(()); 
         }
-        let current_round = ctx.db_manager().current_round().map_err(|e| RpcError::from(e))?;
         let submitter = ctx.verify_signature(&self.0.signature, &self.0.commitment, self.sender())?;
 
         // Sanity check: if the sender is not a key generator, skip
-        let key_generators = KeyGeneratorList::<C::Address>::get(current_round)?;
-        if !key_generators.contains(&submitter) { return Ok(()); } 
+        let operators = ActiveOperatorList::<C::Address>::get()?;
+        if !operators.contains(&submitter) { return Ok(()); } 
         // Store commitment for `session` and `sender`
         let commitment = EncKeyCommitment::new(self.inner());
         commitment.put(&session_id, &submitter)?;
@@ -48,7 +46,7 @@ impl<C: Config> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
             SubmitterList::<C::Address>::new().put(session_id)?;
         }
         SubmitterList::<C::Address>::apply(session_id, |submitter_list| { submitter_list.insert(submitter.clone()); })?;
-        ctx.async_task().emit_event(RuntimeEvent::SubmitEncKey { submitter, session_id }).await.map_err(|e| RpcError::from(e))?;
+        ctx.async_task().emit_event(SessionEvent::SubmitEncKey { submitter, session_id }).await.map_err(|e| RpcError::from(e))?;
 
         let _ = multicast_enc_key_ack(&ctx, session_id, commitment);
 

@@ -1,5 +1,5 @@
 use crate::{*, FinalizedEncKeyPayload };
-use dkg_primitives::{AsyncTask, Config, EncKey, RuntimeEvent, KeyService, Payload, SessionId, SignedCommitment};
+use dkg_primitives::{AsyncTask, Config, EncKey, SessionEvent, KeyGenerator, Payload, SessionId, SignedCommitment};
 use radius_sdk::json_rpc::server::RpcError;
 use serde::{Deserialize, Serialize};
 
@@ -34,10 +34,10 @@ impl<C: Config> RpcParameter<C> for SyncFinalizedEncKeys<C::Signature, C::Addres
             })
             .collect::<Result<Vec<Vec<u8>>, RpcError>>()?;
         enc_keys.sort();
-        let enc_key = ctx.key_service().gen_enc_key(ctx.randomness(session_id), Some(enc_keys))?;
+        let enc_key = ctx.key_generator().gen_enc_key(ctx.randomness(session_id), Some(enc_keys))?;
         EncKey::new(enc_key.clone()).put(session_id)?;
         if ctx.is_solver() {
-            ctx.async_task().emit_event(RuntimeEvent::SolveKey { enc_key, session_id }).await.map_err(|e| RpcError::from(e))?;
+            ctx.async_task().emit_event(SessionEvent::SolveKey { enc_key, session_id }).await.map_err(|e| RpcError::from(e))?;
         }
         Ok(())
     }

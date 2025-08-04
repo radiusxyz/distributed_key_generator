@@ -1,7 +1,7 @@
 use crate::*;
 use serde::{Deserialize, Serialize};
 use tracing::info;
-use dkg_primitives::{Config, KeyGenerator, KeyGeneratorList, DbManager};
+use dkg_primitives::{Config, Operator, ActiveOperatorList};
 use std::fmt::{Display, Debug};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -12,9 +12,9 @@ pub struct SyncKeyGenerator<Address> {
     external_rpc_url: String,
 }
 
-impl<Address: Clone> From<SyncKeyGenerator<Address>> for KeyGenerator<Address> {
+impl<Address: Clone> From<SyncKeyGenerator<Address>> for Operator<Address> {
     fn from(value: SyncKeyGenerator<Address>) -> Self {
-        KeyGenerator::new(value.address, value.cluster_rpc_url, value.external_rpc_url)
+        Operator::new(value.address, value.cluster_rpc_url, value.external_rpc_url)
     }
 }
 
@@ -31,11 +31,10 @@ impl<C: Config> RpcParameter<C> for SyncKeyGenerator<C::Address> {
         "sync_key_generator"
     }
 
-    async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
+    async fn handler(self, _ctx: C) -> RpcResult<Self::Response> {
         info!("Sync key generator - {}", self);
-        let current_round = ctx.db_manager().current_round().map_err(|e| RpcError::from(e))?;
-        let mut key_generators = KeyGeneratorList::<C::Address>::get_mut(current_round)?;
-        if key_generators.contains(&self.address) {
+        let mut operators = ActiveOperatorList::<C::Address>::get_mut()?;
+        if operators.contains(&self.address) {
             tracing::warn!("Already synced key generator: {}", self);
             return Ok(());
         }
@@ -47,8 +46,8 @@ impl<C: Config> RpcParameter<C> for SyncKeyGenerator<C::Address> {
         //     context.config().chain_type().clone(),
         // )?;
 
-        key_generators.insert(self.into());
-        key_generators.update()?;
+        operators.insert(self.into());
+        operators.update()?;
 
         Ok(())
     }
