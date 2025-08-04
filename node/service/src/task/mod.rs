@@ -4,6 +4,7 @@ pub use worker::*;
 
 pub mod committee;
 pub mod solver;
+pub mod operator;
 
 use dkg_primitives::Config;
 use dkg_node_primitives::NodeConfig;

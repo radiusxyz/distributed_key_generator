@@ -1,17 +1,16 @@
 use super::{Config, NodeConfig, run_session_worker};
 use crate::rpc::{default_external_rpc_server, default_cluster_rpc_server};
 use dkg_rpc::{DecKeyPayload, SubmitDecKeyResponse, SubmitDecKey};
-use dkg_primitives::{AsyncTask, DecKey, SessionId, SignedCommitment, KeyService, RuntimeError, to_signed_commitment};
+use dkg_primitives::{AsyncTask, DecKey, SessionId, SignedCommitment, KeyGenerator, RuntimeError, to_signed_commitment, OperatorService};
 use radius_sdk::json_rpc::server::RpcParameter;
 use tracing::info;
-use tokio::task::JoinHandle;
-use tokio::sync::mpsc::Receiver;
-use dkg_primitives::RuntimeEvent;
+use tokio::{task::JoinHandle, time::Duration, sync::mpsc::Receiver};
+use dkg_primitives::SessionEvent;
 
 mod worker;
 use worker::SolverWorker;
 
-pub async fn run_node<C: Config>(ctx: &mut C, config: &NodeConfig, rx: Receiver<RuntimeEvent<C::Signature, C::Address>>) -> Result<Vec<JoinHandle<()>>, C::Error> {
+pub async fn run_node<C: Config>(ctx: &mut C, config: &NodeConfig, rx: Receiver<SessionEvent<C::Signature, C::Address>>) -> Result<Vec<JoinHandle<()>>, C::Error> {
     let mut handle: Vec<JoinHandle<()>> = vec![];
 
     let external_server = default_external_rpc_server(ctx).await?;
@@ -24,10 +23,10 @@ pub async fn run_node<C: Config>(ctx: &mut C, config: &NodeConfig, rx: Receiver<
     handle.push(ctx.async_task().spawn_task(async move { server_handle.stopped().await; }));
 
     let mut worker = SolverWorker::<C>::new(rx);
-    let cloned_ctx = ctx.clone();
-    let session_duration = config.session_duration();
+    let mut cloned_ctx = ctx.clone();
+    let session_duration = ctx.operator_service().get_session_duration().await.expect("Failed to get session duration");
     let worker_handle = ctx.async_task().spawn_task(async move {
-        if let Err(e) = run_session_worker(&cloned_ctx, &mut worker, session_duration).await {
+        if let Err(e) = run_session_worker(&mut cloned_ctx, &mut worker, Duration::from_secs(session_duration)).await {
             // TODO: Spawn critical task to start DKG worker
             panic!("Error running DKG worker: {}", e);
         }
@@ -45,7 +44,7 @@ pub fn do_solve_key<C: Config>(
     enc_key: &Vec<u8>,
 ) -> Result<SignedCommitment<C::Signature, C::Address>, C::Error> {
     info!("Start solving at session: {:?}", session_id);
-    let (dec_key, solve_at) = ctx.key_service().gen_dec_key(enc_key).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+    let (dec_key, solve_at) = ctx.key_generator().gen_dec_key(enc_key).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
     info!("End solving at session: {:?}", session_id);
     DecKey::new(dec_key.clone()).put(session_id).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
     let commitment = to_signed_commitment(ctx, session_id, DecKeyPayload::new(dec_key, solve_at))?;

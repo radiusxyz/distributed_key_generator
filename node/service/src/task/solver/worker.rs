@@ -5,12 +5,11 @@ use tokio::sync::{mpsc::{self, Receiver, Sender}, Mutex};
 use dkg_rpc::{Config, SessionId};
 use futures_timer::Delay;
 use std::time::Instant;
-
-use dkg_primitives::{RuntimeEvent, Round, AuthService, DbManager};
+use dkg_primitives::{DbManager, NextOperatorList, OperatorService, RuntimeError, SessionEvent};
 use tracing::{error, info};
 
 pub struct SolverWorker<C: Config> {
-    rx: Arc<Mutex<Receiver<RuntimeEvent<C::Signature, C::Address>>>>,
+    rx: Arc<Mutex<Receiver<SessionEvent<C::Signature, C::Address>>>>,
     has_started: bool,
     session_tx: Sender<SessionId>,
     session_rx: Receiver<SessionId>,
@@ -20,23 +19,18 @@ pub struct SolverWorker<C: Config> {
 impl<C: Config> SessionWorker<C> for SolverWorker<C> {
 
     async fn on_genesis_session(&mut self, ctx: &C) -> Result<(), C::Error> {
-        let current_round = Round::get().expect("Not initialized");
-        if !current_round.is_initial() { panic!("Current round is not initial"); }
-        let key_generators_for_round_0 = ctx.auth_service().get_key_generators(&current_round).await.expect("Failed to get initial key generators");
-        let key_generators_for_round_1 = ctx.auth_service().get_key_generators(&(current_round.clone()+ 1)).await.expect("Failed to get key generators for round 1");
+        let operators = ctx.operator_service().get_active_operators().await.expect("Failed to get initial operators");
         loop {
-            if ctx.auth_service().is_ready(&current_round, ctx.threshold()).await.unwrap() {
+            if ctx.operator_service().is_ready(1).await.unwrap() {
                 // Update the key generator list for round 0 
-                ctx.db_manager().update_key_generator_list(&current_round, key_generators_for_round_0.clone()).expect("Failed to update key generator list for round 0");
-                // Update the key generator list for round 1
-                ctx.db_manager().update_key_generator_list(&(current_round.clone()+1), key_generators_for_round_1.clone()).expect("Failed to update key generator list for round 1");
+                ctx.db_manager().update_active_operator_list(operators.clone()).expect("Failed to update operator list");
                 break;
             }
         }
         Ok(())
     }
 
-    async fn on_session(&mut self, ctx: &C, session_info: SessionInfo) -> Option<SessionResult<C::Signature>> {
+    async fn on_session(&mut self, ctx: &mut C, session_info: SessionInfo) -> Option<SessionResult<C::Signature>> {
         let session_id = session_info.session_id;
         match self.on_session(ctx, session_info).await {
             Ok(res) => Some(res),
@@ -51,9 +45,17 @@ impl<C: Config> SessionWorker<C> for SolverWorker<C> {
 impl<C: Config> SolverWorker<C> {
 
     /// Create a instance of `SessionWorker`
-    pub fn new(rx: Receiver<RuntimeEvent<C::Signature, C::Address>>) -> Self {
+    pub fn new(rx: Receiver<SessionEvent<C::Signature, C::Address>>) -> Self {
         let (session_tx, session_rx) = mpsc::channel(10);
         Self { rx: Arc::new(Mutex::new(rx)), has_started: false, session_tx, session_rx }
+    }
+
+    fn handle_new_session(&mut self, ctx: &C) -> Result<(), C::Error> {
+        if let Ok(next_operator_list) = NextOperatorList::<C::Address>::get() {
+            ctx.db_manager().update_active_operator_list(next_operator_list.inner()).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+            let _ = NextOperatorList::<C::Address>::delete();
+        }
+        Ok(())
     }
 
     pub async fn do_end_session(&self, on_session_id: &mut SessionId, amount: u64) -> Result<(), C::Error> {
@@ -63,8 +65,9 @@ impl<C: Config> SolverWorker<C> {
 
     /// For every next session, worker will wait for the `SolveKey` event and submit the decryption key to the leader.
     /// Each session should be ended before timeout
-    pub async fn on_session(&mut self, ctx: &C, session_info: SessionInfo) -> Result<SessionResult<C::Signature>, C::Error> {
+    pub async fn on_session(&mut self, ctx: &mut C, session_info: SessionInfo) -> Result<SessionResult<C::Signature>, C::Error> {
         let mut on_session_id = session_info.session_id;
+        self.handle_new_session(ctx)?;
         // Ends at after this delay 
         let mut timeout = Delay::new(session_info.ends_at.duration_since(Instant::now()));
         loop {
@@ -76,9 +79,10 @@ impl<C: Config> SolverWorker<C> {
                     if let Some(event) = event {
                         info!("{:?}", event);
                         match event {
-                            RuntimeEvent::SolveKey { enc_key, session_id } => {
+                            SessionEvent::SolveKey { enc_key, session_id } => {
                                 let ctx = ctx.clone();
                                 let _tx = self.session_tx.clone();
+                                // Solve key in background task
                                 tokio::spawn(async move {
                                     // Since do_solve_key is a blocking operation, solutions that exceed the session duration
                                     // will be discarded to maintain timing consistency

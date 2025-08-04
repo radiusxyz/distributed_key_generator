@@ -1,7 +1,8 @@
-use dkg_node_primitives::{BasicDkgService, DefaultTaskExecutor, DefaultAuthService, Role, Skde, NodeConfig, DefaultDbManager, DbManager};
+use dkg_node_primitives::{BasicDkgService, DefaultTaskExecutor, Role, NodeConfig, DefaultDbManager, DbManager};
+use dkg_node_operator::BlockchainOperatorService;
 use futures::future::join_all;
 use radius_sdk::{signature::{PrivateKeySigner, ChainType, Signature, Address}, kvstore::KvStoreBuilder};
-use dkg_primitives::{AuthService, AuthTrustedSetupFor, Config, KeyService, Round, RuntimeError, RuntimeEvent, RuntimeResult, SessionId, Sha3Hasher, TrustedSetupFor};
+use dkg_primitives::{Config, KeyGenerator, OperatorService, OperatorTrustedSetupFor, RuntimeError, RuntimeResult, SessionEvent, SessionId, Sha3Hasher, TrustedSetupFor};
 use std::{fs, path::PathBuf};
 use tokio::{signal, sync::mpsc::{channel, Sender}, task::JoinHandle};
 use tracing::{info, error};
@@ -12,23 +13,24 @@ pub use task::*;
 #[cfg(feature = "experimental")]
 mod builder;
 
-async fn create_key_service<C: Config>(ctx: &C, config: &NodeConfig) -> Result<C::KeyService, C::Error> 
+#[cfg(feature = "skde")]
+use dkg_node_skde_key_generator::Skde;
+
+async fn create_key_generator<C: Config>(ctx: &C, config: &NodeConfig) -> Result<C::KeyGenerator, C::Error> 
 where
-    AuthTrustedSetupFor<C>: From<TrustedSetupFor<C>> + Into<TrustedSetupFor<C>>,
+    TrustedSetupFor<C>: From<OperatorTrustedSetupFor<C>> + Into<OperatorTrustedSetupFor<C>>,
 {
     // If the role is authority, setup the trusted setup 
     if config.role.is_authority() {
-        let path = config.trusted_setup_path().join("trusted_setup.json");  
+        let path = config.trusted_setup_path().join("trusted_setup.json"); 
         match fs::read_to_string(&path) {
             Ok(data) => {
                 match serde_json::from_str::<TrustedSetupFor<C>>(&data) {
                     Ok(trusted_setup) => {
-                        let signature = ctx.sign(&trusted_setup)?;
-                        let signature_bytes = serde_json::to_vec(&signature)?;
-                        if let Err(e) = ctx.auth_service().update_trusted_setup(trusted_setup.clone(), signature_bytes).await {
+                        if let Err(e) = ctx.operator_service().update_trusted_setup(trusted_setup.clone()).await {
                             panic!("Failed to update trusted setup: {}", e);
                         }
-                        Ok(C::KeyService::setup(trusted_setup))
+                        Ok(C::KeyGenerator::setup(trusted_setup))
                     },
                     Err(e) => { panic!("Failed to parse trusted setup file: {}", e) }
                 }
@@ -37,9 +39,9 @@ where
         }
     } else {
         loop {
-            match ctx.auth_service().get_trusted_setup::<TrustedSetupFor<C>>().await {
+            match ctx.operator_service().get_active_trusted_setup::<TrustedSetupFor<C>>().await {
                 Ok(trusted_setup) => {
-                    return Ok(C::KeyService::setup(trusted_setup))
+                    return Ok(C::KeyGenerator::setup(trusted_setup))
                 }
                 Err(e) => { 
                     error!("Failed to get trusted setup: {}", e);
@@ -50,20 +52,19 @@ where
     }
 }
 
-fn create_dkg_service<KS, AS, DB>(config: &NodeConfig, signer: PrivateKeySigner, tx: Sender<RuntimeEvent<Signature, Address>>, auth_service: AS, db_manager: DB) -> RuntimeResult<BasicDkgService<KS, AS, DB>> 
+fn create_dkg_service<KG, OS, DB>(config: &NodeConfig, signer: PrivateKeySigner, tx: Sender<SessionEvent<Signature, Address>>, operator_service: OS, db_manager: DB) -> RuntimeResult<BasicDkgService<KG, OS, DB>> 
 where
-    KS: KeyService + Clone,
-    AS: AuthService<Address> + Clone, 
+    KG: KeyGenerator + Clone,
+    OS: OperatorService<Address> + Clone, 
     DB: DbManager<Address> + Clone + Send + Sync + 'static,
 {
     let task_executor = DefaultTaskExecutor::new(tx)?;
     info!("Creating app state for: {:?}", config.role);
-    BasicDkgService::<KS, AS, DB>::new(
+    BasicDkgService::<KG, OS, DB>::new(
         signer,
         task_executor,
         config.role.clone(),
-        config.threshold,
-        auth_service,
+        operator_service,
         db_manager,
     )
     .map_err(RuntimeError::from)
@@ -94,9 +95,7 @@ fn init_db(config: &NodeConfig) -> RuntimeResult<()> {
         .build(config.db_path.clone())
         .map_err(RuntimeError::Database)?
         .init();
-    // Initialize neccessary kv stores
     SessionId::new().put()?;
-    Round::new().put()?;
     tracing::info!("Successfully initialized the database at {:?}.", config.db_path);
     Ok(())
 }
@@ -150,23 +149,26 @@ pub async fn run_node(config: NodeConfig) -> RuntimeResult<()> {
     let (tx, rx) = channel(10);
     let db_manager = DefaultDbManager;
     let (signer, private_key) = create_signer(&config.private_key_path, config.chain_type);
-    let auth_service = DefaultAuthService::new(&config.auth_service_endpoint, &private_key, &config.trusted_address);
-    let mut dkg_service = create_dkg_service::<Skde<Sha3Hasher>, DefaultAuthService, DefaultDbManager>(&config, signer, tx.clone(), auth_service, db_manager)?;
-    dkg_service.key_service = Some(create_key_service(&dkg_service, &config).await?);
+    let (operator_service, blockchain_event_rx) = BlockchainOperatorService::new(&config.operator_service_url, &private_key, &config.trusted_address);
+    let mut dkg_service = create_dkg_service::<Skde<Sha3Hasher>, BlockchainOperatorService, DefaultDbManager>(&config, signer, tx.clone(), operator_service, db_manager)?;
+    // TODO: Refactor me! - Key generator should be created in the operator service
+    dkg_service.key_generator = Some(create_key_generator(&dkg_service, &config).await?);
     if config.role.is_authority() {
         return Ok(());
     } else {
         init_db(&config)?;
-
+        let mut service_handles = vec![];
+        let operator_handle = operator::start_blockchain_operator_worker(&dkg_service, blockchain_event_rx).await?;
+        service_handles.push(operator_handle);
         let handles = match config.role {
             Role::Committee => {
-                if !dkg_service.auth_service.is_committee(Round::get().expect("Not initialized"), dkg_service.address()).await? {
-                    panic!("Node is not registered as a committee member");
+                if !dkg_service.operator_service.is_operator(dkg_service.address()).await? {
+                    panic!("Node is not registered as a operator");
                 }
                 committee::run_node(&mut dkg_service, &config, tx, rx).await?
             },
             Role::Solver => {
-                if !dkg_service.auth_service.is_solver(dkg_service.address()).await? {
+                if !dkg_service.operator_service.is_solver(dkg_service.address()).await? {
                     panic!("Node is not registered as a solver");
                 }
                 solver::run_node(&mut dkg_service, &config, rx).await?
@@ -174,8 +176,8 @@ pub async fn run_node(config: NodeConfig) -> RuntimeResult<()> {
             Role::Verifier => unimplemented!("Verifier is not implemented yet"),
             _ => panic!("Invalid role"),
         };
-
-        let _ = handle_shutdown(config.clone(), handles).await?;
+        service_handles.extend(handles);
+        let _ = handle_shutdown(config.clone(), service_handles).await?;
     
         Ok(())
     }

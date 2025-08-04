@@ -2,10 +2,8 @@ use std::path::PathBuf;
 use radius_sdk::signature::ChainType;
 pub use constants::*;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
 mod constants {
-    use crate::consts::DAY;
     /// The default home path for storing configuration and data
     pub const DEFAULT_HOME_PATH: &str = ".radius";
     /// The directory name for storing database files
@@ -13,32 +11,24 @@ mod constants {
     /// The file name for storing the signing key
     pub const SIGNING_KEY: &str = "signing_key";
     /// The default port number for external RPC communication
-    pub const DEFAULT_EXTERNAL_RPC_PORT: u16 = 3000;
+    pub const DEFAULT_EXTERNAL_RPC_URL: &str = "http://localhost:3000";
     /// The default port number for internal RPC communication
-    pub const DEFAULT_INTERNAL_RPC_PORT: u16 = 4000;
+    pub const DEFAULT_INTERNAL_RPC_URL: &str = "http://localhost:4000";
     /// The default port number for cluster RPC communication
-    pub const DEFAULT_CLUSTER_RPC_PORT: u16 = 5000;
-    /// The default port number for leader RPC communication
-    pub const DEFAULT_LEADER_RPC_PORT: u16 = 6000;
+    pub const DEFAULT_CLUSTER_RPC_URL: &str = "http://localhost:5000";
     /// The default port number for authority RPC communication
-    pub const DEFAULT_AUTHORITY_RPC_PORT: u16 = 7000;
+    pub const DEFAULT_AUTHORITY_RPC_URL: &str = "http://localhost:7000";
+    /// The default port number for solver RPC communication
+    pub const DEFAULT_SOLVER_RPC_URL: &str = "http://localhost:6000";
     /// The default trusted address for the admin contract
     pub const DEFAULT_TRUSTED_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
-    /// The duration of a session in milliseconds (2 seconds)
-    pub const DEFAULT_SESSION_DURATION: u64 = 2000;
-    /// The duration for collecting keys in milliseconds (0.1 seconds)
-    pub const DEFAULT_COLLECTING_DURATION: u64 = 100;
     /// The default blockchain type for signatures
     pub const DEFAULT_CHAIN_TYPE: &str = "ethereum";
-    /// The default threshold for encryption key submission
-    pub const DEFAULT_THRESHOLD: u16 = 1;
     /// The default endpoint for the authentication service
-    pub const DEFAULT_AUTH_SERVICE_ENDPOINT: &str = "http://localhost:8545";
-    /// The number of rounds to look ahead (1 day)
-    pub const DEFAULT_ROUND_LOOK_AHEAD: u64 = DAY;
+    pub const DEFAULT_AUTH_SERVICE_URL: &str = "http://localhost:8545";
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct NodeConfig {
     pub is_dev: bool,
     pub node_name: Option<String>,
@@ -47,15 +37,11 @@ pub struct NodeConfig {
     pub cluster_rpc_url: String,
     pub role: Role,
     pub trusted_address: String,
-    pub auth_service_endpoint: String,
+    pub operator_service_url: String,
     pub chain_type: ChainType,
-    pub session_duration: Duration,
-    pub collecting_duration: Duration,
     pub private_key_path: PathBuf,
     pub db_path: PathBuf,
     pub trusted_setup_path: Option<PathBuf>,
-    pub threshold: u16,
-    pub round_look_ahead: u64
 }
 
 impl NodeConfig {
@@ -67,15 +53,11 @@ impl NodeConfig {
         cluster_rpc_url: String,
         role: Role,
         trusted_address: String,
-        auth_service_endpoint: String,
-        chain_type: ChainType,
-        session_duration: Duration,
-        collecting_duration: Duration,
+        operator_service_url: String,
+        chain_type: String,
         private_key_path: PathBuf,
         db_path: PathBuf,
         trusted_setup_path: Option<PathBuf>,
-        threshold: u16,
-        round_look_ahead: u64
     ) -> Self {
         Self {
             is_dev,
@@ -85,24 +67,16 @@ impl NodeConfig {
             cluster_rpc_url,
             role,
             trusted_address,
-            auth_service_endpoint,
-            chain_type,
-            session_duration,
-            collecting_duration,
+            operator_service_url,
+            chain_type: chain_type.try_into().unwrap(),
             private_key_path,
             db_path,
             trusted_setup_path,
-            threshold,
-            round_look_ahead,
         }
     }
 
     pub fn trusted_setup_path(&self) -> PathBuf {
         self.trusted_setup_path.clone().expect("Trusted setup path not set")
-    }
-
-    pub fn session_duration(&self) -> Duration {
-        self.session_duration
     }
 
     pub fn log(&self) -> String {
@@ -121,9 +95,6 @@ impl NodeConfig {
 
             // Security and configuration
             log_lines.push(format!("🔑 Trusted Address: {}", self.trusted_address));
-            log_lines.push(format!("⏱️ Session Duration: {}ms", self.session_duration.as_millis()));
-            log_lines.push(format!("⏱️ Collecting Duration: {}ms", self.collecting_duration.as_millis()));
-            log_lines.push(format!("📊 Threshold: {}", self.threshold));
 
             // Paths
             log_lines.push(format!("💾 DB opens at: {}", self.db_path.display()));
@@ -133,7 +104,7 @@ impl NodeConfig {
         }
         
         // Auth service
-        log_lines.push(format!("🔐 Auth Service Endpoint: {}", self.auth_service_endpoint));
+        log_lines.push(format!("🔐 Operator Service URL: {}", self.operator_service_url));
         
         log_lines.join("\n")
     }

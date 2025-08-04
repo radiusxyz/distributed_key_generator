@@ -12,7 +12,7 @@ impl<Signature> SessionResult<Signature> {
     }
 }
 
-pub async fn run_session_worker<C, SW>(ctx: &C, worker: &mut SW, session_duration: Duration) -> Result<(), C::Error> 
+pub async fn run_session_worker<C, SW>(ctx: &mut C, worker: &mut SW, session_duration: Duration) -> Result<(), C::Error> 
 where
     C: Config,
     SW: SessionWorker<C>
@@ -136,5 +136,5 @@ pub trait SessionWorker<C: Config> {
     /// Handle the genesis session
     async fn on_genesis_session(&mut self, ctx: &C) -> Result<(), C::Error>;
     /// Handle for every next session
-    async fn on_session(&mut self, ctx: &C, session_info: SessionInfo) -> Option<SessionResult<C::Signature>>;
+    async fn on_session(&mut self, ctx: &mut C, session_info: SessionInfo) -> Option<SessionResult<C::Signature>>;
 }
