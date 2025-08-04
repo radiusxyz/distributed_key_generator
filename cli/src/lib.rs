@@ -1,5 +1,10 @@
 
+use std::path::PathBuf;
+
 use clap::{Parser, Args};
+
+mod config;
+pub use config::*;
 
 mod command;
 pub use command::run;
@@ -11,6 +16,10 @@ use commands::*;
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
 pub struct Cli {
+    #[doc = "Path to configuration file (TOML format)"]
+    #[arg(long = "config", global = true)]
+    pub config: Option<PathBuf>,
+
     #[command(subcommand)]
     pub command: Commands,
 }
