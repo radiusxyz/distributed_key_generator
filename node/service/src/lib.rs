@@ -1,5 +1,5 @@
 use dkg_node_primitives::{BasicDkgService, DefaultTaskExecutor, Role, NodeConfig, DefaultDbManager, DbManager};
-use dkg_node_operator::BlockchainOperatorService;
+use dkg_node_operator::BAppService;
 use futures::future::join_all;
 use radius_sdk::{signature::{PrivateKeySigner, ChainType, Signature, Address}, kvstore::KvStoreBuilder};
 use dkg_primitives::{Config, KeyGenerator, OperatorService, OperatorTrustedSetupFor, RuntimeError, RuntimeResult, SessionEvent, SessionId, Sha3Hasher, TrustedSetupFor};
@@ -149,8 +149,9 @@ pub async fn run_node(config: NodeConfig) -> RuntimeResult<()> {
     let (tx, rx) = channel(10);
     let db_manager = DefaultDbManager;
     let (signer, private_key) = create_signer(&config.private_key_path, config.chain_type);
-    let (operator_service, blockchain_event_rx) = BlockchainOperatorService::new(&config.operator_service_url, &private_key, &config.trusted_address);
-    let mut dkg_service = create_dkg_service::<Skde<Sha3Hasher>, BlockchainOperatorService, DefaultDbManager>(&config, signer, tx.clone(), operator_service, db_manager)?;
+    let (mut bapp_service, blockchain_event_rx) = BAppService::new(&config.blockchain_http_rpc_url, &private_key, &config.trusted_address);
+    bapp_service.subscribe_events(&config.blockchain_ws_rpc_url).await;
+    let mut dkg_service = create_dkg_service::<Skde<Sha3Hasher>, BAppService, DefaultDbManager>(&config, signer, tx.clone(), bapp_service, db_manager)?;
     // TODO: Refactor me! - Key generator should be created in the operator service
     dkg_service.key_generator = Some(create_key_generator(&dkg_service, &config).await?);
     if config.role.is_authority() {
