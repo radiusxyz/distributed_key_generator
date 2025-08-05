@@ -10,8 +10,10 @@ pub struct DkgArgs {
     #[arg(long = "dkg.trusted-address")]
     pub trusted_address: Option<String>,
     /// The endpoint of the auth service(e.g blockchain rpc endpoint)
-    #[arg(long = "dkg.auth-service-url")]
-    pub auth_service_url: Option<String>,
+    #[arg(long = "dkg.blockchain-http-rpc-url")]
+    pub blockchain_http_rpc_url: Option<String>,
+    #[arg(long = "dkg.blockchain-ws-rpc-url")]
+    pub blockchain_ws_rpc_url: Option<String>,
     /// The type of the chain for signature type(e.g ethereum, solana)
     #[arg(long = "dkg.chaintype")]
     pub chain_type: Option<String>,

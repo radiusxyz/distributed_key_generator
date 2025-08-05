@@ -59,9 +59,12 @@ fn create_configuration(cli: Box<NodeCommand>, maybe_config: Option<TomlConfig>)
         .or_else(|| maybe_config.as_ref().and_then(|config| config.trusted_address.clone()))
         .expect("Trusted address is required either in cli or config");
 
-    let operator_service_url = cli.dkg.auth_service_url
-        .or_else(|| maybe_config.as_ref().and_then(|config| config.auth_service_url.clone()))
-        .expect("Auth service url is required either in cli or config");
+    let blockchain_http_rpc_url = cli.dkg.blockchain_http_rpc_url
+        .or_else(|| maybe_config.as_ref().and_then(|config| config.blockchain_http_rpc_url.clone()))
+        .expect("Blockchain HTTP RPC URL is required either in cli or config");
+    let blockchain_ws_rpc_url = cli.dkg.blockchain_ws_rpc_url
+        .or_else(|| maybe_config.as_ref().and_then(|config| config.blockchain_ws_rpc_url.clone()))
+        .expect("Blockchain WS RPC URL is required either in cli or config");
 
     NodeConfig::new(
         cli.is_dev,
@@ -71,7 +74,8 @@ fn create_configuration(cli: Box<NodeCommand>, maybe_config: Option<TomlConfig>)
         cluster_rpc_url,
         role,
         trusted_address,
-        operator_service_url,
+        blockchain_http_rpc_url,
+        blockchain_ws_rpc_url,
         chain_type,
         private_key_path,
         db_path,

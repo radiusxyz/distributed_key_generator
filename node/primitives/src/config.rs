@@ -37,7 +37,8 @@ pub struct NodeConfig {
     pub cluster_rpc_url: String,
     pub role: Role,
     pub trusted_address: String,
-    pub operator_service_url: String,
+    pub blockchain_http_rpc_url: String,
+    pub blockchain_ws_rpc_url: String,
     pub chain_type: ChainType,
     pub private_key_path: PathBuf,
     pub db_path: PathBuf,
@@ -53,7 +54,8 @@ impl NodeConfig {
         cluster_rpc_url: String,
         role: Role,
         trusted_address: String,
-        operator_service_url: String,
+        blockchain_http_rpc_url: String,
+        blockchain_ws_rpc_url: String,
         chain_type: String,
         private_key_path: PathBuf,
         db_path: PathBuf,
@@ -67,7 +69,8 @@ impl NodeConfig {
             cluster_rpc_url,
             role,
             trusted_address,
-            operator_service_url,
+            blockchain_http_rpc_url,
+            blockchain_ws_rpc_url,
             chain_type: chain_type.try_into().unwrap(),
             private_key_path,
             db_path,
@@ -104,7 +107,8 @@ impl NodeConfig {
         }
         
         // Auth service
-        log_lines.push(format!("🔐 Operator Service URL: {}", self.operator_service_url));
+        log_lines.push(format!("🔐 Blockchain HTTP RPC URL: {}", self.blockchain_http_rpc_url));
+        log_lines.push(format!("🔐 Blockchain WS RPC URL: {}", self.blockchain_ws_rpc_url));
         
         log_lines.join("\n")
     }
