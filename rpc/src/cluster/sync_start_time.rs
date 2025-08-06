@@ -34,7 +34,7 @@ impl<C: Config> RpcParameter<C> for SyncStartTime<C::Signature, C::Address> {
                 return Ok(None);
             }
             let start_time = self.start_time()?;
-            ctx.async_task().emit_event(SessionEvent::GenesisSession(start_time)).await?;
+            ctx.async_task().emit_event(SessionEvent::GenesisSession(start_time).into()).await?;
             return Ok(Some(start_time));   
         } 
         Ok(None)

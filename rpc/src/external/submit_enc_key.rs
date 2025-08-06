@@ -46,7 +46,7 @@ impl<C: Config> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
             SubmitterList::<C::Address>::new().put(session_id)?;
         }
         SubmitterList::<C::Address>::apply(session_id, |submitter_list| { submitter_list.insert(submitter.clone()); })?;
-        ctx.async_task().emit_event(SessionEvent::SubmitEncKey { submitter, session_id }).await.map_err(|e| RpcError::from(e))?;
+        ctx.async_task().emit_event(SessionEvent::SubmitEncKey { submitter, session_id }.into()).await.map_err(|e| RpcError::from(e))?;
 
         let _ = multicast_enc_key_ack(&ctx, session_id, commitment);
 

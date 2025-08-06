@@ -7,7 +7,6 @@ mod get_key_generator_list;
 mod submit_enc_key;
 mod request_submit_enc_key;
 mod submit_dec_key;
-// mod submit_final_reveal;
 
 pub use get_heartbeat::*;
 pub use get_decryption_key::GetDecKey;
@@ -18,5 +17,4 @@ pub use get_key_generator_list::{GetKeyGeneratorList, Response as GetKeyGenerato
 pub use submit_enc_key::*;
 pub use request_submit_enc_key::RequestSubmitEncKey;
 pub use submit_dec_key::{SubmitDecKey, Response as SubmitDecKeyResponse};
-// pub use submit_final_reveal::SubmitFinalReveal;
 
