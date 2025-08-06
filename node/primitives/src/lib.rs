@@ -1,8 +1,9 @@
 pub use crate::NodeConfig;
 use std::sync::Arc;
+use dkg_primitives::DkgEvent;
 pub use dkg_primitives::{
     Config, DecKey, ActiveOperatorList, VerifyService, SelectLeader, AsyncTask, RuntimeResult, RuntimeError,
-    TraceExt, KeyGeneratorError, SessionId, Parameter, SessionEvent, TrustedSetupFor, 
+    TraceExt, KeyGeneratorError, SessionId, Parameter, SessionEvent, TrustedSetupFor, SolverEvent,
     OperatorService, OperatorServiceError, KeyGenerator, DbManager, AddressT
 };
 use radius_sdk::{signature::{PrivateKeySigner, Address, Signature, SignatureError}, json_rpc::client::{RpcClient, Id}};
@@ -22,6 +23,7 @@ pub struct BasicDkgService<KG, OS, DB> {
     signer: PrivateKeySigner,
     task_executor: DefaultTaskExecutor,
     role: Role,
+    session_duration: u64,
     pub key_generator: Option<KG>,
     pub operator_service: OS,
     pub db_manager: DB,
@@ -32,10 +34,11 @@ impl<KG, OS, DB> BasicDkgService<KG, OS, DB> {
         signer: PrivateKeySigner,
         task_executor: DefaultTaskExecutor,
         role: Role,
+        session_duration: u64,
         operator_service: OS,
         db_manager: DB,
     ) -> RuntimeResult<Self> {        
-        Ok(Self { signer, task_executor, role, key_generator: None, operator_service, db_manager })
+        Ok(Self { signer, task_executor, role, key_generator: None, operator_service, db_manager, session_duration })
     }
 
     pub fn task_executor(&self) -> &DefaultTaskExecutor {
@@ -69,6 +72,7 @@ where
     fn is_solver(&self) -> bool { self.role == Role::Solver }
     fn signer(&self) -> &PrivateKeySigner { &self.signer }
     fn address(&self) -> Address { self.signer.address().clone() }
+    fn session_duration(&self) -> u64 { self.session_duration }
     fn randomness(&self, session_id: SessionId) -> Vec<u8> {
         match session_id.prev() {
             Some(prev) => match self.db_manager().get_dec_key(prev) {
@@ -130,13 +134,14 @@ impl<Address: AddressT> DbManager<Address> for DefaultDbManager {
 #[derive(Clone)]
 pub struct DefaultTaskExecutor {
     rpc_client: Arc<RpcClient>,
-    sender: Sender<SessionEvent<Signature, Address>>,
+    session_event_tx: Sender<SessionEvent<Signature, Address>>,
+    solver_event_tx: Sender<SolverEvent>,
 }
 
 impl DefaultTaskExecutor {
-    pub fn new(sender: Sender<SessionEvent<Signature, Address>>) -> RuntimeResult<Self> {
+    pub fn new(session_event_tx: Sender<SessionEvent<Signature, Address>>, solver_event_tx: Sender<SolverEvent>) -> RuntimeResult<Self> {
         let rpc_client = RpcClient::new().map_err(RuntimeError::from)?;
-        Ok(Self { rpc_client: Arc::new(rpc_client), sender })
+        Ok(Self { rpc_client: Arc::new(rpc_client), session_event_tx, solver_event_tx })
     }
 }
 
@@ -159,8 +164,11 @@ impl AsyncTask<Signature, Address, RuntimeError> for DefaultTaskExecutor {
         tokio::task::spawn_blocking(move || tokio::runtime::Handle::current().block_on(Box::pin(fut)))
     }
 
-    async fn emit_event(&self, event: SessionEvent<Signature, Address>) -> RuntimeResult<()> {
-        self.sender.send(event).await.map_err(|e| RuntimeError::from(e))
+    async fn emit_event(&self, event: DkgEvent<Signature, Address>) -> RuntimeResult<()> {
+        match event {
+            DkgEvent::SessionEvent(event) => self.session_event_tx.send(event).await.map_err(|e| RuntimeError::AnyError(Box::new(e))),
+            DkgEvent::SolverEvent(event) => self.solver_event_tx.send(event).await.map_err(|e| RuntimeError::AnyError(Box::new(e))),
+        }
     }
 
     async fn request<P, R>(&self, url: String, method: String, parameter: P) -> RuntimeResult<R> 

@@ -2,7 +2,7 @@ use dkg_node_primitives::{BasicDkgService, DefaultTaskExecutor, Role, NodeConfig
 use dkg_node_operator::BAppService;
 use futures::future::join_all;
 use radius_sdk::{signature::{PrivateKeySigner, ChainType, Signature, Address}, kvstore::KvStoreBuilder};
-use dkg_primitives::{Config, KeyGenerator, OperatorService, OperatorTrustedSetupFor, RuntimeError, RuntimeResult, SessionEvent, SessionId, Sha3Hasher, TrustedSetupFor};
+use dkg_primitives::{Config, KeyGenerator, OperatorService, OperatorTrustedSetupFor, RuntimeError, RuntimeResult, SessionEvent, SessionId, Sha3Hasher, TrustedSetupFor, SolverEvent};
 use std::{fs, path::PathBuf};
 use tokio::{signal, sync::mpsc::{channel, Sender}, task::JoinHandle};
 use tracing::{info, error};
@@ -52,18 +52,20 @@ where
     }
 }
 
-fn create_dkg_service<KG, OS, DB>(config: &NodeConfig, signer: PrivateKeySigner, tx: Sender<SessionEvent<Signature, Address>>, operator_service: OS, db_manager: DB) -> RuntimeResult<BasicDkgService<KG, OS, DB>> 
+async fn create_dkg_service<KG, OS, DB>(config: &NodeConfig, signer: PrivateKeySigner, session_event_tx: Sender<SessionEvent<Signature, Address>>, solver_event_tx: Sender<SolverEvent>, operator_service: OS, db_manager: DB) -> RuntimeResult<BasicDkgService<KG, OS, DB>> 
 where
     KG: KeyGenerator + Clone,
     OS: OperatorService<Address> + Clone, 
     DB: DbManager<Address> + Clone + Send + Sync + 'static,
 {
-    let task_executor = DefaultTaskExecutor::new(tx)?;
+    let task_executor = DefaultTaskExecutor::new(session_event_tx, solver_event_tx)?;
     info!("Creating app state for: {:?}", config.role);
+    let session_duration = operator_service.get_session_duration().await.expect("Failed to get session duration");
     BasicDkgService::<KG, OS, DB>::new(
         signer,
         task_executor,
         config.role.clone(),
+        session_duration,
         operator_service,
         db_manager,
     )
@@ -146,12 +148,13 @@ async fn handle_shutdown(config: NodeConfig, handles: Vec<JoinHandle<()>>) -> Ru
 pub async fn run_node(config: NodeConfig) -> RuntimeResult<()> {
     
     info!("{}", config.log());
-    let (tx, rx) = channel(10);
+    let (session_event_tx, session_event_rx) = channel(100);
+    let (solver_event_tx, solver_event_rx) = channel(100);
     let db_manager = DefaultDbManager;
     let (signer, private_key) = create_signer(&config.private_key_path, config.chain_type);
     let (mut bapp_service, blockchain_event_rx) = BAppService::new(&config.blockchain_http_rpc_url, &private_key, &config.trusted_address);
     bapp_service.subscribe_events(&config.blockchain_ws_rpc_url).await;
-    let mut dkg_service = create_dkg_service::<Skde<Sha3Hasher>, BAppService, DefaultDbManager>(&config, signer, tx.clone(), bapp_service, db_manager)?;
+    let mut dkg_service = create_dkg_service::<Skde<Sha3Hasher>, BAppService, DefaultDbManager>(&config, signer, session_event_tx.clone(), solver_event_tx.clone(), bapp_service, db_manager).await?;
     // TODO: Refactor me! - Key generator should be created in the operator service
     dkg_service.key_generator = Some(create_key_generator(&dkg_service, &config).await?);
     if config.role.is_authority() {
@@ -166,13 +169,13 @@ pub async fn run_node(config: NodeConfig) -> RuntimeResult<()> {
                 if !dkg_service.operator_service.is_operator(dkg_service.address()).await? {
                     panic!("Node is not registered as a operator");
                 }
-                committee::run_node(&mut dkg_service, &config, tx, rx).await?
+                committee::run_node(&mut dkg_service, &config, session_event_tx, session_event_rx, solver_event_rx).await?
             },
             Role::Solver => {
                 if !dkg_service.operator_service.is_solver(dkg_service.address()).await? {
                     panic!("Node is not registered as a solver");
                 }
-                solver::run_node(&mut dkg_service, &config, rx).await?
+                solver::run_node(&mut dkg_service, &config, session_event_rx).await?
             },
             Role::Verifier => unimplemented!("Verifier is not implemented yet"),
             _ => panic!("Invalid role"),
