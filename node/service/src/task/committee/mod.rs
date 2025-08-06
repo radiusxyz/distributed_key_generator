@@ -1,14 +1,23 @@
 use super::{Config, RpcParameter, NodeConfig};
 use crate::{rpc::{default_cluster_rpc_server, default_external_rpc_server}, run_session_worker};
 use dkg_rpc::{submit_enc_key, EncKeyCommitment, FinalizedEncKeyPayload, GetHeartbeat, GetHeartbeatResponse, RequestSubmitEncKey, StartTimePayload, SubmitDecKey, SubmitEncKey, SyncFinalizedEncKeys, SyncStartTime};
-use dkg_primitives::{AsyncTask, OperatorService, DbManager, OperatorServiceError, KeyGeneratorError, RuntimeError, SessionEvent, SessionId, to_signed_commitment, Operator};
+use dkg_primitives::{AsyncTask, OperatorService, DbManager, OperatorServiceError, KeyGeneratorError, RuntimeError, SessionEvent, SessionId, to_signed_commitment, Operator, SolverEvent};
 use tokio::{task::JoinHandle, sync::mpsc::{Sender, Receiver}, time::Duration};
 use tracing::info;
 
-mod worker;
-use worker::CommitteeWorker;
+mod key_manager;
+use key_manager::KeyManager;
 
-pub async fn run_node<C: Config>(ctx: &mut C, config: &NodeConfig, event_tx: Sender<SessionEvent<C::Signature, C::Address>>, event_rx: Receiver<SessionEvent<C::Signature, C::Address>>) -> Result<Vec<JoinHandle<()>>, C::Error> {
+mod session_worker;
+use session_worker::CommitteeSessionWorker;
+
+pub async fn run_node<C: Config>(
+    ctx: &mut C, 
+    config: &NodeConfig, 
+    session_event_tx: Sender<SessionEvent<C::Signature, C::Address>>, 
+    session_event_rx: Receiver<SessionEvent<C::Signature, C::Address>>,
+    solver_event_rx: Receiver<SolverEvent>,
+) -> Result<Vec<JoinHandle<()>>, C::Error> {
     let mut handle: Vec<JoinHandle<()>> = Vec::new();
     // 2. Get Solver Info
     let (_, solver_cluster_rpc_url, _) = ctx.operator_service().get_solver_info().await.expect("Failed to get solver info");
@@ -32,17 +41,18 @@ pub async fn run_node<C: Config>(ctx: &mut C, config: &NodeConfig, event_tx: Sen
     let sessions_per_round = ctx.operator_service().get_session_per_round().await.expect("Failed to get session per round");
     let collecting_duration = ctx.operator_service().get_collecting_duration().await.expect("Failed to get collecting duration");
     // Start the DKG worker
-    let mut key_generator_worker = CommitteeWorker::<C>::new(solver_cluster_rpc_url, event_tx, event_rx, 1u64, sessions_per_round, Duration::from_millis(collecting_duration));
+    let mut committee_session_worker = CommitteeSessionWorker::<C>::new(solver_cluster_rpc_url, session_event_tx, session_event_rx, 1u64, sessions_per_round, Duration::from_millis(collecting_duration));
     let mut cloned_ctx = ctx.clone();
     let session_duration = ctx.operator_service().get_session_duration().await.expect("Failed to get session duration");
     let worker_handle = ctx.async_task().spawn_task(async move {
-        if let Err(e) = run_session_worker(&mut cloned_ctx, &mut key_generator_worker, Duration::from_secs(session_duration)).await {
+        if let Err(e) = run_session_worker(&mut cloned_ctx, &mut committee_session_worker, Duration::from_secs(session_duration)).await {
             // TODO: Spawn critical task to start DKG worker
             panic!("Error running DKG worker: {}", e);
         }
     });
     handle.push(worker_handle);
-
+    let mut key_manager = KeyManager::new(ctx.clone(), solver_event_rx);
+    handle.push(ctx.async_task().spawn_task(async move { key_manager.run().await; }));
     Ok(handle)
 }
 

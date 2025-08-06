@@ -3,22 +3,20 @@ use crate::{committee::check_heartbeat, OperatorService, DbManager, SessionId, S
 use std::{sync::Arc, time::Duration};
 use dkg_utils::timestamp;
 use tokio::sync::{mpsc::{Sender, Receiver}, Mutex};
-use dkg_primitives::{to_signed_commitment, EncKeyCommitment, NextOperatorList, OperatorTask};
+use dkg_primitives::{to_signed_commitment, EncKeyCommitment, NextOperatorList};
 use dkg_rpc::{helper::multicast_enc_key_ack, AsyncTask};
 use futures_timer::Delay;
 use std::time::Instant;
 use dkg_primitives::{Operator, RuntimeError, SessionEvent, KeyGenerator};
 use tracing::{error, info};
 
-pub struct CommitteeWorker<C: Config> {
+pub struct CommitteeSessionWorker<C: Config> {
     /// RPC url of the solver 
     solver_rpc_url: String,
     /// Sender for the events
     event_tx: Sender<SessionEvent<C::Signature, C::Address>>,
     /// Receiver for the events
     event_rx: Arc<Mutex<Receiver<SessionEvent<C::Signature, C::Address>>>>,
-    /// Whether the solver has solved the key
-    has_solved: bool,
     /// Operators for the current session stored in memory
     operators: Option<Vec<Operator<C::Address>>>,
     /// Amount of sessions to add to the current session id
@@ -36,7 +34,7 @@ pub struct CommitteeWorker<C: Config> {
 }
 
 #[async_trait::async_trait]
-impl<C: Config> SessionWorker<C> for CommitteeWorker<C> {
+impl<C: Config> SessionWorker<C> for CommitteeSessionWorker<C> {
 
     async fn on_genesis_session(&mut self, ctx: &C) -> Result<(), C::Error> {
         let session_id = SessionId::get().expect("Not initialized"); 
@@ -65,7 +63,7 @@ impl<C: Config> SessionWorker<C> for CommitteeWorker<C> {
     }
 }
 
-impl<C: Config> CommitteeWorker<C> {
+impl<C: Config> CommitteeSessionWorker<C> {
 
     /// Create a new instance of `CommitteeWorker`
     pub fn new(solver_rpc_url: String, event_tx: Sender<SessionEvent<C::Signature, C::Address>>, event_rx: Receiver<SessionEvent<C::Signature, C::Address>>, add_session_amount: u64, sessions_per_round: u64, collecting_duration: Duration) -> Self {
@@ -74,7 +72,6 @@ impl<C: Config> CommitteeWorker<C> {
             event_tx, 
             event_rx: Arc::new(Mutex::new(event_rx)), 
             add_session_amount, 
-            has_solved: false, 
             operators: None, 
             pending: None, 
             start_collecting_key: Mutex::new(true), 
@@ -262,6 +259,12 @@ impl<C: Config> CommitteeWorker<C> {
         Ok(EncKeyCommitment::<C::Signature, C::Address>::new(commitment))
     }
 
+    /// Finalize the key for the current session
+    /// 1. If there are submitters, get the commitments from the submitters
+    /// 2. If there are no submitters, generate a new key and broadcast the key to the participants including the solver
+    /// 3. Reset the collecting state
+    /// 4. Send the `FinalizeKey` event
+    /// 5. Update the decryption key request record
     async fn finalize_key(&mut self, ctx: &C, session_id: SessionId) -> Result<(), C::Error> {
         let mut commitments = Vec::new();
         if let Some(submitters) = self.submitters.take() {
@@ -276,7 +279,8 @@ impl<C: Config> CommitteeWorker<C> {
             commitments.push(enc_key_commitment);
         }
         self.reset_collecting().await;
-        self.event_tx.send(SessionEvent::FinalizeKey { commitments, start_session_id: session_id }).await.map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+        self.event_tx.send(SessionEvent::FinalizeKey { commitments, start_session_id: session_id, at: timestamp() }).await.map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+        ctx.db_manager().update_dec_key_request_record(session_id, ctx.session_duration()).map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
         Ok(())
     }
 
@@ -307,9 +311,9 @@ impl<C: Config> CommitteeWorker<C> {
         } 
         // Current leader should create the task before the next round 
         if is_leader && should_next_round {
-            info!("Creating task for the next round: {:?}", *on_session_id);
-            let task = OperatorTask::get().map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
-            self.create_task(ctx, task.inner()).await?;
+            info!("🔥 Creating task for the next round on session: {:?}", *on_session_id);
+            // let task = OperatorTask::get().map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
+            self.create_task(ctx, b"new task".to_vec()).await?;
         }
         Ok(())
     }
@@ -325,7 +329,6 @@ impl<C: Config> CommitteeWorker<C> {
         if let Some(event) = self.pending.take() {
             self.event_tx.send(event).await.map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
         }
-        self.has_solved = false;
         // Ends at after this delay 
         let mut timeout = Delay::new(session_info.ends_at.duration_since(Instant::now()));
         loop {
@@ -346,7 +349,7 @@ impl<C: Config> CommitteeWorker<C> {
                                 self.handle_submit_enc_key(ctx, self.event_tx.clone(), on_session_id, submitter).await?;
                                 continue;
                             },
-                            SessionEvent::FinalizeKey { commitments, start_session_id } => {
+                            SessionEvent::FinalizeKey { commitments, start_session_id, .. } => {
                                 if start_session_id < on_session_id { 
                                     info!("Stale session {:?}. Ignore it", start_session_id);
                                     continue;
@@ -357,17 +360,6 @@ impl<C: Config> CommitteeWorker<C> {
                                     self.add_pending_event(event);
                                 }
                                 continue;
-                            },
-                            SessionEvent::EndSession(end_session_id) => {
-                                if end_session_id < on_session_id {
-                                    info!("Stale session {:?}. Ignore it", end_session_id);
-                                    continue;
-                                }
-                                // If solver has decrypted the key, it means the key generation process has started
-                                // We only update `has_started` at session `0`
-                                self.has_solved = true;
-                                self.do_end_session(ctx, &mut on_session_id).await?;
-                                return Ok(SessionResult::<C::Signature>::new());
                             },
                             SessionEvent::CollectingTimeout => {
                                 info!("Collecting key timeout. Finalizing {} keys at session: {:?}", self.key_len(), on_session_id);
@@ -381,15 +373,9 @@ impl<C: Config> CommitteeWorker<C> {
                         }
                     }
                 },
-                // Timeout for the session
+                // Timeout for the session. Proceed to the next session
                 _ = &mut timeout => {
-                    if self.has_solved {
-                        error!("Timeout. Force ending session: {:?}", on_session_id);
-                        self.do_end_session(ctx, &mut on_session_id).await?;
-                    } else {
-                        // Don't update the session id until the solver has solved the key
-                        error!("Timeout. Maybe solver has turned off?")
-                    }
+                    self.do_end_session(ctx, &mut on_session_id).await?;
                     return Ok(SessionResult::<C::Signature>::new());
                 }
             }
