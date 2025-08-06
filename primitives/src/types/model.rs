@@ -292,3 +292,21 @@ impl OperatorTask {
         self.0.clone()
     }
 }
+
+/// Record for request timestamp of decryption key in unix
+#[derive(Clone, Debug, Deserialize, Serialize, Model)]
+#[kvstore(key(session_id: SessionId))]
+pub struct DecKeyRequestRecord {
+    at: u128,
+    timeout: u128,
+}
+
+impl DecKeyRequestRecord {
+    pub fn new(at: u128, period: u128) -> Self {
+        Self { at, timeout: at + period }
+    }
+
+    pub fn is_good(&self, now: u128) -> bool {
+        now - self.at < self.timeout
+    }
+}

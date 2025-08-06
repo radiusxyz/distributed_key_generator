@@ -1,5 +1,10 @@
-use crate::{ActiveOperatorList, DecKey, EncKey, KeyGeneratorError, NextOperatorList, Operator, OperatorServiceError, OperatorTrustedSetupFor, RuntimeError, SessionEvent, SessionId};
+use crate::{
+    ActiveOperatorList, DecKey, EncKey, KeyGeneratorError, NextOperatorList, 
+    Operator, OperatorServiceError, OperatorTrustedSetupFor, RuntimeError, 
+    SessionId, DecKeyRequestRecord, DkgEvent
+};
 use std::{hash::Hash, fmt::Debug, time::Duration};
+use dkg_utils::timestamp;
 use futures::future::{select, Either};
 use futures_util::{pin_mut, future::Future};
 use futures_timer::Delay;
@@ -51,6 +56,8 @@ pub trait Config: Clone + Send + Sync + 'static {
     fn signer(&self) -> &PrivateKeySigner;
     /// Get the node's address which is used for creating payload
     fn address(&self) -> Self::Address;
+    /// Get the session duration
+    fn session_duration(&self) -> u64;
     /// Helper function to get signature
     fn sign<T: Serialize>(&self, message: &T) -> Result<Self::Signature, Self::Error>;
     /// Get the randomness for a given session id
@@ -132,6 +139,17 @@ pub trait DbManager<Address: AddressT> {
         let kv_store: DecKey = DecKey::get(session_id)?;
         Ok(kv_store)
     }
+
+    fn update_dec_key_request_record(&self, session_id: SessionId, session_duration: u64) -> Result<(), Self::Error> {
+        let record = DecKeyRequestRecord::new(timestamp(), session_duration as u128);
+        let _ = record.put(session_id)?;
+        Ok(())
+    }
+
+    fn get_dec_key_request_record(&self, session_id: SessionId) -> Result<DecKeyRequestRecord, Self::Error> {
+        let kv_store: DecKeyRequestRecord = DecKeyRequestRecord::get(session_id)?;
+        Ok(kv_store)
+    }
 }
 
 
@@ -202,7 +220,7 @@ where
     }
 
     /// Helper function to emit an event
-    async fn emit_event(&self, event: SessionEvent<Signature, Address>) -> Result<(), Error>;
+    async fn emit_event(&self, event: DkgEvent<Signature, Address>) -> Result<(), Error>;
 
     // TODO: REFACTOR ME! - RPC Worker should be a separate thread
     /// API for RPC request which waits for the response

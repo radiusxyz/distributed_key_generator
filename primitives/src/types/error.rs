@@ -1,4 +1,4 @@
-use super::SessionEvent;
+use super::DkgEvent;
 use crate::ConsensusError;
 use radius_sdk::{
     json_rpc::{client::RpcClientError, server::RpcServerError},
@@ -30,7 +30,7 @@ pub enum RuntimeError {
     TaskJoinError(#[from] JoinError),
     /// Event emission error
     #[error(transparent)]
-    EventError(#[from] SendError<SessionEvent<Signature, Address>>),
+    EventError(#[from] SendError<DkgEvent<Signature, Address>>),
     /// Conversion error
     #[error("Conversion error: {0}")]
     ConvertError(String),
