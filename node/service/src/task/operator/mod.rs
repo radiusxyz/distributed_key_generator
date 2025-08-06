@@ -28,8 +28,9 @@ where
         Self { config, blockchain_event_rx }
     }
 
-    pub async fn handle_task_created(&mut self) {
-        tracing::info!("Got task created event!");
+    pub async fn handle_task_created(&mut self, round: u64) {
+        tracing::info!("Got task created event! Responding to the task...");
+        let _ = self.config.operator_service().respond_to_task(round).await;
     }
 
     // Set up the new operator list and trusted setup when the task response is received
@@ -59,8 +60,8 @@ where
         loop {
             while let Some(event) = self.blockchain_event_rx.recv().await {
                 match event {
-                    Ok(BAppEvent::TaskCreated(_)) => {
-                        self.handle_task_created().await;
+                    Ok(BAppEvent::TaskCreated(e)) => {
+                        self.handle_task_created(e.round.try_into().expect("Failed to convert round")).await;
                     }, 
                     Ok(BAppEvent::TaskResponse(_)) => {
                         self.handle_task_response().await;

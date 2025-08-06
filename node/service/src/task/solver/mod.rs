@@ -1,38 +1,29 @@
-use super::{Config, NodeConfig, run_session_worker};
+use super::{Config, NodeConfig};
 use crate::rpc::{default_external_rpc_server, default_cluster_rpc_server};
 use dkg_rpc::{DecKeyPayload, SubmitDecKeyResponse, SubmitDecKey};
 use dkg_primitives::{AsyncTask, DecKey, SessionId, SignedCommitment, KeyGenerator, RuntimeError, to_signed_commitment, OperatorService};
 use radius_sdk::json_rpc::server::RpcParameter;
 use tracing::info;
-use tokio::{task::JoinHandle, time::Duration, sync::mpsc::Receiver};
+use tokio::{task::JoinHandle, sync::mpsc::Receiver, time::Duration};
 use dkg_primitives::SessionEvent;
 
 mod worker;
 use worker::SolverWorker;
 
-pub async fn run_node<C: Config>(ctx: &mut C, config: &NodeConfig, rx: Receiver<SessionEvent<C::Signature, C::Address>>) -> Result<Vec<JoinHandle<()>>, C::Error> {
+pub async fn run_node<C: Config>(ctx: &C, config: &NodeConfig, rx: Receiver<SessionEvent<C::Signature, C::Address>>) -> Result<Vec<JoinHandle<()>>, C::Error> {
     let mut handle: Vec<JoinHandle<()>> = vec![];
-
     let external_server = default_external_rpc_server(ctx).await?;
     let server_handle = external_server.init(config.external_rpc_url.clone()).await?;
     handle.push(ctx.async_task().spawn_task(async move { server_handle.stopped().await; }));
-    
+
     let cluster_server = default_cluster_rpc_server(ctx).await?;
     let server_handle = cluster_server.init(config.cluster_rpc_url.clone()).await?;
 
     handle.push(ctx.async_task().spawn_task(async move { server_handle.stopped().await; }));
-
-    let mut worker = SolverWorker::<C>::new(rx);
-    let mut cloned_ctx = ctx.clone();
     let session_duration = ctx.operator_service().get_session_duration().await.expect("Failed to get session duration");
-    let worker_handle = ctx.async_task().spawn_task(async move {
-        if let Err(e) = run_session_worker(&mut cloned_ctx, &mut worker, Duration::from_secs(session_duration)).await {
-            // TODO: Spawn critical task to start DKG worker
-            panic!("Error running DKG worker: {}", e);
-        }
-    });
+    let mut worker = SolverWorker::<C>::new(ctx.clone(), rx, Duration::from_secs(session_duration));
+    let worker_handle = ctx.async_task().spawn_task(async move { worker.run().await });
     handle.push(worker_handle);
-
 
     Ok(handle)
 }
