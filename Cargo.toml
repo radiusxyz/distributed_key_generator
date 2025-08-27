@@ -16,7 +16,6 @@ members = [
     "src",
     "node/primitives",
     "node/service",
-    "node/operator",
     "node/key_generator/skde",
 ]
 
@@ -30,7 +29,6 @@ dkg-cli = { path = "cli" }
 dkg-utils = { path = "utils" }
 dkg-node-service = { path = "node/service" }
 dkg-node-primitives = { path = "node/primitives" }
-dkg-node-operator = { path = "node/operator" }
 dkg-node-skde-key-generator = { path = "node/key_generator/skde" }
 
 # Radius
@@ -59,4 +57,4 @@ futures-util = "0.3"
 futures-timer = "3.0.2"
 futures = "0.3.31"
 dirs = "5.0"
-alloy = "0.7"
+alloy = "1.0.23"
