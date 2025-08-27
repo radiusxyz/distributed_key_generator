@@ -93,6 +93,8 @@ The `scripts/execute/` directory contains automation scripts:
 - **RPC Endpoints**: All have configurable URLs with sensible defaults
 - **Storage**: Node data stored under `./tmp/{role}/db/` using RocksDB
 - **Private Keys**: Test private keys defined in `tests/utils.rs:38-49`
+- **Formatting**: Uses custom rustfmt.toml with StdExternalCrate grouping and crate-level import granularity
+- **Dependencies**: External dependencies include radius-sdk, skde (from GitHub), and standard async/crypto libraries
 
 ### Event System Architecture
 
@@ -116,3 +118,12 @@ Key configuration files are generated per role in `tmp/{role}/config.toml`
 - **Integration Tests**: Located in `tests/integration/` directory
 - **Port Allocation**: Tests use predictable port ranges (7100+ internal, 7200+ external, 7300+ cluster)
 - **Process Management**: Automatic cleanup and process spawning for multi-node tests
+- **Process Cleanup**: Use `pkill -f key-generator` if tests hang or don't exit properly
+
+### Workspace Structure Details
+
+The project uses a Cargo workspace with the following key crates:
+- **src/**: Main binary crate producing the `dkg` executable
+- **node/operator/**: Blockchain operator integration for Radius network
+- **node/key_generator/skde/**: SKDE-specific key generation implementation
+- **External Dependencies**: Uses radius-sdk from local path, SKDE from GitHub commit, and ethers for blockchain interaction
