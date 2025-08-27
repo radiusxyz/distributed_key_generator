@@ -1,7 +1,13 @@
-use std::{fmt::{Debug, Display}, hash::{Hash, Hasher}, ops::Add};
+use std::{
+    fmt::{Debug, Display},
+    hash::{Hash, Hasher},
+    ops::Add,
+};
+
 use radius_sdk::kvstore::Model;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use crate::{SignedCommitment, AddressT, RuntimeError};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+
+use crate::{AddressT, Payload, RuntimeError, SignedCommitment};
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
 #[kvstore(key(session_id: &SessionId, address: &Address))]
 /// Kvstore for signed commitment to a encryption keys mapped by session id and address
@@ -15,6 +21,10 @@ impl<Signature: Clone, Address: Clone> EncKeyCommitment<Signature, Address> {
     pub fn inner(&self) -> SignedCommitment<Signature, Address> {
         self.0.clone()
     }
+
+    pub fn payload(&self) -> Payload {
+        self.0.commitment.payload.clone()
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Model)]
@@ -23,7 +33,6 @@ impl<Signature: Clone, Address: Clone> EncKeyCommitment<Signature, Address> {
 pub struct SubmitterList<Address>(pub Vec<Address>);
 
 impl<Address: AddressT> SubmitterList<Address> {
-
     pub fn new() -> Self {
         Self(Vec::new())
     }
@@ -67,7 +76,7 @@ impl DecKey {
     pub fn new(key: Vec<u8>) -> Self {
         Self(key)
     }
-    
+
     pub fn inner(&self) -> Vec<u8> {
         self.0.clone()
     }
@@ -101,9 +110,23 @@ pub struct Operator<Address> {
     external_rpc_url: String,
 }
 
+impl<Address> From<(Address, String, String)> for Operator<Address> {
+    fn from((address, cluster_rpc_url, external_rpc_url): (Address, String, String)) -> Self {
+        Self {
+            address,
+            cluster_rpc_url,
+            external_rpc_url,
+        }
+    }
+}
+
 impl<Address: Debug> Display for Operator<Address> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "address: {:?}, cluster_rpc_url: {:?}, external_rpc_url: {:?}", self.address, self.cluster_rpc_url, self.external_rpc_url)
+        write!(
+            f,
+            "address: {:?}, cluster_rpc_url: {:?}, external_rpc_url: {:?}",
+            self.address, self.cluster_rpc_url, self.external_rpc_url
+        )
     }
 }
 
@@ -182,7 +205,7 @@ impl<Address: AddressT> ActiveOperatorList<Address> {
     pub fn all_rpc_urls(&self, is_sync: bool, exclude_list: Vec<Address>) -> Vec<String> {
         self.0
             .iter()
-                .filter(|o| !exclude_list.contains(&o.address()))
+            .filter(|o| !exclude_list.contains(&o.address()))
             .map(|operator| {
                 if is_sync {
                     operator.cluster_rpc_url().to_owned()
@@ -224,7 +247,9 @@ impl<Address: AddressT> From<Vec<Operator<Address>>> for NextOperatorList<Addres
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Default, Hash, Serialize, Deserialize, Model)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Default, Hash, Serialize, Deserialize, Model,
+)]
 #[kvstore(key())]
 pub struct SessionId(u64);
 
@@ -303,10 +328,39 @@ pub struct DecKeyRequestRecord {
 
 impl DecKeyRequestRecord {
     pub fn new(at: u128, period: u128) -> Self {
-        Self { at, timeout: at + period }
+        Self {
+            at,
+            timeout: at + period,
+        }
     }
 
     pub fn is_good(&self, now: u128) -> bool {
-        now - self.at < self.timeout
+        now < self.timeout
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Model)]
+#[kvstore(key(session_id: SessionId))]
+pub struct Randomness(Vec<u8>);
+
+impl Randomness {
+    pub fn new(randomness: Vec<u8>) -> Self {
+        Self(randomness)
+    }
+}
+
+impl Into<Vec<u8>> for Randomness {
+    fn into(self) -> Vec<u8> {
+        self.0
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Model)]
+#[kvstore(key())]
+pub struct TrustedSetup(Vec<u8>);
+
+impl TrustedSetup {
+    pub fn new(trusted_setup: Vec<u8>) -> Self {
+        Self(trusted_setup)
     }
 }

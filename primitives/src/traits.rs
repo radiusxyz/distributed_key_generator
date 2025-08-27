@@ -1,22 +1,26 @@
-use crate::{
-    ActiveOperatorList, DecKey, EncKey, KeyGeneratorError, NextOperatorList, 
-    Operator, OperatorServiceError, OperatorTrustedSetupFor, RuntimeError, 
-    SessionId, DecKeyRequestRecord, DkgEvent
-};
-use std::{hash::Hash, fmt::Debug, time::Duration};
+use std::{fmt::Debug, hash::Hash, sync::Arc, time::Duration};
+
+use async_trait::async_trait;
 use dkg_utils::timestamp;
 use futures::future::{select, Either};
-use futures_util::{pin_mut, future::Future};
 use futures_timer::Delay;
-use tokio::task::JoinHandle;
-use serde::{Serialize, de::DeserializeOwned};
-use serde_json::Error as SerdeJsonError;
-use async_trait::async_trait;
+use futures_util::{future::Future, pin_mut};
 use radius_sdk::{
-    json_rpc::{client::RpcClientError, server::RpcServerError}, kvstore::KvStoreError, signature::{PrivateKeySigner, SignatureError}
+    json_rpc::{client::RpcClientError, server::RpcServerError},
+    kvstore::KvStoreError,
+    signature::{PrivateKeySigner, SignatureError},
+    validation_service::{validation_dkg::DkgValidation, DkgValidationServiceError},
+};
+use serde::{de::DeserializeOwned, Serialize};
+use serde_json::Error as SerdeJsonError;
+use tokio::{sync::RwLock, task::JoinHandle};
+
+use crate::{
+    ActiveOperatorList, DecKey, DecKeyRequestRecord, DkgEvent, EncKey, KeyGeneratorError,
+    NextOperatorList, Operator, RuntimeError, SessionId,
 };
 
-/// Config trait for the node  
+/// Config trait for the node
 #[async_trait]
 pub trait Config: Clone + Send + Sync + 'static {
     /// The address type of the runtime
@@ -25,27 +29,29 @@ pub trait Config: Clone + Send + Sync + 'static {
     type Signature: Parameter + Debug;
     /// Type that selects the leader
     type SelectLeader: SelectLeader;
-    /// Type that serves related to verification 
+    /// Type that serves related to verification
     type VerifyService: VerifyService<Self::Signature, Self::Address>;
     /// Type that serves related key generation(e.g Set trusted setup, generate encryption and decryption key)
-    type KeyGenerator: KeyGenerator<TrustedSetUp: From<OperatorTrustedSetupFor<Self>> + Into<OperatorTrustedSetupFor<Self>>>;
-    /// Operator service of the runtime which interacts with the registry(e.g blockchain)
-    type OperatorService: OperatorService<Self::Address>;
+    type KeyGenerator: KeyGenerator + Parameter;
+    /// Type that validates the distributed key generation process
+    type ValidationService: DkgValidation<Address = Self::Address, Key = u64, Proof = Vec<u8>>;
     /// Type that spawns tasks
     type AsyncTask: AsyncTask<Self::Signature, Self::Address, Self::Error>;
     /// Type that serves related to backend services
     type DbManager: DbManager<Self::Address>;
+    /// Type of hasher this runtime uses
+    type Hasher: Hasher;
     /// The error type of the runtime
-    type Error: std::error::Error 
+    type Error: std::error::Error
         + IsType<RuntimeError>
         + From<KvStoreError>
         + From<KeyGeneratorError>
         + From<RpcServerError>
         + From<RpcClientError>
         + From<SerdeJsonError>
-        + From<OperatorServiceError>
-        + Send 
-        + Sync 
+        + From<DkgValidationServiceError>
+        + Send
+        + Sync
         + 'static;
 
     /// Check if the node is a leader
@@ -65,24 +71,37 @@ pub trait Config: Clone + Send + Sync + 'static {
     /// Check if the node should force generate the encryption key
     fn should_force_generating(&self) -> Result<bool, Self::Error>;
     /// Get the current leader on the current session which will return (address, rpc_url)
-    fn current_leader(&self, session_id: SessionId, is_sync: bool) -> Result<(Self::Address, String), Self::Error>;
+    fn current_leader(
+        &self,
+        session_id: SessionId,
+        is_sync: bool,
+    ) -> Result<(Self::Address, String), Self::Error>;
     /// Helper function to verify signature. Verification will be handled by `Self::VerifySignature` type
-    fn verify_signature<T: Serialize>(&self, signature: &Self::Signature, message: &T, maybe_signer: Option<Self::Address>) -> Result<Self::Address, Self::Error> {
+    fn verify_signature<T: Serialize>(
+        &self,
+        signature: &Self::Signature,
+        message: &T,
+        maybe_signer: Option<Self::Address>,
+    ) -> Result<Self::Address, Self::Error> {
         let signer = Self::VerifyService::verify_signature(signature, message)
             .map_err(|e| KeyGeneratorError::InvalidSignature(e))?;
         if let Some(address) = maybe_signer {
             if signer != address {
-                return Err(KeyGeneratorError::InvalidSignature(SignatureError::Unauthorized).into());
+                return Err(
+                    KeyGeneratorError::InvalidSignature(SignatureError::Unauthorized).into(),
+                );
             }
         }
         Ok(signer)
     }
-    /// Get the instance of the operator service
-    fn operator_service(&self) -> &Self::OperatorService;
+    /// Hash the given input
+    fn hash(&self, input: &[u8]) -> Vec<u8> {
+        Self::Hasher::hash(input, None).into()
+    }
+    /// Get the instance of the validation service
+    fn validation_service(&self) -> &Self::ValidationService;
     /// Get the instance of the key generator
-    fn key_generator(&self) -> &Self::KeyGenerator;
-    /// Get the mutable instance of the key generator
-    fn key_generator_mut(&mut self) -> &mut Self::KeyGenerator;
+    fn key_generator(&self) -> Arc<RwLock<Self::KeyGenerator>>;
     /// Get the instance of the task spawner
     fn async_task(&self) -> &Self::AsyncTask;
     /// Get the instance of the db manager
@@ -93,12 +112,16 @@ pub trait Config: Clone + Send + Sync + 'static {
 pub trait SelectLeader {
     /// Get the current leader which will return the index of the leader
     fn select_leader(current_session: u64, len: usize) -> Option<usize>;
-} 
+}
 
 /// Interface for db client services
 pub trait DbManager<Address: AddressT> {
-
-    type Error: IsType<RuntimeError> + From<KvStoreError> + std::error::Error + Send + Sync + 'static;
+    type Error: IsType<RuntimeError>
+        + From<KvStoreError>
+        + std::error::Error
+        + Send
+        + Sync
+        + 'static;
 
     /// Get the current session id
     fn current_session(&self) -> Result<SessionId, Self::Error> {
@@ -113,14 +136,20 @@ pub trait DbManager<Address: AddressT> {
         Ok(())
     }
     /// Update the operator list
-    fn update_active_operator_list(&self, operators: Vec<Operator<Address>>) -> Result<(), Self::Error> {
-        let kv_store: ActiveOperatorList<Address> = operators.into();
+    fn update_active_operator_list(
+        &self,
+        operators: &Vec<Operator<Address>>,
+    ) -> Result<(), Self::Error> {
+        let kv_store: ActiveOperatorList<Address> = operators.clone().into();
         let _ = kv_store.put()?;
         Ok(())
     }
 
-    fn update_next_operator_list(&self, operators: Vec<Operator<Address>>) -> Result<(), Self::Error> {
-        let kv_store: NextOperatorList<Address> = operators.into();
+    fn update_next_operator_list(
+        &self,
+        operators: &Vec<Operator<Address>>,
+    ) -> Result<(), Self::Error> {
+        let kv_store: NextOperatorList<Address> = operators.clone().into();
         let _ = kv_store.put()?;
         Ok(())
     }
@@ -140,54 +169,56 @@ pub trait DbManager<Address: AddressT> {
         Ok(kv_store)
     }
 
-    fn update_dec_key_request_record(&self, session_id: SessionId, session_duration: u64) -> Result<(), Self::Error> {
+    fn update_dec_key_request_record(
+        &self,
+        session_id: SessionId,
+        session_duration: u64,
+    ) -> Result<(), Self::Error> {
         let record = DecKeyRequestRecord::new(timestamp(), session_duration as u128);
         let _ = record.put(session_id)?;
         Ok(())
     }
 
-    fn get_dec_key_request_record(&self, session_id: SessionId) -> Result<DecKeyRequestRecord, Self::Error> {
+    fn get_dec_key_request_record(
+        &self,
+        session_id: SessionId,
+    ) -> Result<DecKeyRequestRecord, Self::Error> {
         let kv_store: DecKeyRequestRecord = DecKeyRequestRecord::get(session_id)?;
         Ok(kv_store)
     }
 }
 
-
-/// Inferface for verifying related 
+/// Inferface for verifying related
 pub trait VerifyService<Signature, Address> {
-
-    fn verify_signature<T: Serialize>(signature: &Signature, message: &T) -> Result<Address, SignatureError>;
+    fn verify_signature<T: Serialize>(
+        signature: &Signature,
+        message: &T,
+    ) -> Result<Address, SignatureError>;
 }
 
 /// Interface for generating (encryption, decryption) keys
 pub trait KeyGenerator {
-    
-    type TrustedSetUp: Parameter + Debug;
-    type Metadata: Parameter;
     type Error: std::error::Error + Send + Sync + 'static + Into<RuntimeError>;
 
-    /// Create new instance of the secure block with the trusted setup
-    fn setup(param: Self::TrustedSetUp) -> Self;
-
-    /// Update the trusted setup for this app
-    fn update_trusted_setup(&mut self, trusted_setup: Self::TrustedSetUp) -> Result<(), Self::Error>;
-
-    /// Get the trusted setup for this app
-    fn get_trusted_setup(&self) -> Self::TrustedSetUp;
+    fn setup(trusted_setup: Vec<u8>) -> Result<Self, Self::Error> where Self: Sized;
 
     /// Generate encryption key for a given session
-    fn gen_enc_key(&self, randomness: Vec<u8>, maybe_enc_keys: Option<Vec<Vec<u8>>>) -> Result<Vec<u8>, Self::Error>;
+    fn gen_enc_key(
+        &self,
+        randomness: &Vec<u8>,
+        maybe_enc_keys: Option<Vec<Vec<u8>>>,
+    ) -> Result<Vec<u8>, Self::Error>;
 
     /// Generate decryption key from encryption key
     fn gen_dec_key(&self, enc_key: &Vec<u8>) -> Result<(Vec<u8>, u128), Self::Error>;
 
-    /// Verify the given decryption key for a given session 
+    /// Verify the given decryption key for a given session
     fn verify_dec_key(&self, enc_key: &Vec<u8>, dec_key: &Vec<u8>) -> Result<(), Self::Error>;
 }
 
 /// Interface for spawning async tasks
 #[async_trait]
-pub trait AsyncTask<Signature, Address, Error>: Send + Sync + Unpin + 'static 
+pub trait AsyncTask<Signature, Address, Error>: Send + Sync + Unpin + 'static
 where
     Error: std::error::Error + Send + Sync + 'static + Into<RuntimeError>,
 {
@@ -215,7 +246,7 @@ where
             Either::Right(_) => {
                 tracing::error!("Task timed out");
                 None
-            },
+            }
         }
     }
 
@@ -234,46 +265,6 @@ where
     fn multicast<P>(&self, urls: Vec<String>, method: String, parameter: P)
     where
         P: Serialize + Send + Sync + 'static;
-}
-
-/// Interface for providing operator service
-#[async_trait]
-pub trait OperatorService<Address>: Send + Sync + 'static {
-    
-    type TrustedSetup;
-    /// The error type of the auth service
-    type Error: std::error::Error + Send + Sync + 'static + Into<RuntimeError>;
-    
-    /// Get the session duration
-    async fn get_session_duration(&self) -> Result<u64, Self::Error>;
-    /// Get the collecting duration
-    async fn get_collecting_duration(&self) -> Result<u64, Self::Error>;
-    /// Get the threshold
-    async fn get_threshold(&self) -> Result<u16, Self::Error>;
-    /// Check if the given address is a solver
-    async fn is_solver(&self, address: Address) -> Result<bool, Self::Error>;
-    /// Check if the given address is a committee member
-    async fn is_operator(&self, address: Address) -> Result<bool, Self::Error>;
-    /// Update the trusted setup with given `T` which will be converted to `Self::TrustedSetup`
-    async fn update_trusted_setup<T>(&self, trusted_setup: T) -> Result<(), Self::Error> 
-    where
-        T: Into<Self::TrustedSetup> + Send + Sync + 'static;
-    /// Get the session per round
-    async fn get_session_per_round(&self) -> Result<u64, Self::Error>;
-    /// Get the trusted setup which will be converted to `T`
-    async fn get_active_trusted_setup<T>(&self) -> Result<T, Self::Error>
-    where
-        Self::TrustedSetup: Into<T>;
-    /// Get the solver info which will return (address, cluster_rpc_url, external_rpc_url)
-    async fn get_solver_info(&self) -> Result<(Address, String, String), Self::Error>;
-    /// Get the operators for the given round
-    async fn get_active_operators(&self) -> Result<Vec<Operator<Address>>, Self::Error>;
-    /// Check if the service is ready to go for the given round
-    async fn is_ready(&self, threshold: u16) -> Result<bool, Self::Error>;
-    /// Create a new task for the current round
-    async fn create_new_task(&self, data: Vec<u8>) -> Result<(), Self::Error>;
-    /// Respond to the task which is created on certain round. If the task is not created, it will be reverted
-    async fn respond_to_task(&self, round: u64) -> Result<(), Self::Error>;
 }
 
 /// Using unwrap() inside the task block is caught by tracing::error!().
@@ -311,13 +302,27 @@ pub trait Parameter: Serialize + DeserializeOwned + Clone + Send + Sync + 'stati
 
 impl<T> Parameter for T where T: Serialize + DeserializeOwned + Clone + Send + Sync + 'static {}
 
-pub trait AddressT: Parameter + Hash + Eq + PartialEq + Clone + Debug + Into<String> + From<String> {}
+pub trait AddressT:
+    Parameter + Hash + Eq + PartialEq + Clone + Debug + Into<String> + From<String> + From<Vec<u8>>
+{
+}
 
-impl<T> AddressT for T where T: Parameter + Hash + Eq + PartialEq + Clone + Debug + Into<String> + From<String> {}
+impl<T> AddressT for T where
+    T: Parameter
+        + Hash
+        + Eq
+        + PartialEq
+        + Clone
+        + Debug
+        + Into<String>
+        + From<String>
+        + From<Vec<u8>>
+{
+}
 
 /// A trait for types that can be used as a hasher
 pub trait Hasher {
-    type Output;
+    type Output: Into<Vec<u8>>;
     const LENGTH: usize;
 
     /// Hash function which size would be dependent on the given input size

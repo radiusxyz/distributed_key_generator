@@ -1,14 +1,16 @@
-use super::DkgEvent;
-use crate::ConsensusError;
 use radius_sdk::{
     json_rpc::{client::RpcClientError, server::RpcServerError},
     kvstore::KvStoreError,
-    signature::{SignatureError, Signature, Address},
+    signature::{Address, Signature, SignatureError},
+    validation_service::DkgValidationServiceError,
 };
-use thiserror::Error;
-use tokio::{sync::mpsc::error::SendError, task::JoinError};
 use serde_json::Error as SerdeError;
 use skde::delay_encryption::{DecryptionError, EncryptionError};
+use thiserror::Error;
+use tokio::{sync::mpsc::error::SendError, task::JoinError};
+
+use super::DkgEvent;
+use crate::ConsensusError;
 
 /// Error types of the runtime
 #[derive(Debug, Error)]
@@ -45,7 +47,7 @@ pub enum RuntimeError {
     AnyError(#[from] Box<dyn std::error::Error>),
     /// Operator service error
     #[error(transparent)]
-    OperatorServiceError(#[from] OperatorServiceError),
+    ValidationserviceError(#[from] DkgValidationServiceError),
     /// Maybe overflow or underflow
     #[error("Arithmetic error(e.g. overflow or underflow)")]
     Arithmetic,
@@ -64,6 +66,8 @@ unsafe impl Sync for RuntimeError {}
 /// Error type for key generation process
 #[derive(Debug, Error)]
 pub enum KeyGeneratorError {
+    #[error("Trusted Setup has not been set")]
+    NotInitialized,
     /// Key generator not registered
     #[error("Key generator not registered: {0}")]
     NotRegistered(String),
@@ -108,6 +112,5 @@ pub enum OperatorServiceError {
     #[error("{0}")]
     AnyError(String),
     #[error("Round is over 64 bits")]
-    Overflow
+    Overflow,
 }
-    
