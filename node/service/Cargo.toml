@@ -9,7 +9,6 @@ repository.workspace = true
 [dependencies]
 dkg-primitives.workspace = true
 dkg-node-primitives.workspace = true
-dkg-node-operator.workspace = true
 dkg-node-skde-key-generator = { workspace = true, optional = true }
 dkg-rpc.workspace = true
 dkg-utils.workspace = true

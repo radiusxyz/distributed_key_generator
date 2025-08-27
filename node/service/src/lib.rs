@@ -1,11 +1,28 @@
-use dkg_node_primitives::{BasicDkgService, DefaultTaskExecutor, Role, NodeConfig, DefaultDbManager, DbManager};
-use dkg_node_operator::BAppService;
-use futures::future::join_all;
-use radius_sdk::{signature::{PrivateKeySigner, ChainType, Signature, Address}, kvstore::KvStoreBuilder};
-use dkg_primitives::{Config, KeyGenerator, OperatorService, OperatorTrustedSetupFor, RuntimeError, RuntimeResult, SessionEvent, SessionId, Sha3Hasher, TrustedSetupFor, SolverEvent};
 use std::{fs, path::PathBuf};
-use tokio::{signal, sync::mpsc::{channel, Sender}, task::JoinHandle};
-use tracing::{info, error};
+
+use dkg_node_primitives::{
+    Context, ContextInner, DbManager, DefaultDbManager, DefaultTaskExecutor, NodeConfig, Role,
+};
+use dkg_primitives::{
+    Config, KeyGenerator, RuntimeError, RuntimeResult, SessionEvent, SessionId, Sha3Hasher,
+    SolverEvent,
+};
+use futures::future::join_all;
+use radius_sdk::{
+    kvstore::KvStoreBuilder,
+    signature::{Address, ChainType, PrivateKeySigner, Signature},
+    validation_service::{
+        create_pub_sub,
+        validation_dkg::{DkgValidation, DkgValidationService},
+        RestakingValidation,
+    },
+};
+use tokio::{
+    signal,
+    sync::mpsc::{channel, Sender},
+    task::JoinHandle,
+};
+use tracing::{error, info};
 
 mod task;
 pub use task::*;
@@ -16,34 +33,33 @@ mod builder;
 #[cfg(feature = "skde")]
 use dkg_node_skde_key_generator::Skde;
 
-async fn create_key_generator<C: Config>(ctx: &C, config: &NodeConfig) -> Result<C::KeyGenerator, C::Error> 
-where
-    TrustedSetupFor<C>: From<OperatorTrustedSetupFor<C>> + Into<OperatorTrustedSetupFor<C>>,
-{
-    // If the role is authority, setup the trusted setup 
+async fn get_trusted_setup<C: Config>(
+    ctx: &C,
+    config: &NodeConfig,
+) -> Result<Vec<u8>, C::Error> {
+    // If the role is authority, setup the trusted setup
     if config.role.is_authority() {
-        let path = config.trusted_setup_path().join("trusted_setup.json"); 
+        let path = config.trusted_setup_path().join("trusted_setup.json");
         match fs::read_to_string(&path) {
             Ok(data) => {
-                match serde_json::from_str::<TrustedSetupFor<C>>(&data) {
-                    Ok(trusted_setup) => {
-                        if let Err(e) = ctx.operator_service().update_trusted_setup(trusted_setup.clone()).await {
-                            panic!("Failed to update trusted setup: {}", e);
-                        }
-                        Ok(C::KeyGenerator::setup(trusted_setup))
-                    },
-                    Err(e) => { panic!("Failed to parse trusted setup file: {}", e) }
-                }
+                let bytes = data.into_bytes();
+                ctx.validation_service()
+                    .update_trusted_setup(bytes.clone())
+                    .await
+                    .expect("Failed to update trusted setup");
+                Ok(bytes)
             }
-            Err(e) => { panic!("Trusted setup not set for authority node: {}", e) }
+            Err(e) => {
+                panic!("Trusted setup not set for authority node: {}", e)
+            }
         }
     } else {
         loop {
-            match ctx.operator_service().get_active_trusted_setup::<TrustedSetupFor<C>>().await {
-                Ok(trusted_setup) => {
-                    return Ok(C::KeyGenerator::setup(trusted_setup))
+            match ctx.validation_service().get_active_trusted_setup().await {
+                Ok(bytes) => {
+                    return Ok(bytes)
                 }
-                Err(e) => { 
+                Err(e) => {
                     error!("Failed to get trusted setup: {}", e);
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 }
@@ -52,24 +68,36 @@ where
     }
 }
 
-async fn create_dkg_service<KG, OS, DB>(config: &NodeConfig, signer: PrivateKeySigner, session_event_tx: Sender<SessionEvent<Signature, Address>>, solver_event_tx: Sender<SolverEvent>, operator_service: OS, db_manager: DB) -> RuntimeResult<BasicDkgService<KG, OS, DB>> 
+async fn create_context<KG, VS, DB>(
+    config: &NodeConfig,
+    signer: PrivateKeySigner,
+    session_event_tx: Sender<SessionEvent<Signature, Address>>,
+    solver_event_tx: Sender<SolverEvent<Address>>,
+    key_generator: KG,
+    validation_service: VS,
+    db_manager: DB,
+) -> RuntimeResult<Context<KG, VS, DB>>
 where
     KG: KeyGenerator + Clone,
-    OS: OperatorService<Address> + Clone, 
+    VS: DkgValidation,
     DB: DbManager<Address> + Clone + Send + Sync + 'static,
 {
     let task_executor = DefaultTaskExecutor::new(session_event_tx, solver_event_tx)?;
     info!("Creating app state for: {:?}", config.role);
-    let session_duration = operator_service.get_session_duration().await.expect("Failed to get session duration");
-    BasicDkgService::<KG, OS, DB>::new(
+    let session_duration = validation_service
+        .get_session_duration()
+        .await
+        .expect("Failed to get session duration");
+    Ok(ContextInner::<KG, VS, DB>::new(
         signer,
         task_executor,
         config.role.clone(),
         session_duration,
-        operator_service,
+        key_generator,
+        validation_service,
         db_manager,
     )
-    .map_err(RuntimeError::from)
+    .into())
 }
 
 fn create_signer(path: &PathBuf, chain_type: ChainType) -> (PrivateKeySigner, String) {
@@ -80,13 +108,15 @@ fn create_signer(path: &PathBuf, chain_type: ChainType) -> (PrivateKeySigner, St
                 Ok(signer) => {
                     tracing::info!("Created signer for: {:?}", path);
                     (signer, clean_key)
-                },
+                }
                 Err(err) => {
                     panic!("Invalid signing key in file: {}", err);
                 }
             }
         }
-        Err(err) => { panic!("Failed to read signing key file: {}", err); }
+        Err(err) => {
+            panic!("Failed to read signing key file: {}", err);
+        }
     }
 }
 
@@ -98,7 +128,10 @@ fn init_db(config: &NodeConfig) -> RuntimeResult<()> {
         .map_err(RuntimeError::Database)?
         .init();
     SessionId::new().put()?;
-    tracing::info!("Successfully initialized the database at {:?}.", config.db_path);
+    tracing::info!(
+        "Successfully initialized the database at {:?}.",
+        config.db_path
+    );
     Ok(())
 }
 
@@ -146,43 +179,69 @@ async fn handle_shutdown(config: NodeConfig, handles: Vec<JoinHandle<()>>) -> Ru
 // service.start();
 //```
 pub async fn run_node(config: NodeConfig) -> RuntimeResult<()> {
-    
     info!("{}", config.log());
     let (session_event_tx, session_event_rx) = channel(100);
     let (solver_event_tx, solver_event_rx) = channel(100);
     let db_manager = DefaultDbManager;
     let (signer, private_key) = create_signer(&config.private_key_path, config.chain_type);
-    let (mut bapp_service, blockchain_event_rx) = BAppService::new(&config.blockchain_http_rpc_url, &private_key, &config.trusted_address);
-    bapp_service.subscribe_events(&config.blockchain_ws_rpc_url).await;
-    let mut dkg_service = create_dkg_service::<Skde<Sha3Hasher>, BAppService, DefaultDbManager>(&config, signer, session_event_tx.clone(), solver_event_tx.clone(), bapp_service, db_manager).await?;
-    // TODO: Refactor me! - Key generator should be created in the operator service
-    dkg_service.key_generator = Some(create_key_generator(&dkg_service, &config).await?);
-    if config.role.is_authority() {
-        return Ok(());
-    } else {
-        init_db(&config)?;
-        let mut service_handles = vec![];
-        let operator_handle = operator::start_blockchain_operator_worker(&dkg_service, blockchain_event_rx).await?;
-        service_handles.push(operator_handle);
-        let handles = match config.role {
-            Role::Committee => {
-                if !dkg_service.operator_service.is_operator(dkg_service.address()).await? {
-                    panic!("Node is not registered as a operator");
-                }
-                committee::run_node(&mut dkg_service, &config, session_event_tx, session_event_rx, solver_event_rx).await?
-            },
-            Role::Solver => {
-                if !dkg_service.operator_service.is_solver(dkg_service.address()).await? {
-                    panic!("Node is not registered as a solver");
-                }
-                solver::run_node(&mut dkg_service, &config, session_event_rx).await?
-            },
-            Role::Verifier => unimplemented!("Verifier is not implemented yet"),
-            _ => panic!("Invalid role"),
-        };
-        service_handles.extend(handles);
-        let _ = handle_shutdown(config.clone(), service_handles).await?;
-    
-        Ok(())
-    }
+    let (_pub, _sub) = create_pub_sub(
+        &config.blockchain_http_rpc_url,
+        &config.blockchain_ws_rpc_url,
+        &config.trusted_address,
+        &private_key,
+    )
+    .await;
+    let dkg_validation_service = DkgValidationService::new(_pub, _sub);
+    let context = create_context::<_, _, _>(
+        &config,
+        signer,
+        session_event_tx.clone(),
+        solver_event_tx.clone(),
+        Skde::<Sha3Hasher>::new(),
+        dkg_validation_service.clone(),
+        db_manager,
+    )
+    .await?;
+    let raw_trusted_setup = get_trusted_setup(&context, &config).await?;
+    context.set_key_generator(raw_trusted_setup).await;
+    let operator = validation::ValidationService::new(context.clone());
+    let _ = dkg_validation_service
+        .subscribe_events(|e| operator.handle_callback_events(e))
+        .await;
+    init_db(&config)?;
+    let mut service_handles = vec![];
+    let handles = match config.role {
+        Role::Committee => {
+            if !context
+                .validation_service()
+                .is_operator(context.address())
+                .await?
+            {
+                panic!("Node is not registered as a operator");
+            }
+            committee::run_node(
+                context,
+                &config,
+                session_event_tx,
+                session_event_rx,
+                solver_event_rx,
+            )
+            .await?
+        }
+        Role::Solver => {
+            if !context
+                .validation_service()
+                .is_solver(context.address())
+                .await?
+            {
+                panic!("Node is not registered as a solver");
+            }
+            solver::run_node(context, &config, session_event_rx).await?
+        }
+        Role::Verifier => unimplemented!("Verifier is not implemented yet"),
+        _ => panic!("Invalid role"),
+    };
+    service_handles.extend(handles);
+    let _ = handle_shutdown(config.clone(), service_handles).await?;
+    Ok(())
 }
