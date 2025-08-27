@@ -1,6 +1,7 @@
-use crate::*;
+use dkg_primitives::{Config, DecKey, SessionId};
 use serde::{Deserialize, Serialize};
-use dkg_primitives::{Config, SessionId, DecKey};   
+
+use crate::*;
 
 /// 09/05
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -22,6 +23,8 @@ impl<C: Config> RpcParameter<C> for GetDecKey {
 
     async fn handler(self, _ctx: C) -> RpcResult<Self::Response> {
         let dec_key = DecKey::get(self.session_id)?;
-        Ok(Response { key: dec_key.inner() })
+        Ok(Response {
+            key: dec_key.inner(),
+        })
     }
 }

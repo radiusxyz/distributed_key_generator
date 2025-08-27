@@ -1,12 +1,14 @@
-use crate::*;
+use std::fmt::{Debug, Display};
+
+use dkg_primitives::{ActiveOperatorList, Config, Operator};
 use serde::{Deserialize, Serialize};
 use tracing::info;
-use dkg_primitives::{Config, Operator, ActiveOperatorList};
-use std::fmt::{Display, Debug};
+
+use crate::*;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncKeyGenerator<Address> {
-    // signature: Signature, // TODO: Auth 
+    // signature: Signature, // TODO: Auth
     address: Address,
     cluster_rpc_url: String,
     external_rpc_url: String,
@@ -20,7 +22,11 @@ impl<Address: Clone> From<SyncKeyGenerator<Address>> for Operator<Address> {
 
 impl<Address: Debug> Display for SyncKeyGenerator<Address> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "address: {:?}, cluster_rpc_url: {:?}, external_rpc_url: {:?}", self.address, self.cluster_rpc_url, self.external_rpc_url)
+        write!(
+            f,
+            "address: {:?}, cluster_rpc_url: {:?}, external_rpc_url: {:?}",
+            self.address, self.cluster_rpc_url, self.external_rpc_url
+        )
     }
 }
 

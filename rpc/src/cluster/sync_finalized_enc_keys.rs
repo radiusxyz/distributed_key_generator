@@ -1,7 +1,10 @@
-use crate::{*, FinalizedEncKeyPayload };
-use dkg_primitives::{AsyncTask, Config, EncKey, SessionEvent, KeyGenerator, Payload, SessionId, SignedCommitment};
+use dkg_primitives::{
+    AsyncTask, Config, EncKey, KeyGenerator, Payload, SessionEvent, SessionId, SignedCommitment,
+};
 use radius_sdk::json_rpc::server::RpcError;
 use serde::{Deserialize, Serialize};
+
+use crate::{FinalizedEncKeyPayload, *};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 /// Handler for syncing the finalized encryption keys.
@@ -9,9 +12,13 @@ use serde::{Deserialize, Serialize};
 pub struct SyncFinalizedEncKeys<Signature, Address>(pub SignedCommitment<Signature, Address>);
 
 impl<Signature, Address: Clone> SyncFinalizedEncKeys<Signature, Address> {
-    fn get_session_id(&self) -> SessionId { self.0.session_id() }
+    fn get_session_id(&self) -> SessionId {
+        self.0.session_id()
+    }
 
-    fn payload(&self) -> Payload { self.0.commitment.payload.clone() }
+    fn payload(&self) -> Payload {
+        self.0.commitment.payload.clone()
+    }
 }
 
 impl<C: Config> RpcParameter<C> for SyncFinalizedEncKeys<C::Signature, C::Address> {
@@ -22,22 +29,45 @@ impl<C: Config> RpcParameter<C> for SyncFinalizedEncKeys<C::Signature, C::Addres
     }
 
     async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
+        if !ctx.is_solver() {
+            return Ok(());
+        }
         let session_id = self.get_session_id();
-        info!("method::{:?} at session {:?}", <Self as RpcParameter<C>>::method(), session_id);
-        let mut enc_keys = self.payload()
+        info!(
+            "method::{:?} at session {:?}",
+            <Self as RpcParameter<C>>::method(),
+            session_id
+        );
+        let FinalizedEncKeyPayload {
+            randomness,
+            enc_keys,
+        } = self
+            .payload()
             .decode::<FinalizedEncKeyPayload<C::Signature, C::Address>>()
-            .map_err(|e| RpcError::from(e))?
-            .inner()
+            .map_err(|e| RpcError::from(e))?;
+        let mut enc_keys = enc_keys
             .iter()
-            .map(|key| {
-                Ok(key.inner().commitment.payload.inner())
-            })
+            .map(|key| Ok(key.inner().commitment.payload.inner()))
             .collect::<Result<Vec<Vec<u8>>, RpcError>>()?;
         enc_keys.sort();
-        let enc_key = ctx.key_generator().gen_enc_key(ctx.randomness(session_id), Some(enc_keys))?;
+        let enc_key = ctx
+            .key_generator()
+            .read()
+            .await
+            .gen_enc_key(&randomness, Some(enc_keys))?;
         EncKey::new(enc_key.clone()).put(session_id)?;
         if ctx.is_solver() {
-            ctx.async_task().emit_event(SessionEvent::SolveKey { enc_key, session_id }.into()).await.map_err(|e| RpcError::from(e))?;
+            ctx.async_task()
+                .emit_event(
+                    SessionEvent::SolveKey {
+                        enc_key,
+                        randomness,
+                        session_id,
+                    }
+                    .into(),
+                )
+                .await
+                .map_err(|e| RpcError::from(e))?;
         }
         Ok(())
     }

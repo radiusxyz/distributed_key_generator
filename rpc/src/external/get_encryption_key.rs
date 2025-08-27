@@ -1,6 +1,7 @@
-use crate::*;
-use serde::{Deserialize, Serialize};
 use dkg_primitives::{Config, EncKey, RuntimeError, SessionId};
+use serde::{Deserialize, Serialize};
+
+use crate::*;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetEncKey;
 

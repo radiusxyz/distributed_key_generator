@@ -1,6 +1,7 @@
-use crate::*;
+use dkg_primitives::{ActiveOperatorList, AddressT, Config, Operator};
 use serde::{Deserialize, Serialize};
-use dkg_primitives::{Config, ActiveOperatorList, Operator, AddressT};
+
+use crate::*;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetKeyGeneratorList;
@@ -23,7 +24,11 @@ impl<Address: AddressT> From<Response> for ActiveOperatorList<Address> {
         let mut operator_list = ActiveOperatorList::<Address>::new();
         let operator_rpc_url_list = value.urls;
         for operator_rpc_info in operator_rpc_url_list {
-            operator_list.insert(Operator::new(operator_rpc_info.address.into(), operator_rpc_info.cluster_rpc_url, operator_rpc_info.external_rpc_url));
+            operator_list.insert(Operator::new(
+                operator_rpc_info.address.into(),
+                operator_rpc_info.cluster_rpc_url,
+                operator_rpc_info.external_rpc_url,
+            ));
         }
         operator_list
     }

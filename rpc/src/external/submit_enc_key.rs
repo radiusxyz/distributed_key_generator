@@ -1,7 +1,10 @@
-use crate::*;
-use dkg_primitives::{Config, EncKeyCommitment, SessionEvent, ActiveOperatorList, SignedCommitment, SubmitterList};
+use dkg_primitives::{
+    ActiveOperatorList, Config, EncKeyCommitment, SessionEvent, SignedCommitment, SubmitterList,
+};
 use serde::{Deserialize, Serialize};
 use tracing::info;
+
+use crate::*;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SubmitEncKey<Signature, Address>(pub SignedCommitment<Signature, Address>);
@@ -14,10 +17,13 @@ impl<Signature: Clone, Address: Clone> SubmitEncKey<Signature, Address> {
     pub fn inner(&self) -> SignedCommitment<Signature, Address> {
         self.0.clone()
     }
+
+    pub fn payload(&self) -> Payload {
+        self.0.commitment.payload.clone()
+    }
 }
 
 impl<C: Config> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
-    
     type Response = ();
 
     fn method() -> &'static str {
@@ -27,16 +33,23 @@ impl<C: Config> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
     async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
         // Leader of the session will handle the enc key submission
         let session_id = self.0.session_id();
-        info!("method::{} for session: {:?}", <Self as RpcParameter<C>>::method(), session_id);
-        if !ctx.is_leader(session_id) { 
+        info!(
+            "method::{} for session: {:?}",
+            <Self as RpcParameter<C>>::method(),
+            session_id
+        );
+        if !ctx.is_leader(session_id) {
             info!("Not a leader for session: {:?}. Skipping...", session_id);
-            return Ok(()); 
+            return Ok(());
         }
-        let submitter = ctx.verify_signature(&self.0.signature, &self.0.commitment, self.sender())?;
+        let submitter =
+            ctx.verify_signature(&self.0.signature, &self.0.commitment, self.sender())?;
 
         // Sanity check: if the sender is not a key generator, skip
         let operators = ActiveOperatorList::<C::Address>::get()?;
-        if !operators.contains(&submitter) { return Ok(()); } 
+        if !operators.contains(&submitter) {
+            return Ok(());
+        }
         // Store commitment for `session` and `sender`
         let commitment = EncKeyCommitment::new(self.inner());
         commitment.put(&session_id, &submitter)?;
@@ -45,10 +58,21 @@ impl<C: Config> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
             info!("Initializing submitter list for session {:?}", session_id);
             SubmitterList::<C::Address>::new().put(session_id)?;
         }
-        SubmitterList::<C::Address>::apply(session_id, |submitter_list| { submitter_list.insert(submitter.clone()); })?;
-        ctx.async_task().emit_event(SessionEvent::SubmitEncKey { submitter, session_id }.into()).await.map_err(|e| RpcError::from(e))?;
+        SubmitterList::<C::Address>::apply(session_id, |submitter_list| {
+            submitter_list.insert(submitter.clone());
+        })?;
+        ctx.async_task()
+            .emit_event(
+                SessionEvent::SubmitEncKey {
+                    submitter,
+                    session_id,
+                }
+                .into(),
+            )
+            .await
+            .map_err(|e| RpcError::from(e))?;
 
-        let _ = multicast_enc_key_ack(&ctx, session_id, commitment);
+        // let _ = multicast_enc_key_ack(&ctx, session_id, commitment);
 
         Ok(())
     }

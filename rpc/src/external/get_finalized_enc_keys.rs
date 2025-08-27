@@ -1,9 +1,8 @@
-use crate::*;
-use dkg_primitives::{
-    Config, SessionId, SignedCommitment, SubmitterList, EncKeyCommitment
-};
+use dkg_primitives::{Config, EncKeyCommitment, SessionId, SignedCommitment, SubmitterList};
 use radius_sdk::kvstore::KvStoreError;
 use serde::{Deserialize, Serialize};
+
+use crate::*;
 
 /// Get commitments for all encryption keys at a given session id
 #[derive(Clone, Debug, Deserialize, Serialize)]

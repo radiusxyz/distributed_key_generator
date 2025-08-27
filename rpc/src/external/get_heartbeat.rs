@@ -1,7 +1,7 @@
+use dkg_primitives::to_signed_commitment;
+use serde::{Deserialize, Serialize};
 
 use crate::*;
-use serde::{Deserialize, Serialize};
-use dkg_primitives::to_signed_commitment;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetHeartbeat;
@@ -19,8 +19,18 @@ impl<C: Config> RpcParameter<C> for GetHeartbeat {
     }
 
     async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
-        let session_id = ctx.db_manager().current_session().map_err(|e| RpcError::from(e))?;
-        let commitment = to_signed_commitment(&ctx, session_id, HeartbeatPayload { address: ctx.address(), at: session_id })?;
+        let session_id = ctx
+            .db_manager()
+            .current_session()
+            .map_err(|e| RpcError::from(e))?;
+        let commitment = to_signed_commitment(
+            ctx.clone(),
+            session_id,
+            HeartbeatPayload {
+                address: ctx.address(),
+                at: session_id,
+            },
+        )?;
         Ok(GetHeartbeatResponse { commitment })
     }
 }
