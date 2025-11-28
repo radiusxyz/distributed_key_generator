@@ -30,7 +30,14 @@ where
     }
 
     fn get_params(&self) -> KeyServiceResult<&SkdeParams> {
-        self.params.as_ref().ok_or(KeyGeneratorError::NotInitialized)
+        self.params
+            .as_ref()
+            .ok_or(KeyGeneratorError::NotInitialized)
+    }
+
+    fn get_enc_key(&self, bytes: &[u8]) -> KeyServiceResult<String> {
+        let enc_key = serde_json::from_slice::<AggregatedKey>(bytes)?;
+        Ok(enc_key.u)
     }
 
     pub fn gen_enc_key(
@@ -65,14 +72,15 @@ where
         let params = self.get_params()?;
         let secure_key = solve_time_lock_puzzle(params, &enc_key)
             .map_err(|e| KeyGeneratorError::InternalError(e.to_string()))?;
-        Ok((serde_json::to_vec(&secure_key.sk)?, timestamp()))
+        Ok((secure_key.sk.into_bytes(), timestamp()))
     }
 
     pub fn verify_dec_key(&self, enc_key: &Vec<u8>, dec_key: &Vec<u8>) -> KeyServiceResult<()> {
         let params = self.get_params()?;
         let sample_message = "sample_message";
         let enc_key = serde_json::from_slice::<AggregatedKey>(enc_key)?;
-        let dec_key = serde_json::from_slice::<String>(dec_key)?;
+        let dec_key = String::from_utf8(dec_key.clone()).map_err(|e| KeyGeneratorError::InvalidDecKey(e))?;
+        tracing::info!("Verifying dec key => enc_key: {:?}, dec_key: {:?}", enc_key.u, dec_key);
         let ciphertext = encrypt(params, sample_message, &enc_key.u, true)?;
         let decrypted_message = decrypt(params, &ciphertext, &dec_key)?;
         if decrypted_message.as_str() != sample_message {
@@ -183,8 +191,12 @@ where
         let from_raw: SkdeParams = serde_json::from_slice(&trusted_setup)?;
         Ok(Self {
             params: Some(from_raw),
-            _phantom: Default::default()
+            _phantom: Default::default(),
         })
+    }
+
+    fn get_enc_key(&self, bytes: &[u8]) -> Result<String, Self::Error> {
+        Ok(self.get_enc_key(bytes)?)
     }
 
     fn gen_enc_key(
