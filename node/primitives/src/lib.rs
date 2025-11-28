@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 pub use dkg_primitives::{
-    ActiveOperatorList, AddressT, AsyncTask, Config, DbManager, DecKey, KeyGenerator,
+    ActiveCommitteeList, AddressT, AsyncTask, Config, DbManager, DecKey, KeyGenerator,
     KeyGeneratorError, Parameter, RuntimeError, RuntimeResult, SelectLeader, SessionEvent,
     SessionId, Sha3Hasher, SolverEvent, TraceExt, VerifyService,
 };
@@ -86,7 +86,11 @@ impl<KG, VS, DB> From<ContextInner<KG, VS, DB>> for Context<KG, VS, DB> {
 impl<KG, VS, DB> Config for Context<KG, VS, DB>
 where
     KG: KeyGenerator + Parameter,
-    VS: DkgValidation<Address = Address, Key = u64, Proof = Vec<u8>> + Clone + Send + Sync + 'static,
+    VS: DkgValidation<Address = Address, Key = u64, Proof = Vec<u8>>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
     DB: DbManager<Address, Error = RuntimeError> + Clone + Send + Sync + 'static,
 {
     type Address = Address;
@@ -126,7 +130,7 @@ where
         }
     }
     fn should_force_generating(&self) -> Result<bool, Self::Error> {
-        let operator_list = ActiveOperatorList::<Self::Address>::get()?;
+        let operator_list = ActiveCommitteeList::<Self::Address>::get()?;
         Ok(operator_list.len() == 1)
     }
     fn current_leader(
@@ -134,20 +138,23 @@ where
         session_id: SessionId,
         is_sync: bool,
     ) -> Result<(Self::Address, String), Self::Error> {
-        let operator_list = ActiveOperatorList::<Self::Address>::get()?;
+        let committees = ActiveCommitteeList::<Self::Address>::get()?;
         let index = if session_id.is_initial() {
             0
         } else {
-            Self::SelectLeader::select_leader(session_id.into(), operator_list.len())
+            Self::SelectLeader::select_leader(session_id.into(), committees.len())
                 .ok_or(RuntimeError::LeaderNotFound)?
         };
-        let operator = operator_list
+        let committee = committees
             .get_by_index(index)
             .ok_or(RuntimeError::LeaderNotFound)?;
         if is_sync {
-            Ok((operator.address(), operator.cluster_rpc_url().to_string()))
+            Ok((committee.address(), committee.cluster_rpc_url().to_string()))
         } else {
-            Ok((operator.address(), operator.external_rpc_url().to_string()))
+            Ok((
+                committee.address(),
+                committee.external_rpc_url().to_string(),
+            ))
         }
     }
     fn sign<T: Serialize>(&self, message: &T) -> Result<Self::Signature, Self::Error> {
@@ -204,7 +211,6 @@ impl<Address: AddressT> DbManager<Address> for DefaultDbManager {
     type Error = RuntimeError;
 }
 
-#[derive(Clone)]
 pub struct DefaultTaskExecutor {
     rpc_client: Arc<RpcClient>,
     session_event_tx: Sender<SessionEvent<Signature, Address>>,

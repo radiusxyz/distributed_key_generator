@@ -1,4 +1,3 @@
-
 use dkg_primitives::Config;
 use dkg_rpc::{
     GetDecKey, GetEncKey, GetKeyGeneratorList, GetSessionId, SyncDecKey, SyncEncKey,

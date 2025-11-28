@@ -1,4 +1,3 @@
-
 use dkg_primitives::{DbManager, NextOperatorList, RuntimeError, SessionEvent};
 use dkg_rpc::Config;
 use radius_sdk::validation_service::DkgValidation;
@@ -31,7 +30,7 @@ impl<C: Config> SolverWorker<C> {
     fn should_update_operators(&self, ctx: &C) -> Result<(), C::Error> {
         if let Ok(next_operator_list) = NextOperatorList::<C::Address>::get() {
             ctx.db_manager()
-                .update_active_operator_list(&next_operator_list.inner())
+                .update_active_committee_list(&next_operator_list.inner())
                 .map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
             let _ = NextOperatorList::<C::Address>::delete();
         }
@@ -51,7 +50,7 @@ impl<C: Config> SolverWorker<C> {
             .collect::<Vec<_>>();
         self.ctx
             .db_manager()
-            .update_active_operator_list(&initial_operators)
+            .update_active_committee_list(&initial_operators)
             .expect("Failed to update active operator list");
         while let Some(event) = self.rx.recv().await {
             match event {

@@ -65,7 +65,7 @@ impl<C: Config> SessionWorker<C> for CommitteeSessionWorker<C> {
         self.operators = Some(operators.clone());
         // Update the operator list for round 0
         ctx.db_manager()
-            .update_active_operator_list(&operators)
+            .update_active_committee_list(&operators)
             .expect("Failed to update operator list for round 0");
         // Wait for the nodes to be ready
         if self
@@ -133,7 +133,7 @@ impl<C: Config> CommitteeSessionWorker<C> {
         if let Ok(next_operator_list) = NextOperatorList::<C::Address>::get() {
             self.operators = Some(next_operator_list.inner().clone());
             ctx.db_manager()
-                .update_active_operator_list(&next_operator_list.inner())
+                .update_active_committee_list(&next_operator_list.inner())
                 .map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
             let _ = NextOperatorList::<C::Address>::delete();
         }
@@ -416,11 +416,7 @@ impl<C: Config> CommitteeSessionWorker<C> {
         Ok(())
     }
 
-    async fn do_submit_enc_key(
-        &self,
-        ctx: C,
-        session_id: SessionId,
-    ) -> Result<(), C::Error> {
+    async fn do_submit_enc_key(&self, ctx: C, session_id: SessionId) -> Result<(), C::Error> {
         let enc_key = ctx
             .key_generator()
             .read()
@@ -465,7 +461,8 @@ impl<C: Config> CommitteeSessionWorker<C> {
                 current_session_id
             );
             // let task = OperatorTask::get().map_err(|e| RuntimeError::AnyError(Box::new(e)))?;
-            self.create_task(&ctx, current_session_id.into(), b"new task".to_vec()).await?;
+            self.create_task(&ctx, current_session_id.into(), b"new task".to_vec())
+                .await?;
         }
         Ok(())
     }

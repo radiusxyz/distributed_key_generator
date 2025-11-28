@@ -1,4 +1,3 @@
-
 use dkg_primitives::{
     to_signed_commitment, AsyncTask, DbManager, KeyGeneratorError, Operator, RuntimeError,
     SessionEvent, SessionId, SolverEvent,
@@ -69,6 +68,7 @@ pub async fn run_node<C: Config>(
         .get_session_per_round()
         .await
         .expect("Failed to get session per round");
+    println!("Sessions per round: {}", sessions_per_round);
     let collecting_duration = ctx
         .validation_service()
         .get_collecting_duration()

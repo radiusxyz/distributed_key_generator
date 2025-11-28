@@ -12,7 +12,7 @@ use radius_sdk::{
     kvstore::KvStoreBuilder,
     signature::{Address, ChainType, PrivateKeySigner, Signature},
     validation_service::{
-        create_pub_sub,
+        create_pub_sub_with_signer,
         validation_dkg::{DkgValidation, DkgValidationService},
         RestakingValidation,
     },
@@ -33,10 +33,7 @@ mod builder;
 #[cfg(feature = "skde")]
 use dkg_node_skde_key_generator::Skde;
 
-async fn get_trusted_setup<C: Config>(
-    ctx: &C,
-    config: &NodeConfig,
-) -> Result<Vec<u8>, C::Error> {
+async fn init_trusted_setup<C: Config>(ctx: &C, config: &NodeConfig) -> Result<Vec<u8>, C::Error> {
     // If the role is authority, setup the trusted setup
     if config.role.is_authority() {
         let path = config.trusted_setup_path().join("trusted_setup.json");
@@ -56,9 +53,7 @@ async fn get_trusted_setup<C: Config>(
     } else {
         loop {
             match ctx.validation_service().get_active_trusted_setup().await {
-                Ok(bytes) => {
-                    return Ok(bytes)
-                }
+                Ok(bytes) => return Ok(bytes),
                 Err(e) => {
                     error!("Failed to get trusted setup: {}", e);
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -184,7 +179,7 @@ pub async fn run_node(config: NodeConfig) -> RuntimeResult<()> {
     let (solver_event_tx, solver_event_rx) = channel(100);
     let db_manager = DefaultDbManager;
     let (signer, private_key) = create_signer(&config.private_key_path, config.chain_type);
-    let (_pub, _sub) = create_pub_sub(
+    let (_pub, _sub) = create_pub_sub_with_signer(
         &config.blockchain_http_rpc_url,
         &config.blockchain_ws_rpc_url,
         &config.trusted_address,
@@ -192,6 +187,7 @@ pub async fn run_node(config: NodeConfig) -> RuntimeResult<()> {
     )
     .await;
     let dkg_validation_service = DkgValidationService::new(_pub, _sub);
+    println!("dkg validation service created");
     let context = create_context::<_, _, _>(
         &config,
         signer,
@@ -202,14 +198,23 @@ pub async fn run_node(config: NodeConfig) -> RuntimeResult<()> {
         db_manager,
     )
     .await?;
-    let raw_trusted_setup = get_trusted_setup(&context, &config).await?;
+    let raw_trusted_setup = init_trusted_setup(&context, &config).await?;
+    if config.role.is_authority() {
+        return Ok(());
+    }
     context.set_key_generator(raw_trusted_setup).await;
     let operator = validation::ValidationService::new(context.clone());
-    let _ = dkg_validation_service
-        .subscribe_events(|e| operator.handle_callback_events(e))
-        .await;
-    init_db(&config)?;
     let mut service_handles = vec![];
+    let event_handle = tokio::spawn(async move {
+        if let Err(e) = dkg_validation_service
+            .subscribe_events(|e| operator.handle_callback_events(e))
+            .await
+        {
+            error!("Error subscribing to DKG validation service events: {}", e);
+        }
+    });
+    service_handles.push(event_handle);
+    init_db(&config)?;
     let handles = match config.role {
         Role::Committee => {
             if !context

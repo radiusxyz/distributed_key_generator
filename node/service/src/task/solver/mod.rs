@@ -70,7 +70,7 @@ pub async fn do_solve_key<C: Config>(
     let commitment = to_signed_commitment(
         ctx.clone(),
         session_id,
-        DecKeyPayload::new(enc_key, randomness, dec_key, solve_at),
+        DecKeyPayload::new(enc_key, dec_key, randomness, solve_at),
     )?;
     Ok(commitment)
 }
