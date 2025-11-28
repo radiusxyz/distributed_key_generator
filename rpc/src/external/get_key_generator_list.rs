@@ -1,4 +1,4 @@
-use dkg_primitives::{ActiveOperatorList, AddressT, Config, Operator};
+use dkg_primitives::{ActiveCommitteeList, AddressT, Config, Operator};
 use serde::{Deserialize, Serialize};
 
 use crate::*;
@@ -19,9 +19,9 @@ pub struct Response {
     pub urls: Vec<KeyGeneratorRpcInfo>,
 }
 
-impl<Address: AddressT> From<Response> for ActiveOperatorList<Address> {
+impl<Address: AddressT> From<Response> for ActiveCommitteeList<Address> {
     fn from(value: Response) -> Self {
-        let mut operator_list = ActiveOperatorList::<Address>::new();
+        let mut operator_list = ActiveCommitteeList::<Address>::new();
         let operator_rpc_url_list = value.urls;
         for operator_rpc_info in operator_rpc_url_list {
             operator_list.insert(Operator::new(
@@ -42,7 +42,7 @@ impl<C: Config> RpcParameter<C> for GetKeyGeneratorList {
     }
 
     async fn handler(self, _ctx: C) -> Result<Self::Response, RpcError> {
-        let operator_list = ActiveOperatorList::<C::Address>::get()?;
+        let operator_list = ActiveCommitteeList::<C::Address>::get()?;
 
         let urls: Vec<KeyGeneratorRpcInfo> = operator_list
             .into_iter()

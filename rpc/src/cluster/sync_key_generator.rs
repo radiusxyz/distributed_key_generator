@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 
-use dkg_primitives::{ActiveOperatorList, Config, Operator};
+use dkg_primitives::{ActiveCommitteeList, Config, Operator};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -39,7 +39,7 @@ impl<C: Config> RpcParameter<C> for SyncKeyGenerator<C::Address> {
 
     async fn handler(self, _ctx: C) -> RpcResult<Self::Response> {
         info!("Sync key generator - {}", self);
-        let mut operators = ActiveOperatorList::<C::Address>::get_mut()?;
+        let mut operators = ActiveCommitteeList::<C::Address>::get_mut()?;
         if operators.contains(&self.address) {
             tracing::warn!("Already synced key generator: {}", self);
             return Ok(());

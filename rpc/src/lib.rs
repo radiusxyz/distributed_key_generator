@@ -1,7 +1,7 @@
 pub use std::sync::Arc;
 
 pub use dkg_primitives::{
-    to_signed_commitment, ActiveOperatorList, AsyncTask, Commitment, Config, DbManager,
+    to_signed_commitment, ActiveCommitteeList, AsyncTask, Commitment, Config, DbManager,
     EncKeyCommitment, Payload, SessionId, SignedCommitment,
 };
 pub use radius_sdk::json_rpc::server::{RpcError, RpcParameter};
@@ -49,22 +49,22 @@ pub mod helper {
         session_id: SessionId,
         commitment: EncKeyCommitment<C::Signature, C::Address>,
     ) -> RpcResult<()> {
-        let operators = ctx
+        let committees = ctx
             .db_manager()
-            .get_active_operator_list()
+            .get_active_committee_list()
             .map_err(|e| RpcError::from(e))?
             .into_iter()
             .filter(|kg| kg.address() != ctx.address()) // Exclude self
             .map(|kg| kg.cluster_rpc_url().to_owned())
             .collect::<Vec<_>>();
         let commitment = to_signed_commitment(ctx.clone(), session_id, commitment)?;
-        if !operators.is_empty() {
+        if !committees.is_empty() {
             info!(
                 "Broadcasting enc key ack to {:?} at session: {:?}",
-                operators, session_id
+                committees, session_id
             );
             ctx.async_task().multicast(
-                operators,
+                committees,
                 <SyncEncKey<C::Signature, C::Address> as RpcParameter<C>>::method().into(),
                 SyncEncKey(commitment),
             );
@@ -79,24 +79,24 @@ pub mod helper {
         session_id: SessionId,
         exclude_list: Vec<C::Address>,
     ) -> RpcResult<()> {
-        let operators = ctx
+        let committees = ctx
             .db_manager()
-            .get_active_operator_list()
+            .get_active_committee_list()
             .map_err(|e| RpcError::from(e))?
             .into_iter()
             .filter(|kg| !exclude_list.contains(&kg.address()))
             .map(|kg| kg.cluster_rpc_url().to_owned())
             .collect::<Vec<_>>();
-        if !operators.is_empty() {
+        if !committees.is_empty() {
             info!(
                 "Broadcasting dec key to {:?} at session: {:?}",
-                operators, session_id
+                committees, session_id
             );
             let commitment = Commitment::new(payload, Some(ctx.address()), session_id);
             let signature = ctx.sign(&commitment)?;
             let randomness = ctx.randomness(session_id);
             ctx.async_task().multicast(
-                operators,
+                committees,
                 <SyncDecKey<C::Signature, C::Address> as RpcParameter<C>>::method().into(),
                 SyncDecKey {
                     signed_commitment: SignedCommitment {

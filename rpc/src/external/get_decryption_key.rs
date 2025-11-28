@@ -22,6 +22,10 @@ impl<C: Config> RpcParameter<C> for GetDecKey {
     }
 
     async fn handler(self, _ctx: C) -> RpcResult<Self::Response> {
+        tracing::info!(
+            "Handling get_decryption_key request at {:?}",
+            self.session_id
+        );
         let dec_key = DecKey::get(self.session_id)?;
         Ok(Response {
             key: dec_key.inner(),

@@ -1,8 +1,8 @@
 use dkg_primitives::{
-    ActiveOperatorList, Config, EncKeyCommitment, SessionEvent, SignedCommitment, SubmitterList,
+    ActiveCommitteeList, Config, EncKeyCommitment, SessionEvent, SignedCommitment, SubmitterList,
 };
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::*;
 
@@ -39,19 +39,19 @@ impl<C: Config> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
             session_id
         );
         if !ctx.is_leader(session_id) {
-            info!("Not a leader for session: {:?}. Skipping...", session_id);
+            debug!("Not a leader for session: {:?}. Skipping...", session_id);
             return Ok(());
         }
         let submitter =
             ctx.verify_signature(&self.0.signature, &self.0.commitment, self.sender())?;
 
         // Sanity check: if the sender is not a key generator, skip
-        let operators = ActiveOperatorList::<C::Address>::get()?;
-        if !operators.contains(&submitter) {
+        let committees = ActiveCommitteeList::<C::Address>::get()?;
+        if !committees.contains(&submitter) {
             return Ok(());
         }
         // Store commitment for `session` and `sender`
-        let commitment = EncKeyCommitment::new(self.inner());
+        let commitment = EncKeyCommitment::<C::Signature, C::Address>::new(self.inner());
         commitment.put(&session_id, &submitter)?;
 
         if SubmitterList::<C::Address>::get(session_id).is_err() {
@@ -72,7 +72,7 @@ impl<C: Config> RpcParameter<C> for SubmitEncKey<C::Signature, C::Address> {
             .await
             .map_err(|e| RpcError::from(e))?;
 
-        // let _ = multicast_enc_key_ack(&ctx, session_id, commitment);
+        let _ = multicast_enc_key_ack(ctx, session_id, commitment);
 
         Ok(())
     }

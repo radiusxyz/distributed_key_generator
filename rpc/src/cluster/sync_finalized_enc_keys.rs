@@ -29,9 +29,6 @@ impl<C: Config> RpcParameter<C> for SyncFinalizedEncKeys<C::Signature, C::Addres
     }
 
     async fn handler(self, ctx: C) -> RpcResult<Self::Response> {
-        if !ctx.is_solver() {
-            return Ok(());
-        }
         let session_id = self.get_session_id();
         info!(
             "method::{:?} at session {:?}",
