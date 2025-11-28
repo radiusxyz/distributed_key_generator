@@ -1,3 +1,5 @@
+use std::string::FromUtf8Error;
+
 use radius_sdk::{
     json_rpc::{client::RpcClientError, server::RpcServerError},
     kvstore::KvStoreError,
@@ -92,6 +94,8 @@ pub enum KeyGeneratorError {
     /// Error on (de)serialization
     #[error(transparent)]
     SerdeError(#[from] SerdeError),
+    #[error("Invalid decryption key")]
+    InvalidDecKey(#[from] FromUtf8Error)
 }
 
 unsafe impl Send for KeyGeneratorError {}
