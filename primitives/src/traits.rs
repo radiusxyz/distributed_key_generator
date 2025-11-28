@@ -16,7 +16,7 @@ use serde_json::Error as SerdeJsonError;
 use tokio::{sync::RwLock, task::JoinHandle};
 
 use crate::{
-    ActiveOperatorList, DecKey, DecKeyRequestRecord, DkgEvent, EncKey, KeyGeneratorError,
+    ActiveCommitteeList, DecKey, DecKeyRequestRecord, DkgEvent, EncKey, KeyGeneratorError,
     NextOperatorList, Operator, RuntimeError, SessionId,
 };
 
@@ -136,11 +136,11 @@ pub trait DbManager<Address: AddressT> {
         Ok(())
     }
     /// Update the operator list
-    fn update_active_operator_list(
+    fn update_active_committee_list(
         &self,
         operators: &Vec<Operator<Address>>,
     ) -> Result<(), Self::Error> {
-        let kv_store: ActiveOperatorList<Address> = operators.clone().into();
+        let kv_store: ActiveCommitteeList<Address> = operators.clone().into();
         let _ = kv_store.put()?;
         Ok(())
     }
@@ -154,8 +154,8 @@ pub trait DbManager<Address: AddressT> {
         Ok(())
     }
 
-    fn get_active_operator_list(&self) -> Result<Vec<Operator<Address>>, Self::Error> {
-        let kv_store: ActiveOperatorList<Address> = ActiveOperatorList::get()?;
+    fn get_active_committee_list(&self) -> Result<Vec<Operator<Address>>, Self::Error> {
+        let kv_store: ActiveCommitteeList<Address> = ActiveCommitteeList::get()?;
         Ok(kv_store.into_iter().collect())
     }
 
@@ -200,7 +200,11 @@ pub trait VerifyService<Signature, Address> {
 pub trait KeyGenerator {
     type Error: std::error::Error + Send + Sync + 'static + Into<RuntimeError>;
 
-    fn setup(trusted_setup: Vec<u8>) -> Result<Self, Self::Error> where Self: Sized;
+    fn setup(trusted_setup: Vec<u8>) -> Result<Self, Self::Error>
+    where
+        Self: Sized;
+
+    fn get_enc_key(&self, bytes: &[u8]) -> Result<String, Self::Error>;
 
     /// Generate encryption key for a given session
     fn gen_enc_key(

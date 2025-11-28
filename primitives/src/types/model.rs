@@ -168,9 +168,9 @@ impl<Address: Clone> Operator<Address> {
 
 #[derive(Clone, Debug, Deserialize, Serialize, Model)]
 #[kvstore(key())]
-pub struct ActiveOperatorList<Address>(Vec<Operator<Address>>);
+pub struct ActiveCommitteeList<Address>(Vec<Operator<Address>>);
 
-impl<Address: AddressT> ActiveOperatorList<Address> {
+impl<Address: AddressT> ActiveCommitteeList<Address> {
     pub fn new() -> Self {
         Self(Vec::new())
     }
@@ -217,13 +217,13 @@ impl<Address: AddressT> ActiveOperatorList<Address> {
     }
 }
 
-impl<Address: AddressT> From<Vec<Operator<Address>>> for ActiveOperatorList<Address> {
+impl<Address: AddressT> From<Vec<Operator<Address>>> for ActiveCommitteeList<Address> {
     fn from(value: Vec<Operator<Address>>) -> Self {
         Self(value)
     }
 }
 
-impl<Address> Iterator for ActiveOperatorList<Address> {
+impl<Address> Iterator for ActiveCommitteeList<Address> {
     type Item = Operator<Address>;
 
     fn next(&mut self) -> Option<Self::Item> {
