@@ -49,9 +49,7 @@ impl<C: Config> RpcParameter<C> for SyncDecKey<C::Signature, C::Address> {
             ctx.key_generator()
                 .read()
                 .await
-                .verify_dec_key(&enc_key.inner(), &dec_key.inner())
-                .map_err(|e| RpcError::from(e))?;
-            info!("Verification successful");
+                .verify_dec_key(&enc_key.inner(), &dec_key.inner())?;
             dec_key.put(session_id)?;
         }
 
